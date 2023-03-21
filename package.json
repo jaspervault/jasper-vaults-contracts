@@ -1,0 +1,56 @@
+{
+  "name": "jasper-vault-contracts",
+  "private": true,
+  "version": "0.1",
+  "description": "Jasper Vault Contracts",
+  "scripts": {},
+  "devDependencies": {
+    "@ethersproject/abi": "^5.7.0",
+    "@ethersproject/providers": "^5.7.0",
+    "@nomicfoundation/hardhat-chai-matchers": "^1.0.3",
+    "@nomicfoundation/hardhat-network-helpers": "^1.0.4",
+    "@nomicfoundation/hardhat-toolbox": "^1.0.2",
+    "@nomiclabs/hardhat-ethers": "^2.1.1",
+    "@nomiclabs/hardhat-etherscan": "^3.1.3",
+    "@openzeppelin/contracts": "^3.1.0",
+    "@openzeppelin/hardhat-upgrades": "^1.12.0",
+    "@typechain/ethers-v5": "^10.1.0",
+    "@typechain/hardhat": "^6.1.2",
+    "chai": "^4.3.6",
+    "dotenv": "^16.0.0",
+    "ethers": "^5.7.0",
+    "hardhat": "^2.9.9",
+    "hardhat-gas-reporter": "^1.0.8",
+    "prettier": "^2.3.2",
+    "prettier-plugin-solidity": "^1.0.0-beta.13",
+    "solhint": "^3.3.6",
+    "solidity-coverage": "^0.7.21",
+    "typechain": "^8.1.0"
+  },
+  "dependencies": {
+    "@openzeppelin-upgradeable/contracts": "npm:@openzeppelin/contracts-upgradeable@4.8.0",
+    "@setprotocol/set-protocol-v2": "^0.11.0",
+    "@uniswap/v3-core": "1.0.1",
+    "@uniswap/v3-periphery": "^1.4.0",
+    "@uniswap/v3-sdk": "^3.5.1",
+    "alchemy-sdk": "^2.2.1",
+    "better-sqlite3": "7.4.6",
+    "font-awesome": "^4.7.0",
+    "moralis": "^2.14.1",
+    "mysql": "^2.18.1",
+    "notional-solidity-sdk": "https://github.com/ckoopmann/notional-solidity-sdk.git#77aa2f8fd8a72b8f5865e561f2d39d4606c3740c",
+    "openzeppelin-contracts-V4": "npm:@openzeppelin/contracts@4.5",
+    "p-all": "^4.0.0",
+    "qs": "^6.11.0",
+    "random-js": "^2.1.0",
+    "wrapped-fcash": "https://github.com/ckoopmann/wrapped-fcash.git#6b7d870c9b750aa343f0405f3543c9bbb0e3cdfc"
+  },
+  "author": {
+    "name": "Gary Leung"
+  },
+  "engines": {
+    "node": ">=14.19.1 <=16.x.x",
+    "npm": ">=6.0.0"
+  },
+  "license": "MIT"
+}
