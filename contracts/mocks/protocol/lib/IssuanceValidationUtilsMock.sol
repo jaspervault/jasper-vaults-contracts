@@ -18,15 +18,15 @@
 
 pragma solidity 0.6.10;
 
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
 import { IssuanceValidationUtils } from "../../../protocol/lib/IssuanceValidationUtils.sol";
 
 contract IssuanceValidationUtilsMock {
     /* ============ External Functions ============ */
 
     function testValidateCollateralizationPostTransferInPreHook(
-        ISetToken _setToken, 
-        address _component, 
+        IJasperVault _jasperVault,
+        address _component,
         uint256 _initialSetSupply,
         uint256 _componentQuantity
     )
@@ -34,24 +34,24 @@ contract IssuanceValidationUtilsMock {
         view
     {
         IssuanceValidationUtils.validateCollateralizationPostTransferInPreHook(
-            _setToken, 
-            _component, 
+            _jasperVault,
+            _component,
             _initialSetSupply,
             _componentQuantity
         );
     }
 
     function testValidateCollateralizationPostTransferOut(
-        ISetToken _setToken, 
+        IJasperVault _jasperVault,
         address _component,
         uint256 _finalSetSupply
-    ) 
+    )
         external
         view
     {
         IssuanceValidationUtils.validateCollateralizationPostTransferOut(
-            _setToken, 
-            _component, 
+            _jasperVault,
+            _component,
             _finalSetSupply
         );
     }

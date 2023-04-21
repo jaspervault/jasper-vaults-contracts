@@ -22,7 +22,7 @@ pragma experimental "ABIEncoderV2";
 import { DebtIssuanceModule } from "./DebtIssuanceModule.sol";
 import { IController } from "../../../interfaces/IController.sol";
 import { IModuleIssuanceHookV2 } from "../../../interfaces/IModuleIssuanceHookV2.sol";
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
 
 /**
  * @title SlippageIssuanceModule
@@ -45,20 +45,20 @@ contract SlippageIssuanceModule is DebtIssuanceModule {
     /**
      * @dev Reverts upon calling. Call `issueWithSlippage` instead.
      */
-    function issue(ISetToken /*_setToken*/, uint256 /*_quantity*/, address /*_to*/) external override(DebtIssuanceModule) {
+    function issue(IJasperVault /*_jasperVault*/, uint256 /*_quantity*/, address /*_to*/) external override(DebtIssuanceModule) {
         revert("Call issueWithSlippage instead");
     }
 
     /**
      * @dev Reverts upon calling. Call `redeemWithSlippage` instead.
      */
-    function redeem(ISetToken /*_setToken*/, uint256 /*_quantity*/, address /*_to*/) external override(DebtIssuanceModule) {
+    function redeem(IJasperVault /*_jasperVault*/, uint256 /*_quantity*/, address /*_to*/) external override(DebtIssuanceModule) {
         revert("Call redeemWithSlippage instead");
     }
 
     /**
-     * Deposits components to the SetToken, replicates any external module component positions and mints
-     * the SetToken. If the token has a debt position all collateral will be transferred in first then debt
+     * Deposits components to the JasperVault, replicates any external module component positions and mints
+     * the JasperVault. If the token has a debt position all collateral will be transferred in first then debt
      * will be returned to the minting address. If specified, a fee will be charged on issuance. Issuer can
      * also pass in a max amount of tokens they are willing to pay for each component. They are NOT required
      * to pass in a limit for every component, and may in fact only want to pass in limits for components which
@@ -66,16 +66,16 @@ contract SlippageIssuanceModule is DebtIssuanceModule {
      * _maxTokenAmountsIn is equivalent to calling issue. NOTE: not passing in limits for positions that require
      * a trade for replication leaves the issuer open to sandwich attacks!
      *
-     * @param _setToken             Instance of the SetToken to issue
-     * @param _setQuantity          Quantity of SetToken to issue
+     * @param _jasperVault             Instance of the JasperVault to issue
+     * @param _setQuantity          Quantity of JasperVault to issue
      * @param _checkedComponents    Array of components to be checked to verify required collateral doesn't exceed
      *                                  defined max. Each entry must be unique.
      * @param _maxTokenAmountsIn    Maps to same index in _checkedComponents. Max amount of component willing to
-     *                                  transfer in to collateralize _setQuantity amount of _setToken.
-     * @param _to                   Address to mint SetToken to
+     *                                  transfer in to collateralize _setQuantity amount of _jasperVault.
+     * @param _to                   Address to mint JasperVault to
      */
     function issueWithSlippage(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _setQuantity,
         address[] memory _checkedComponents,
         uint256[] memory _maxTokenAmountsIn,
@@ -84,11 +84,11 @@ contract SlippageIssuanceModule is DebtIssuanceModule {
         external
         virtual
         nonReentrant
-        onlyValidAndInitializedSet(_setToken)
+        onlyValidAndInitializedSet(_jasperVault)
     {
         _validateInputs(_setQuantity, _checkedComponents, _maxTokenAmountsIn);
 
-        address hookContract = _callManagerPreIssueHooks(_setToken, _setQuantity, msg.sender, _to);
+        address hookContract = _callManagerPreIssueHooks(_jasperVault, _setQuantity, msg.sender, _to);
 
         bool isIssue = true;
 
@@ -96,9 +96,9 @@ contract SlippageIssuanceModule is DebtIssuanceModule {
             uint256 quantityWithFees,
             uint256 managerFee,
             uint256 protocolFee
-        ) = calculateTotalFees(_setToken, _setQuantity, isIssue);
+        ) = calculateTotalFees(_jasperVault, _setQuantity, isIssue);
 
-        _callModulePreIssueHooks(_setToken, quantityWithFees);
+        _callModulePreIssueHooks(_jasperVault, quantityWithFees);
 
         // Scoping logic to avoid stack too deep errors
         {
@@ -106,20 +106,20 @@ contract SlippageIssuanceModule is DebtIssuanceModule {
                 address[] memory components,
                 uint256[] memory equityUnits,
                 uint256[] memory debtUnits
-            ) = _calculateRequiredComponentIssuanceUnits(_setToken, quantityWithFees, isIssue);
+            ) = _calculateRequiredComponentIssuanceUnits(_jasperVault, quantityWithFees, isIssue);
 
             // Validate the required token amounts don't exceed those passed by issuer
             _validateTokenTransferLimits(_checkedComponents, _maxTokenAmountsIn, components, equityUnits, isIssue);
 
-            _resolveEquityPositions(_setToken, quantityWithFees, _to, isIssue, components, equityUnits);
-            _resolveDebtPositions(_setToken, quantityWithFees, isIssue, components, debtUnits);
-            _resolveFees(_setToken, managerFee, protocolFee);
+            _resolveEquityPositions(_jasperVault, quantityWithFees, _to, isIssue, components, equityUnits);
+            _resolveDebtPositions(_jasperVault, quantityWithFees, isIssue, components, debtUnits);
+            _resolveFees(_jasperVault, managerFee, protocolFee);
         }
 
-        _setToken.mint(_to, _setQuantity);
+        _jasperVault.mint(_to, _setQuantity);
 
         emit SetTokenIssued(
-            _setToken,
+            _jasperVault,
             msg.sender,
             _to,
             hookContract,
@@ -130,9 +130,9 @@ contract SlippageIssuanceModule is DebtIssuanceModule {
     }
 
     /**
-     * Returns components from the SetToken, unwinds any external module component positions and burns the SetToken.
+     * Returns components from the JasperVault, unwinds any external module component positions and burns the JasperVault.
      * If the token has debt positions, the module transfers in the required debt amounts from the caller and uses
-     * those funds to repay the debts on behalf of the SetToken. All debt will be paid down first then equity positions
+     * those funds to repay the debts on behalf of the JasperVault. All debt will be paid down first then equity positions
      * will be returned to the minting address. If specified, a fee will be charged on redeem. Redeemer can
      * also pass in a min amount of tokens they want to receive for each component. They are NOT required
      * to pass in a limit for every component, and may in fact only want to pass in limits for components which
@@ -140,16 +140,16 @@ contract SlippageIssuanceModule is DebtIssuanceModule {
      * _minTokenAmountsOut is equivalent to calling redeem. NOTE: not passing in limits for positions that require
      * a trade for replication leaves the redeemer open to sandwich attacks!
      *
-     * @param _setToken             Instance of the SetToken to redeem
-     * @param _setQuantity          Quantity of SetToken to redeem
+     * @param _jasperVault             Instance of the JasperVault to redeem
+     * @param _setQuantity          Quantity of JasperVault to redeem
      * @param _checkedComponents    Array of components to be checked to verify received collateral isn't less than
      *                                  defined min. Each entry must be unique.
      * @param _minTokenAmountsOut   Maps to same index in _checkedComponents. Min amount of component willing to
-     *                                  receive to redeem _setQuantity amount of _setToken.
+     *                                  receive to redeem _setQuantity amount of _jasperVault.
      * @param _to                   Address to send collateral to
      */
     function redeemWithSlippage(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _setQuantity,
         address[] memory _checkedComponents,
         uint256[] memory _minTokenAmountsOut,
@@ -158,7 +158,7 @@ contract SlippageIssuanceModule is DebtIssuanceModule {
         external
         virtual
         nonReentrant
-        onlyValidAndInitializedSet(_setToken)
+        onlyValidAndInitializedSet(_jasperVault)
     {
         _validateInputs(_setQuantity, _checkedComponents, _minTokenAmountsOut);
 
@@ -168,28 +168,28 @@ contract SlippageIssuanceModule is DebtIssuanceModule {
             uint256 quantityNetFees,
             uint256 managerFee,
             uint256 protocolFee
-        ) = calculateTotalFees(_setToken, _setQuantity, isIssue);
+        ) = calculateTotalFees(_jasperVault, _setQuantity, isIssue);
 
-        _callModulePreRedeemHooks(_setToken, quantityNetFees);
+        _callModulePreRedeemHooks(_jasperVault, quantityNetFees);
 
         // Place burn after pre-redeem hooks because burning tokens may lead to false accounting of synced positions
-        _setToken.burn(msg.sender, _setQuantity);
+        _jasperVault.burn(msg.sender, _setQuantity);
 
         (
             address[] memory components,
             uint256[] memory equityUnits,
             uint256[] memory debtUnits
-        ) = _calculateRequiredComponentIssuanceUnits(_setToken, quantityNetFees, isIssue);
+        ) = _calculateRequiredComponentIssuanceUnits(_jasperVault, quantityNetFees, isIssue);
 
         // Validate the required token amounts don't exceed those passed by redeemer
         _validateTokenTransferLimits(_checkedComponents, _minTokenAmountsOut, components, equityUnits, isIssue);
 
-        _resolveDebtPositions(_setToken, quantityNetFees, isIssue, components, debtUnits);
-        _resolveEquityPositions(_setToken, quantityNetFees, _to, isIssue, components, equityUnits);
-        _resolveFees(_setToken, managerFee, protocolFee);
+        _resolveDebtPositions(_jasperVault, quantityNetFees, isIssue, components, debtUnits);
+        _resolveEquityPositions(_jasperVault, quantityNetFees, _to, isIssue, components, equityUnits);
+        _resolveFees(_jasperVault, managerFee, protocolFee);
 
         emit SetTokenRedeemed(
-            _setToken,
+            _jasperVault,
             msg.sender,
             _to,
             _setQuantity,
@@ -206,7 +206,7 @@ contract SlippageIssuanceModule is DebtIssuanceModule {
      * NOTE: This getter is non-view to allow module hooks to determine units by simulating state changes in an external protocol and
      * reverting. It should only be called by off-chain methods via static call.
      *
-     * @param _setToken         Instance of the SetToken to issue
+     * @param _jasperVault         Instance of the JasperVault to issue
      * @param _quantity         Amount of Sets to be issued
      *
      * @return address[]        Array of component addresses making up the Set
@@ -214,7 +214,7 @@ contract SlippageIssuanceModule is DebtIssuanceModule {
      * @return uint256[]        Array of debt notional amounts of each component, respectively, represented as uint256
      */
     function getRequiredComponentIssuanceUnitsOffChain(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _quantity
     )
         external
@@ -224,15 +224,15 @@ contract SlippageIssuanceModule is DebtIssuanceModule {
 
         (
             uint256 totalQuantity,,
-        ) = calculateTotalFees(_setToken, _quantity, isIssue);
+        ) = calculateTotalFees(_jasperVault, _quantity, isIssue);
 
         (
             int256[] memory equityIssuanceAdjustments,
             int256[] memory debtIssuanceAdjustments
-        )= _calculateAdjustments(_setToken, totalQuantity, isIssue);
+        )= _calculateAdjustments(_jasperVault, totalQuantity, isIssue);
 
         return _calculateAdjustedComponentIssuanceUnits(
-            _setToken,
+            _jasperVault,
             totalQuantity,
             isIssue,
             equityIssuanceAdjustments,
@@ -247,7 +247,7 @@ contract SlippageIssuanceModule is DebtIssuanceModule {
      * NOTE: This getter is non-view to allow module hooks to determine units by simulating state changes in an external protocol and
      * reverting. It should only be called by off-chain methods via static call.
      *
-     * @param _setToken         Instance of the SetToken to issue
+     * @param _jasperVault         Instance of the JasperVault to issue
      * @param _quantity         Amount of Sets to be redeemed
      *
      * @return address[]        Array of component addresses making up the Set
@@ -255,7 +255,7 @@ contract SlippageIssuanceModule is DebtIssuanceModule {
      * @return uint256[]        Array of debt notional amounts of each component, respectively, represented as uint256
      */
     function getRequiredComponentRedemptionUnitsOffChain(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _quantity
     )
         external
@@ -265,15 +265,15 @@ contract SlippageIssuanceModule is DebtIssuanceModule {
 
         (
             uint256 totalQuantity,,
-        ) = calculateTotalFees(_setToken, _quantity, isIssue);
+        ) = calculateTotalFees(_jasperVault, _quantity, isIssue);
 
         (
             int256[] memory equityRedemptionAdjustments,
             int256[] memory debtRedemptionAdjustments
-        )= _calculateAdjustments(_setToken, totalQuantity, isIssue);
+        )= _calculateAdjustments(_jasperVault, totalQuantity, isIssue);
 
         return _calculateAdjustedComponentIssuanceUnits(
-            _setToken,
+            _jasperVault,
             totalQuantity,
             isIssue,
             equityRedemptionAdjustments,
@@ -288,8 +288,8 @@ contract SlippageIssuanceModule is DebtIssuanceModule {
      * or redeem process are added in. Adjustments can be either positive or negative, a negative debt adjustment means there
      * is less debt than the pre-issue position unit indicates there will be.
      *
-     * @param _setToken             Instance of the SetToken to redeem
-     * @param _quantity             Quantity of SetToken to redeem
+     * @param _jasperVault             Instance of the JasperVault to redeem
+     * @param _quantity             Quantity of JasperVault to redeem
      * @param _isIssue              Boolean indicating whether Set is being issues
      * @param _equityAdjustments    Array of equity position unit adjustments that account for position changes during issuance
      *                                  (maps to getComponents array)
@@ -297,7 +297,7 @@ contract SlippageIssuanceModule is DebtIssuanceModule {
      *                                  (maps to getComponents array)
      */
     function _calculateAdjustedComponentIssuanceUnits(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _quantity,
         bool _isIssue,
         int256[] memory _equityAdjustments,
@@ -311,7 +311,7 @@ contract SlippageIssuanceModule is DebtIssuanceModule {
             address[] memory components,
             uint256[] memory equityUnits,
             uint256[] memory debtUnits
-        ) = _getTotalIssuanceUnits(_setToken);
+        ) = _getTotalIssuanceUnits(_jasperVault);
 
         // NOTE: components.length isn't stored in local variable to avoid stack too deep errors. Since this function is used
         // by view functions intended to be queried off-chain this seems acceptable
@@ -350,31 +350,31 @@ contract SlippageIssuanceModule is DebtIssuanceModule {
      * Calculates all equity and debt adjustments that will be made to the positionUnits within the context of the current chain
      * state. Each module that registers a hook with the SlippageIssuanceModule is cycled through and returns how the module will
      * adjust the equity and debt positions for the Set. All changes are summed/netted against each other. The adjustment arrays
-     * returned by each module are ordered according to the components array on the SetToken.
+     * returned by each module are ordered according to the components array on the JasperVault.
      *
-     * @param _setToken             Instance of the SetToken to redeem
-     * @param _quantity             Quantity of SetToken to redeem
+     * @param _jasperVault             Instance of the JasperVault to redeem
+     * @param _quantity             Quantity of JasperVault to redeem
      * @param _isIssue              Boolean indicating whether Set is being issues
      */
     function _calculateAdjustments(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _quantity,
         bool _isIssue
     )
         internal
         returns (int256[] memory, int256[] memory)
     {
-        uint256 componentsLength = _setToken.getComponents().length;
+        uint256 componentsLength = _jasperVault.getComponents().length;
         int256[] memory cumulativeEquityAdjustments = new int256[](componentsLength);
         int256[] memory cumulativeDebtAdjustments = new int256[](componentsLength);
 
-        address[] memory issuanceHooks = issuanceSettings[_setToken].moduleIssuanceHooks;
+        address[] memory issuanceHooks = issuanceSettings[_jasperVault].moduleIssuanceHooks;
         for (uint256 i = 0; i < issuanceHooks.length; i++) {
             (
                 int256[] memory equityAdjustments,
                 int256[] memory debtAdjustments
-            ) = _isIssue ? IModuleIssuanceHookV2(issuanceHooks[i]).getIssuanceAdjustments(_setToken, _quantity) :
-                IModuleIssuanceHookV2(issuanceHooks[i]).getRedemptionAdjustments(_setToken, _quantity);
+            ) = _isIssue ? IModuleIssuanceHookV2(issuanceHooks[i]).getIssuanceAdjustments(_jasperVault, _quantity) :
+                IModuleIssuanceHookV2(issuanceHooks[i]).getRedemptionAdjustments(_jasperVault, _quantity);
 
             for (uint256 j = 0; j < componentsLength; j++) {
                 cumulativeEquityAdjustments[j] = cumulativeEquityAdjustments[j].add(equityAdjustments[j]);
@@ -393,7 +393,7 @@ contract SlippageIssuanceModule is DebtIssuanceModule {
      * @param _checkedComponents            Components the issuer/redeemer wants checked
      * @param _tokenTransferLimits          If _isIssue true, max amount of checked component allowed to xfer, else min amount of
      *                                          of checked component the redeemer wants to receive
-     * @param _components                   Array of SetToken components
+     * @param _components                   Array of JasperVault components
      * @param _tokenTransferAmounts         Amount of component required for issuance or returned for redemption, maps to components
      * @param _isIssue                      Boolean indicating whether Set is being issues
      */
@@ -431,7 +431,7 @@ contract SlippageIssuanceModule is DebtIssuanceModule {
         internal
         pure
     {
-        require(_setQuantity > 0, "SetToken quantity must be > 0");
+        require(_setQuantity > 0, "JasperVault quantity must be > 0");
 
         uint256 componentsLength = _components.length;
         require(componentsLength == _componentLimits.length, "Array length mismatch");

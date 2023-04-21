@@ -18,11 +18,9 @@
 pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
 
-
-import { ISetToken } from "../interfaces/ISetToken.sol";
-import { IStreamingFeeModule } from "../interfaces/IStreamingFeeModule.sol";
-import { StreamingFeeModule } from "../protocol/modules/v1/StreamingFeeModule.sol";
-
+import {IJasperVault} from "../interfaces/IJasperVault.sol";
+import {IStreamingFeeModule} from "../interfaces/IStreamingFeeModule.sol";
+import {StreamingFeeModule} from "../protocol/modules/v1/StreamingFeeModule.sol";
 
 /**
  * @title StreamingFeeModuleViewer
@@ -31,7 +29,6 @@ import { StreamingFeeModule } from "../protocol/modules/v1/StreamingFeeModule.so
  * StreamingFeeModuleViewer enables batch queries of StreamingFeeModule state.
  */
 contract StreamingFeeModuleViewer {
-
     struct StreamingFeeInfo {
         address feeRecipient;
         uint256 streamingFeePercentage;
@@ -40,16 +37,15 @@ contract StreamingFeeModuleViewer {
 
     function batchFetchStreamingFeeInfo(
         IStreamingFeeModule _streamingFeeModule,
-        ISetToken[] memory _setTokens
-    )
-        external
-        view
-        returns (StreamingFeeInfo[] memory)
-    {
-        StreamingFeeInfo[] memory feeInfo = new StreamingFeeInfo[](_setTokens.length);
+        IJasperVault[] memory _setTokens
+    ) external view returns (StreamingFeeInfo[] memory) {
+        StreamingFeeInfo[] memory feeInfo = new StreamingFeeInfo[](
+            _setTokens.length
+        );
 
         for (uint256 i = 0; i < _setTokens.length; i++) {
-            IStreamingFeeModule.FeeState memory feeState = _streamingFeeModule.feeStates(_setTokens[i]);
+            IStreamingFeeModule.FeeState memory feeState = _streamingFeeModule
+                .feeStates(_setTokens[i]);
             uint256 unaccruedFees = _streamingFeeModule.getFee(_setTokens[i]);
 
             feeInfo[i] = StreamingFeeInfo({

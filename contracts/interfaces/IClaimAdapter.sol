@@ -18,7 +18,7 @@
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import { ISetToken } from "../interfaces/ISetToken.sol";
+import { IJasperVault } from "./IJasperVault.sol";
 
 pragma solidity 0.6.10;
 
@@ -32,27 +32,27 @@ interface IClaimAdapter {
     /**
      * Generates the calldata for claiming tokens from the rewars pool
      *
-     * @param _setToken     the set token that is owed the tokens
-     * @param _rewardPool   the rewards pool to claim from  
+     * @param _jasperVault     the set token that is owed the tokens
+     * @param _rewardPool   the rewards pool to claim from
      *
      * @return _subject     the rewards pool to call
      * @return _value       the amount of ether to send in the call
      * @return _calldata    the calldata to use
      */
     function getClaimCallData(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _rewardPool
     ) external view returns(address _subject, uint256 _value, bytes memory _calldata);
 
     /**
      * Gets the amount of unclaimed rewards
      *
-     * @param _setToken     the set token that is owed the tokens
+     * @param _jasperVault     the set token that is owed the tokens
      * @param _rewardPool   the rewards pool to check
      *
      * @return uint256      the amount of unclaimed rewards
      */
-    function getRewardsAmount(ISetToken _setToken, address _rewardPool) external view returns(uint256);
+    function getRewardsAmount(IJasperVault _jasperVault, address _rewardPool) external view returns(uint256);
 
     /**
      * Gets the rewards token

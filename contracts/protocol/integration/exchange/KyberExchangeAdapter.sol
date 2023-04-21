@@ -36,7 +36,7 @@ contract KyberExchangeAdapter {
     using PreciseUnitMath for uint256;
 
     /* ============ Structs ============ */
-    
+
     /**
      * Struct containing information for trade function
      */
@@ -47,7 +47,7 @@ contract KyberExchangeAdapter {
     }
 
     /* ============ State Variables ============ */
-    
+
     // Address of Kyber Network Proxy
     address public kyberNetworkProxyAddress;
 
@@ -69,7 +69,7 @@ contract KyberExchangeAdapter {
     /* ============ External Getter Functions ============ */
 
     /**
-     * Calculate Kyber trade encoded calldata. To be invoked on the SetToken.
+     * Calculate Kyber trade encoded calldata. To be invoked on the JasperVault.
      *
      * @param  _sourceToken              Address of source token to be sold
      * @param  _destinationToken         Address of destination token to buy

@@ -20,7 +20,7 @@ pragma experimental "ABIEncoderV2";
 
 
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import { ISetToken } from "../interfaces/ISetToken.sol";
+import { IJasperVault } from "../interfaces/IJasperVault.sol";
 
 
 /**
@@ -39,17 +39,17 @@ contract SetTokenViewer {
         string symbol;
         address manager;
         address[] modules;
-        ISetToken.ModuleState[] moduleStatuses;
-        ISetToken.Position[] positions;
+        IJasperVault.ModuleState[] moduleStatuses;
+        IJasperVault.Position[] positions;
         uint256 totalSupply;
     }
 
     function batchFetchManagers(
-        ISetToken[] memory _setTokens
+        IJasperVault[] memory _setTokens
     )
         external
         view
-        returns (address[] memory) 
+        returns (address[] memory)
     {
         address[] memory managers = new address[](_setTokens.length);
 
@@ -60,16 +60,16 @@ contract SetTokenViewer {
     }
 
     function batchFetchModuleStates(
-        ISetToken[] memory _setTokens,
+        IJasperVault[] memory _setTokens,
         address[] calldata _modules
     )
         public
         view
-        returns (ISetToken.ModuleState[][] memory)
+        returns (IJasperVault.ModuleState[][] memory)
     {
-        ISetToken.ModuleState[][] memory states = new ISetToken.ModuleState[][](_setTokens.length);
+        IJasperVault.ModuleState[][] memory states = new IJasperVault.ModuleState[][](_setTokens.length);
         for (uint256 i = 0; i < _setTokens.length; i++) {
-            ISetToken.ModuleState[] memory moduleStates = new ISetToken.ModuleState[](_modules.length);
+            IJasperVault.ModuleState[] memory moduleStates = new IJasperVault.ModuleState[](_modules.length);
             for (uint256 j = 0; j < _modules.length; j++) {
                 moduleStates[j] = _setTokens[i].moduleStates(_modules[j]);
             }
@@ -79,42 +79,42 @@ contract SetTokenViewer {
     }
 
     function batchFetchDetails(
-        ISetToken[] memory _setTokens,
+        IJasperVault[] memory _setTokens,
         address[] calldata _moduleList
     )
         public
         view
         returns (SetDetails[] memory)
     {
-        ISetToken.ModuleState[][] memory moduleStates = batchFetchModuleStates(_setTokens, _moduleList);
+        IJasperVault.ModuleState[][] memory moduleStates = batchFetchModuleStates(_setTokens, _moduleList);
 
         SetDetails[] memory details = new SetDetails[](_setTokens.length);
         for (uint256 i = 0; i < _setTokens.length; i++) {
-            ISetToken setToken = _setTokens[i];
+            IJasperVault jasperVault = _setTokens[i];
 
             details[i] = SetDetails({
-                name: ERC20(address(setToken)).name(),
-                symbol: ERC20(address(setToken)).symbol(),
-                manager: setToken.manager(),
-                modules: setToken.getModules(),
+                name: ERC20(address(jasperVault)).name(),
+                symbol: ERC20(address(jasperVault)).symbol(),
+                manager: jasperVault.manager(),
+                modules: jasperVault.getModules(),
                 moduleStatuses: moduleStates[i],
-                positions: setToken.getPositions(),
-                totalSupply: setToken.totalSupply()
+                positions: jasperVault.getPositions(),
+                totalSupply: jasperVault.totalSupply()
             });
         }
         return details;
     }
 
     function getSetDetails(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address[] calldata _moduleList
     )
         external
         view
         returns(SetDetails memory)
     {
-        ISetToken[] memory setAddressForBatchFetch = new ISetToken[](1);
-        setAddressForBatchFetch[0] = _setToken;
+        IJasperVault[] memory setAddressForBatchFetch = new IJasperVault[](1);
+        setAddressForBatchFetch[0] = _jasperVault;
 
         return batchFetchDetails(setAddressForBatchFetch, _moduleList)[0];
     }

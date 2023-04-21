@@ -18,7 +18,7 @@
 pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
 
-import {ISetToken} from "./ISetToken.sol";
+import {IJasperVault} from "./IJasperVault.sol";
 import {INAVIssuanceHook} from "./INAVIssuanceHook.sol";
 
 interface INAVIssuanceModule {
@@ -37,12 +37,12 @@ interface INAVIssuanceModule {
     }
 
     function initialize(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         NAVIssuanceSettings memory _navIssuanceSettings
     ) external;
 
     function issue(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _reserveAsset,
         uint256 _reserveAssetQuantity,
         uint256 _minSetTokenReceiveQuantity,
@@ -50,28 +50,28 @@ interface INAVIssuanceModule {
     ) external;
 
     function redeem(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _reserveAsset,
         uint256 _setTokenQuantity,
         uint256 _minReserveReceiveQuantity,
         address _to
     ) external;
 
-    function addReserveAsset(ISetToken _setToken, address _reserveAsset)
+    function addReserveAsset(IJasperVault _jasperVault, address _reserveAsset)
         external;
 
-    function removeReserveAsset(ISetToken _setToken, address _reserveAsset)
+    function removeReserveAsset(IJasperVault _jasperVault, address _reserveAsset)
         external;
 
-    function editPremium(ISetToken _setToken, uint256 _premiumPercentage)
+    function editPremium(IJasperVault _jasperVault, uint256 _premiumPercentage)
         external;
 
     function editManagerFee(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _managerFeePercentage,
         uint256 _managerFeeIndex
     ) external;
 
-    function editFeeRecipient(ISetToken _setToken, address _managerFeeRecipient)
+    function editFeeRecipient(IJasperVault _jasperVault, address _managerFeeRecipient)
         external;
 }

@@ -30,7 +30,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IExchangeAdapter} from "../../../interfaces/IExchangeAdapter.sol";
 import {IIntegrationRegistry} from "../../../interfaces/IIntegrationRegistry.sol";
 import {Invoke} from "../../lib/Invoke.sol";
-import {ISetToken} from "../../../interfaces/ISetToken.sol";
+import {IJasperVault} from "../../../interfaces/IJasperVault.sol";
 import {ModuleBase} from "../../lib/ModuleBase.sol";
 import {Position} from "../../lib/Position.sol";
 import {PreciseUnitMath} from "../../../lib/PreciseUnitMath.sol";
@@ -46,18 +46,18 @@ contract CopyTradingModule is ModuleBase, ReentrancyGuard {
     using SafeCast for int256;
     using SafeMath for uint256;
 
-    using Invoke for ISetToken;
-    using Position for ISetToken;
+    using Invoke for IJasperVault;
+    using Position for IJasperVault;
     using PreciseUnitMath for uint256;
 
     /* ============ Struct ============ */
 
     struct TradeInfo {
-        ISetToken setToken; // Instance of SetToken
+        IJasperVault jasperVault; // Instance of JasperVault
         IExchangeAdapter exchangeAdapter; // Instance of exchange adapter contract
         address sendToken; // Address of token being sold
         address receiveToken; // Address of token being bought
-        uint256 setTotalSupply; // Total supply of SetToken in Precise Units (10^18)
+        uint256 setTotalSupply; // Total supply of JasperVault in Precise Units (10^18)
         uint256 totalSendQuantity; // Total quantity of sold token (position unit x total supply)
         uint256 totalMinReceiveQuantity; // Total minimum quantity of token to receive back
         uint256 preTradeSendTokenBalance; // Total initial balance of token being sold
@@ -67,7 +67,7 @@ contract CopyTradingModule is ModuleBase, ReentrancyGuard {
     /* ============ Events ============ */
 
     event ComponentExchanged(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         address indexed _sendToken,
         address indexed _receiveToken,
         IExchangeAdapter _exchangeAdapter,
@@ -77,8 +77,8 @@ contract CopyTradingModule is ModuleBase, ReentrancyGuard {
     );
 
     event CopyTrading_ComponentExchanged(
-        ISetToken _source_setToken,
-        ISetToken indexed _setToken,
+        IJasperVault _source_setToken,
+        IJasperVault indexed _jasperVault,
         address indexed _sendToken,
         address indexed _receiveToken,
         IExchangeAdapter _exchangeAdapter,
@@ -106,42 +106,42 @@ contract CopyTradingModule is ModuleBase, ReentrancyGuard {
     /* ============ External Functions ============ */
 
     /**
-     * Initializes this module to the SetToken. Only callable by the SetToken's manager.
+     * Initializes this module to the JasperVault. Only callable by the JasperVault's manager.
      *
-     * @param _setToken                 Instance of the SetToken to initialize
+     * @param _jasperVault                 Instance of the JasperVault to initialize
      */
-    function initialize(ISetToken _setToken)
+    function initialize(IJasperVault _jasperVault)
         external
-        onlyValidAndPendingSet(_setToken)
-        onlySetManager(_setToken, msg.sender)
+        onlyValidAndPendingSet(_jasperVault)
+        onlySetManager(_jasperVault, msg.sender)
     {
-        _setToken.initializeModule();
+        _jasperVault.initializeModule();
     }
 
     /**
-     * Executes a trade on a supported DEX. Only callable by the SetToken's manager.
-     * @dev Although the SetToken units are passed in for the send and receive quantities, the total quantity
-     * sent and received is the quantity of SetToken units multiplied by the SetToken totalSupply.
+     * Executes a trade on a supported DEX. Only callable by the JasperVault's manager.
+     * @dev Although the JasperVault units are passed in for the send and receive quantities, the total quantity
+     * sent and received is the quantity of JasperVault units multiplied by the JasperVault totalSupply.
      *
-     * @param _setToken             Instance of the SetToken to trade
+     * @param _jasperVault             Instance of the JasperVault to trade
      * @param _exchangeName         Human readable name of the exchange in the integrations registry
      * @param _sendToken             of the token to be sent to the exchange
-     * @param _sendQuantity         Units of token in SetToken sent to the exchange
+     * @param _sendQuantity         Units of token in JasperVault sent to the exchange
      * @param _receiveToken         AddressAddress of the token that will be received from the exchange
-     * @param _minReceiveQuantity   Min units of token in SetToken to be received from the exchange
+     * @param _minReceiveQuantity   Min units of token in JasperVault to be received from the exchange
      * @param _data                 Arbitrary bytes to be used to construct trade call data
      */
     function trade(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         string memory _exchangeName,
         address _sendToken,
         uint256 _sendQuantity,
         address _receiveToken,
         uint256 _minReceiveQuantity,
         bytes memory _data
-    ) external nonReentrant onlyManagerAndValidSet(_setToken) {
+    ) external nonReentrant onlyManagerAndValidSet(_jasperVault) {
         _trade(
-            _setToken,
+            _jasperVault,
             _exchangeName,
             _sendToken,
             _sendQuantity,
@@ -151,11 +151,11 @@ contract CopyTradingModule is ModuleBase, ReentrancyGuard {
             _data
         );
         address[] memory followers = signalSuscriptionModule.get_followers(
-            address(_setToken)
+            address(_jasperVault)
         );
         for (uint256 i = 0; i < followers.length; i++) {
             _trade(
-                ISetToken(followers[i]),
+                IJasperVault(followers[i]),
                 _exchangeName,
                 _sendToken,
                 _sendQuantity,
@@ -168,7 +168,7 @@ contract CopyTradingModule is ModuleBase, ReentrancyGuard {
     }
 
     function _trade(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         string memory _exchangeName,
         address _sendToken,
         uint256 _sendQuantity,
@@ -178,7 +178,7 @@ contract CopyTradingModule is ModuleBase, ReentrancyGuard {
         bytes memory _data
     ) internal {
         TradeInfo memory tradeInfo = _createTradeInfo(
-            _setToken,
+            _jasperVault,
             _exchangeName,
             _sendToken,
             _receiveToken,
@@ -206,7 +206,7 @@ contract CopyTradingModule is ModuleBase, ReentrancyGuard {
         ) = _updateSetTokenPositions(tradeInfo);
 
         emit ComponentExchanged(
-            _setToken,
+            _jasperVault,
             _sendToken,
             _receiveToken,
             tradeInfo.exchangeAdapter,
@@ -217,7 +217,7 @@ contract CopyTradingModule is ModuleBase, ReentrancyGuard {
     }
 
     /**
-     * Removes this module from the SetToken, via call by the SetToken. Left with empty logic
+     * Removes this module from the JasperVault, via call by the JasperVault. Left with empty logic
      * here because there are no check needed to verify removal.
      */
     function removeModule() external override {}
@@ -227,17 +227,17 @@ contract CopyTradingModule is ModuleBase, ReentrancyGuard {
     /**
      * Create and return TradeInfo struct
      *
-     * @param _setToken             Instance of the SetToken to trade
+     * @param _jasperVault             Instance of the JasperVault to trade
      * @param _exchangeName         Human readable name of the exchange in the integrations registry
      * @param _sendToken            Address of the token to be sent to the exchange
      * @param _receiveToken         Address of the token that will be received from the exchange
-     * @param _sendQuantity         Units of token in SetToken sent to the exchange
-     * @param _minReceiveQuantity   Min units of token in SetToken to be received from the exchange
+     * @param _sendQuantity         Units of token in JasperVault sent to the exchange
+     * @param _minReceiveQuantity   Min units of token in JasperVault to be received from the exchange
      *
      * return TradeInfo             Struct containing data for trade
      */
     function _createTradeInfo(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         string memory _exchangeName,
         address _sendToken,
         address _receiveToken,
@@ -246,7 +246,7 @@ contract CopyTradingModule is ModuleBase, ReentrancyGuard {
     ) internal view returns (TradeInfo memory) {
         TradeInfo memory tradeInfo;
 
-        tradeInfo.setToken = _setToken;
+        tradeInfo.jasperVault = _jasperVault;
 
         tradeInfo.exchangeAdapter = IExchangeAdapter(
             getAndValidateAdapter(_exchangeName)
@@ -255,7 +255,7 @@ contract CopyTradingModule is ModuleBase, ReentrancyGuard {
         tradeInfo.sendToken = _sendToken;
         tradeInfo.receiveToken = _receiveToken;
 
-        tradeInfo.setTotalSupply = _setToken.totalSupply();
+        tradeInfo.setTotalSupply = _jasperVault.totalSupply();
 
         tradeInfo.totalSendQuantity = Position.getDefaultTotalNotional(
             tradeInfo.setTotalSupply,
@@ -268,10 +268,10 @@ contract CopyTradingModule is ModuleBase, ReentrancyGuard {
         );
 
         tradeInfo.preTradeSendTokenBalance = IERC20(_sendToken).balanceOf(
-            address(_setToken)
+            address(_jasperVault)
         );
         tradeInfo.preTradeReceiveTokenBalance = IERC20(_receiveToken).balanceOf(
-            address(_setToken)
+            address(_jasperVault)
         );
 
         return tradeInfo;
@@ -281,7 +281,7 @@ contract CopyTradingModule is ModuleBase, ReentrancyGuard {
      * Validate pre trade data. Check exchange is valid, token quantity is valid.
      *
      * @param _tradeInfo            Struct containing trade information used in internal functions
-     * @param _sendQuantity         Units of token in SetToken sent to the exchange
+     * @param _sendQuantity         Units of token in JasperVault sent to the exchange
      */
     function _validatePreTradeData(
         TradeInfo memory _tradeInfo,
@@ -293,7 +293,7 @@ contract CopyTradingModule is ModuleBase, ReentrancyGuard {
         );
 
         require(
-            _tradeInfo.setToken.hasSufficientDefaultUnits(
+            _tradeInfo.jasperVault.hasSufficientDefaultUnits(
                 _tradeInfo.sendToken,
                 _sendQuantity
             ),
@@ -310,7 +310,7 @@ contract CopyTradingModule is ModuleBase, ReentrancyGuard {
             "Token to sell must be nonzero"
         );
         if (
-            _tradeInfo.setToken.hasSufficientDefaultUnits(
+            _tradeInfo.jasperVault.hasSufficientDefaultUnits(
                 _tradeInfo.sendToken,
                 _sendQuantity
             ) == false
@@ -321,7 +321,7 @@ contract CopyTradingModule is ModuleBase, ReentrancyGuard {
     }
 
     /**
-     * Invoke approve for send token, get method data and invoke trade in the context of the SetToken.
+     * Invoke approve for send token, get method data and invoke trade in the context of the JasperVault.
      *
      * @param _tradeInfo            Struct containing trade information used in internal functions
      * @param _data                 Arbitrary bytes to be used to construct trade call data
@@ -329,8 +329,8 @@ contract CopyTradingModule is ModuleBase, ReentrancyGuard {
     function _executeTrade(TradeInfo memory _tradeInfo, bytes memory _data)
         internal
     {
-        // Get spender address from exchange adapter and invoke approve for exact amount on SetToken
-        _tradeInfo.setToken.invokeApprove(
+        // Get spender address from exchange adapter and invoke approve for exact amount on JasperVault
+        _tradeInfo.jasperVault.invokeApprove(
             _tradeInfo.sendToken,
             _tradeInfo.exchangeAdapter.getSpender(),
             _tradeInfo.totalSendQuantity
@@ -343,13 +343,13 @@ contract CopyTradingModule is ModuleBase, ReentrancyGuard {
         ) = _tradeInfo.exchangeAdapter.getTradeCalldata(
                 _tradeInfo.sendToken,
                 _tradeInfo.receiveToken,
-                address(_tradeInfo.setToken),
+                address(_tradeInfo.jasperVault),
                 _tradeInfo.totalSendQuantity,
                 _tradeInfo.totalMinReceiveQuantity,
                 _data
             );
 
-        _tradeInfo.setToken.invoke(targetExchange, callValue, methodData);
+        _tradeInfo.jasperVault.invoke(targetExchange, callValue, methodData);
     }
 
     /**
@@ -364,7 +364,7 @@ contract CopyTradingModule is ModuleBase, ReentrancyGuard {
         returns (uint256)
     {
         uint256 exchangedQuantity = IERC20(_tradeInfo.receiveToken)
-            .balanceOf(address(_tradeInfo.setToken))
+            .balanceOf(address(_tradeInfo.jasperVault))
             .sub(_tradeInfo.preTradeReceiveTokenBalance);
 
         require(
@@ -376,7 +376,7 @@ contract CopyTradingModule is ModuleBase, ReentrancyGuard {
     }
 
     /**
-     * Retrieve fee from controller and calculate total protocol fee and send from SetToken to protocol recipient
+     * Retrieve fee from controller and calculate total protocol fee and send from JasperVault to protocol recipient
      *
      * @param _tradeInfo                Struct containing trade information used in internal functions
      * @return uint256                  Amount of receive token taken as protocol fee
@@ -391,7 +391,7 @@ contract CopyTradingModule is ModuleBase, ReentrancyGuard {
         );
 
         payProtocolFeeFromSetToken(
-            _tradeInfo.setToken,
+            _tradeInfo.jasperVault,
             _tradeInfo.receiveToken,
             protocolFeeTotal
         );
@@ -400,7 +400,7 @@ contract CopyTradingModule is ModuleBase, ReentrancyGuard {
     }
 
     /**
-     * Update SetToken positions
+     * Update JasperVault positions
      *
      * @param _tradeInfo                Struct containing trade information used in internal functions
      * @return uint256                  Amount of sendTokens used in the trade
@@ -411,7 +411,7 @@ contract CopyTradingModule is ModuleBase, ReentrancyGuard {
         returns (uint256, uint256)
     {
         (uint256 currentSendTokenBalance, , ) = _tradeInfo
-            .setToken
+            .jasperVault
             .calculateAndEditDefaultPosition(
                 _tradeInfo.sendToken,
                 _tradeInfo.setTotalSupply,
@@ -419,7 +419,7 @@ contract CopyTradingModule is ModuleBase, ReentrancyGuard {
             );
 
         (uint256 currentReceiveTokenBalance, , ) = _tradeInfo
-            .setToken
+            .jasperVault
             .calculateAndEditDefaultPosition(
                 _tradeInfo.receiveToken,
                 _tradeInfo.setTotalSupply,

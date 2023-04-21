@@ -17,7 +17,7 @@
 */
 pragma solidity 0.6.10;
 
-import { ISetToken } from "./ISetToken.sol";
+import { IJasperVault } from "./IJasperVault.sol";
 
 /**
  * @title IDebtIssuanceModule
@@ -31,11 +31,11 @@ interface IDebtIssuanceModule {
      * Called by another module to register itself on debt issuance module. Any logic can be included
      * in case checks need to be made or state needs to be updated.
      */
-    function registerToIssuanceModule(ISetToken _setToken) external;
+    function registerToIssuanceModule(IJasperVault _jasperVault) external;
 
     /**
      * Called by another module to unregister itself on debt issuance module. Any logic can be included
      * in case checks need to be made or state needs to be cleared.
      */
-    function unregisterFromIssuanceModule(ISetToken _setToken) external;
+    function unregisterFromIssuanceModule(IJasperVault _jasperVault) external;
 }

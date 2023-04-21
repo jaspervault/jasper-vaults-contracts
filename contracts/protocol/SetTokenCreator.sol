@@ -20,14 +20,14 @@ pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
 
 import { IController } from "../interfaces/IController.sol";
-import { SetToken } from "./SetToken.sol";
+import { JasperVault } from "./JasperVault.sol";
 import { AddressArrayUtils } from "../lib/AddressArrayUtils.sol";
 
 /**
  * @title SetTokenCreator
  * @author Set Protocol
  *
- * SetTokenCreator is a smart contract used to deploy new SetToken contracts. The SetTokenCreator
+ * SetTokenCreator is a smart contract used to deploy new JasperVault contracts. The SetTokenCreator
  * is a Factory contract that is enabled by the controller to create and register new SetTokens.
  */
 contract SetTokenCreator {
@@ -35,7 +35,7 @@ contract SetTokenCreator {
 
     /* ============ Events ============ */
 
-    event SetTokenCreated(address indexed _setToken, address _manager, string _name, string _symbol);
+    event SetTokenCreated(address indexed _jasperVault, address _manager, string _name, string _symbol);
 
     /* ============ State Variables ============ */
 
@@ -52,16 +52,16 @@ contract SetTokenCreator {
     }
 
     /**
-     * Creates a SetToken smart contract and registers the SetToken with the controller. The SetTokens are composed
+     * Creates a JasperVault smart contract and registers the JasperVault with the controller. The SetTokens are composed
      * of positions that are instantiated as DEFAULT (positionState = 0) state.
      *
      * @param _components             List of addresses of components for initial Positions
-     * @param _units                  List of units. Each unit is the # of components per 10^18 of a SetToken
+     * @param _units                  List of units. Each unit is the # of components per 10^18 of a JasperVault
      * @param _modules                List of modules to enable. All modules must be approved by the Controller
      * @param _manager                Address of the manager
-     * @param _name                   Name of the SetToken
-     * @param _symbol                 Symbol of the SetToken
-     * @return address                Address of the newly created SetToken
+     * @param _name                   Name of the JasperVault
+     * @param _symbol                 Symbol of the JasperVault
+     * @return address                Address of the newly created JasperVault
      */
     function create(
         address[] memory _components,
@@ -89,8 +89,8 @@ contract SetTokenCreator {
             require(controller.isModule(_modules[j]), "Must be enabled module");
         }
 
-        // Creates a new SetToken instance
-        SetToken setToken = new SetToken(
+        // Creates a new JasperVault instance
+        JasperVault jasperVault = new JasperVault(
             _components,
             _units,
             _modules,
@@ -101,11 +101,11 @@ contract SetTokenCreator {
         );
 
         // Registers Set with controller
-        controller.addSet(address(setToken));
+        controller.addSet(address(jasperVault));
 
-        emit SetTokenCreated(address(setToken), _manager, _name, _symbol);
+        emit SetTokenCreated(address(jasperVault), _manager, _name, _symbol);
 
-        return address(setToken);
+        return address(jasperVault);
     }
 }
 

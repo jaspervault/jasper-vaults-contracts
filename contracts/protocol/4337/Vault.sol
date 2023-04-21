@@ -5,11 +5,12 @@ pragma solidity  ^0.8.12;
 /* solhint-disable no-inline-assembly */
 /* solhint-disable reason-string */
 
-import "./ECDSA.sol";
-import "../../proxy/utils/Initializable.sol";
-import "../../proxy/utils/UUPSUpgradeable.sol";
+import "./utils/ECDSA.sol";
+import "./proxy/utils/Initializable.sol";
+import "./proxy/utils/UUPSUpgradeable.sol";
 
 import "./core/BaseAccount.sol";
+
 
 /**
   * minimal account.
@@ -17,7 +18,7 @@ import "./core/BaseAccount.sol";
   *  has execute, eth handling methods
   *  has a single signer that can send requests through the entryPoint.
   */
-contract Vault is BaseAccount, UUPSUpgradeable, Initializable {
+contract Vault is BaseAccount, LocalUUPSUpgradeable, LocalInitializable {
     using ECDSA for bytes32;
 
     //filler member, to push the nonce and owner to the same slot

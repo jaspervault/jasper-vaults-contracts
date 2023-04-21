@@ -1,9 +1,10 @@
 pragma solidity 0.6.10;
-import {ISetToken} from "@setprotocol/set-protocol-v2/contracts/interfaces/ISetToken.sol";
+import {IJasperVault} from "./IJasperVault.sol";
 pragma experimental "ABIEncoderV2";
 
 interface IDelegatedManagerFactory {
     function createSetAndManager(
+        uint256 _vaultType,
         address[] memory _components,
         int256[] memory _units,
         string memory _name,
@@ -11,16 +12,22 @@ interface IDelegatedManagerFactory {
         address _owner,
         address _methodologist,
         address[] memory _modules,
+        address[] memory _adapters,
         address[] memory _operators,
         address[] memory _assets,
         address[] memory _extensions
-    ) external returns (ISetToken, address);
+    ) external returns (IJasperVault, address);
 
     function initialize(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _ownerFeeSplit,
         address _ownerFeeRecipient,
         address[] memory _extensions,
         bytes[] memory _initializeBytecode
     ) external;
+
+    function jasperVaultType(address _jasperVault) external view returns(uint256);
+    function acccount2setToken(address _account) external view returns(address);
+    function setToken2account(address _jasperVault) external view returns(address);
+
 }

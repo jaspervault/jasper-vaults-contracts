@@ -22,7 +22,7 @@ pragma experimental "ABIEncoderV2";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import { AddressArrayUtils } from "../lib/AddressArrayUtils.sol";
-import { ISetToken } from "./ISetToken.sol";
+import { IJasperVault } from "./IJasperVault.sol";
 
 interface IAirdropModule {
     using AddressArrayUtils for address[];
@@ -40,17 +40,17 @@ interface IAirdropModule {
         bool anyoneAbsorb;
     }
 
-    function initialize(ISetToken _setToken, AirdropSettings memory _airdropSettings) external;
+    function initialize(IJasperVault _jasperVault, AirdropSettings memory _airdropSettings) external;
 
-    function airdropSettings(ISetToken _setToken) external view returns(AirdropReturnSettings memory);
-    function batchAbsorb(ISetToken _setToken, address[] memory _tokens) external;
-    function absorb(ISetToken _setToken, IERC20 _token) external;
-    function addAirdrop(ISetToken _setToken, IERC20 _airdrop) external;
-    function removeAirdrop(ISetToken _setToken, IERC20 _airdrop) external;
-    function updateAnyoneAbsorb(ISetToken _setToken, bool _anyoneAbsorb) external;
-    function updateFeeRecipient(ISetToken _setToken, address _newFeeRecipient) external;
-    function updateAirdropFee(ISetToken _setToken, uint256 _newFee) external;
+    function airdropSettings(IJasperVault _jasperVault) external view returns(AirdropReturnSettings memory);
+    function batchAbsorb(IJasperVault _jasperVault, address[] memory _tokens) external;
+    function absorb(IJasperVault _jasperVault, IERC20 _token) external;
+    function addAirdrop(IJasperVault _jasperVault, IERC20 _airdrop) external;
+    function removeAirdrop(IJasperVault _jasperVault, IERC20 _airdrop) external;
+    function updateAnyoneAbsorb(IJasperVault _jasperVault, bool _anyoneAbsorb) external;
+    function updateFeeRecipient(IJasperVault _jasperVault, address _newFeeRecipient) external;
+    function updateAirdropFee(IJasperVault _jasperVault, uint256 _newFee) external;
     function removeModule() external;
-    function getAirdrops(ISetToken _setToken) external returns(address[] memory);
-    function isAirdropToken(ISetToken _setToken, IERC20 _token) external returns(bool);
+    function getAirdrops(IJasperVault _jasperVault) external returns(address[] memory);
+    function isAirdropToken(IJasperVault _jasperVault, IERC20 _token) external returns(bool);
 }

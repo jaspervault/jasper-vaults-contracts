@@ -32,7 +32,7 @@ contract CompoundBravoGovernanceAdapter {
 
     // Signature of the propose function in Compound Governor Bravo. This is used to encode the calldata for the propose function
     string public constant PROPOSE_SIGNATURE = "propose(address[],uint256[],string[],bytes[],string)";
-    
+
     // Signature of the delegate function in Compound Governor Bravo
     string public constant DELEGATE_SIGNATURE = "delegate(address)";
 
@@ -99,15 +99,15 @@ contract CompoundBravoGovernanceAdapter {
     /**
      * Generates the calldata to register for voting. This is equivalent to delegating to the SetToken address in Compound.
      *
-     * @param _setToken             Address of SetToken
+     * @param _jasperVault             Address of SetToken
      *
      * @return address              Target contract address
      * @return uint256              Total quantity of ETH (Set to 0)
      * @return bytes                Propose calldata
      */
-    function getRegisterCalldata(address _setToken) external view returns (address, uint256, bytes memory) {
+    function getRegisterCalldata(address _jasperVault) external view returns (address, uint256, bytes memory) {
         // delegate(address _delegatee)
-        bytes memory callData = abi.encodeWithSignature(DELEGATE_SIGNATURE, _setToken);
+        bytes memory callData = abi.encodeWithSignature(DELEGATE_SIGNATURE, _jasperVault);
 
         return (governanceToken, 0, callData);
     }

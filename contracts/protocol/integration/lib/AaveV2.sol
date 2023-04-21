@@ -20,19 +20,19 @@ pragma solidity 0.6.10;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { ILendingPool } from "../../../interfaces/external/aave-v2/ILendingPool.sol";
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
 
 /**
  * @title AaveV2
  * @author Set Protocol
- * 
+ *
  * Collection of helper functions for interacting with AaveV2 integrations.
  */
 library AaveV2 {
     /* ============ External ============ */
-    
+
     /**
-     * Get deposit calldata from SetToken
+     * Get deposit calldata from JasperVault
      *
      * Deposits an `_amountNotional` of underlying asset into the reserve, receiving in return overlying aTokens.
      * - E.g. User deposits 100 USDC and gets in return 100 aUSDC
@@ -51,7 +51,7 @@ library AaveV2 {
      */
     function getDepositCalldata(
         ILendingPool _lendingPool,
-        address _asset, 
+        address _asset,
         uint256 _amountNotional,
         address _onBehalfOf,
         uint16 _referralCode
@@ -61,48 +61,48 @@ library AaveV2 {
         returns (address, uint256, bytes memory)
     {
         bytes memory callData = abi.encodeWithSignature(
-            "deposit(address,uint256,address,uint16)", 
-            _asset, 
-            _amountNotional, 
+            "deposit(address,uint256,address,uint16)",
+            _asset,
+            _amountNotional,
             _onBehalfOf,
             _referralCode
         );
-        
+
         return (address(_lendingPool), 0, callData);
     }
-    
+
     /**
-     * Invoke deposit on LendingPool from SetToken
-     * 
+     * Invoke deposit on LendingPool from JasperVault
+     *
      * Deposits an `_amountNotional` of underlying asset into the reserve, receiving in return overlying aTokens.
-     * - E.g. SetToken deposits 100 USDC and gets in return 100 aUSDC
-     * @param _setToken             Address of the SetToken
+     * - E.g. JasperVault deposits 100 USDC and gets in return 100 aUSDC
+     * @param _jasperVault             Address of the JasperVault
      * @param _lendingPool          Address of the LendingPool contract
      * @param _asset                The address of the underlying asset to deposit
      * @param _amountNotional       The amount to be deposited
      */
     function invokeDeposit(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         ILendingPool _lendingPool,
         address _asset,
-        uint256 _amountNotional        
+        uint256 _amountNotional
     )
         external
     {
         ( , , bytes memory depositCalldata) = getDepositCalldata(
             _lendingPool,
             _asset,
-            _amountNotional, 
-            address(_setToken), 
+            _amountNotional,
+            address(_jasperVault),
             0
         );
-        
-        _setToken.invoke(address(_lendingPool), 0, depositCalldata);
+
+        _jasperVault.invoke(address(_lendingPool), 0, depositCalldata);
     }
-    
+
     /**
-     * Get withdraw calldata from SetToken
-     * 
+     * Get withdraw calldata from JasperVault
+     *
      * Withdraws an `_amountNotional` of underlying asset from the reserve, burning the equivalent aTokens owned
      * - E.g. User has 100 aUSDC, calls withdraw() and receives 100 USDC, burning the 100 aUSDC
      * @param _lendingPool          Address of the LendingPool contract
@@ -119,31 +119,31 @@ library AaveV2 {
      */
     function getWithdrawCalldata(
         ILendingPool _lendingPool,
-        address _asset, 
+        address _asset,
         uint256 _amountNotional,
-        address _receiver        
+        address _receiver
     )
         public
         pure
         returns (address, uint256, bytes memory)
     {
         bytes memory callData = abi.encodeWithSignature(
-            "withdraw(address,uint256,address)", 
-            _asset, 
-            _amountNotional, 
+            "withdraw(address,uint256,address)",
+            _asset,
+            _amountNotional,
             _receiver
         );
-        
+
         return (address(_lendingPool), 0, callData);
     }
-    
+
     /**
-     * Invoke withdraw on LendingPool from SetToken
-     * 
+     * Invoke withdraw on LendingPool from JasperVault
+     *
      * Withdraws an `_amountNotional` of underlying asset from the reserve, burning the equivalent aTokens owned
-     * - E.g. SetToken has 100 aUSDC, and receives 100 USDC, burning the 100 aUSDC
-     *     
-     * @param _setToken         Address of the SetToken
+     * - E.g. JasperVault has 100 aUSDC, and receives 100 USDC, burning the 100 aUSDC
+     *
+     * @param _jasperVault         Address of the JasperVault
      * @param _lendingPool      Address of the LendingPool contract
      * @param _asset            The address of the underlying asset to withdraw
      * @param _amountNotional   The underlying amount to be withdrawn
@@ -152,10 +152,10 @@ library AaveV2 {
      * @return uint256          The final amount withdrawn
      */
     function invokeWithdraw(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         ILendingPool _lendingPool,
         address _asset,
-        uint256 _amountNotional        
+        uint256 _amountNotional
     )
         external
         returns (uint256)
@@ -163,17 +163,17 @@ library AaveV2 {
         ( , , bytes memory withdrawCalldata) = getWithdrawCalldata(
             _lendingPool,
             _asset,
-            _amountNotional, 
-            address(_setToken)
+            _amountNotional,
+            address(_jasperVault)
         );
-        
-        return abi.decode(_setToken.invoke(address(_lendingPool), 0, withdrawCalldata), (uint256));
+
+        return abi.decode(_jasperVault.invoke(address(_lendingPool), 0, withdrawCalldata), (uint256));
     }
-    
+
     /**
-     * Get borrow calldata from SetToken
+     * Get borrow calldata from JasperVault
      *
-     * Allows users to borrow a specific `_amountNotional` of the reserve underlying `_asset`, provided that 
+     * Allows users to borrow a specific `_amountNotional` of the reserve underlying `_asset`, provided that
      * the borrower already deposited enough collateral, or he was given enough allowance by a credit delegator
      * on the corresponding debt token (StableDebtToken or VariableDebtToken)
      *
@@ -193,7 +193,7 @@ library AaveV2 {
      */
     function getBorrowCalldata(
         ILendingPool _lendingPool,
-        address _asset, 
+        address _asset,
         uint256 _amountNotional,
         uint256 _interestRateMode,
         uint16 _referralCode,
@@ -204,31 +204,31 @@ library AaveV2 {
         returns (address, uint256, bytes memory)
     {
         bytes memory callData = abi.encodeWithSignature(
-            "borrow(address,uint256,uint256,uint16,address)", 
-            _asset, 
-            _amountNotional, 
+            "borrow(address,uint256,uint256,uint16,address)",
+            _asset,
+            _amountNotional,
             _interestRateMode,
             _referralCode,
             _onBehalfOf
         );
-        
+
         return (address(_lendingPool), 0, callData);
     }
-    
+
     /**
-     * Invoke borrow on LendingPool from SetToken
+     * Invoke borrow on LendingPool from JasperVault
      *
-     * Allows SetToken to borrow a specific `_amountNotional` of the reserve underlying `_asset`, provided that 
-     * the SetToken already deposited enough collateral, or it was given enough allowance by a credit delegator
+     * Allows JasperVault to borrow a specific `_amountNotional` of the reserve underlying `_asset`, provided that
+     * the JasperVault already deposited enough collateral, or it was given enough allowance by a credit delegator
      * on the corresponding debt token (StableDebtToken or VariableDebtToken)
-     * @param _setToken             Address of the SetToken
+     * @param _jasperVault             Address of the SetToken
      * @param _lendingPool          Address of the LendingPool contract
      * @param _asset                The address of the underlying asset to borrow
      * @param _amountNotional       The amount to be borrowed
      * @param _interestRateMode     The interest rate mode at which the user wants to borrow: 1 for Stable, 2 for Variable
      */
     function invokeBorrow(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         ILendingPool _lendingPool,
         address _asset,
         uint256 _amountNotional,
@@ -241,11 +241,11 @@ library AaveV2 {
             _asset,
             _amountNotional,
             _interestRateMode,
-            0, 
-            address(_setToken)
+            0,
+            address(_jasperVault)
         );
-        
-        _setToken.invoke(address(_lendingPool), 0, borrowCalldata);
+
+        _jasperVault.invoke(address(_lendingPool), 0, borrowCalldata);
     }
 
     /**
@@ -268,9 +268,9 @@ library AaveV2 {
      */
     function getRepayCalldata(
         ILendingPool _lendingPool,
-        address _asset, 
+        address _asset,
         uint256 _amountNotional,
-        uint256 _interestRateMode,        
+        uint256 _interestRateMode,
         address _onBehalfOf
     )
         public
@@ -278,13 +278,13 @@ library AaveV2 {
         returns (address, uint256, bytes memory)
     {
         bytes memory callData = abi.encodeWithSignature(
-            "repay(address,uint256,uint256,address)", 
-            _asset, 
-            _amountNotional, 
-            _interestRateMode,            
+            "repay(address,uint256,uint256,address)",
+            _asset,
+            _amountNotional,
+            _interestRateMode,
             _onBehalfOf
         );
-        
+
         return (address(_lendingPool), 0, callData);
     }
 
@@ -293,7 +293,7 @@ library AaveV2 {
      *
      * Repays a borrowed `_amountNotional` on a specific `_asset` reserve, burning the equivalent debt tokens owned
      * - E.g. SetToken repays 100 USDC, burning 100 variable/stable debt tokens
-     * @param _setToken             Address of the SetToken
+     * @param _jasperVault             Address of the SetToken
      * @param _lendingPool          Address of the LendingPool contract
      * @param _asset                The address of the borrowed underlying asset previously borrowed
      * @param _amountNotional       The amount to repay
@@ -303,7 +303,7 @@ library AaveV2 {
      * @return uint256              The final amount repaid
      */
     function invokeRepay(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         ILendingPool _lendingPool,
         address _asset,
         uint256 _amountNotional,
@@ -317,15 +317,15 @@ library AaveV2 {
             _asset,
             _amountNotional,
             _interestRateMode,
-            address(_setToken)
+            address(_jasperVault)
         );
-        
-        return abi.decode(_setToken.invoke(address(_lendingPool), 0, repayCalldata), (uint256));
+
+        return abi.decode(_jasperVault.invoke(address(_lendingPool), 0, repayCalldata), (uint256));
     }
 
     /**
      * Get setUserUseReserveAsCollateral calldata from SetToken
-     * 
+     *
      * Allows borrower to enable/disable a specific deposited asset as collateral
      * @param _lendingPool          Address of the LendingPool contract
      * @param _asset                The address of the underlying asset deposited
@@ -345,11 +345,11 @@ library AaveV2 {
         returns (address, uint256, bytes memory)
     {
         bytes memory callData = abi.encodeWithSignature(
-            "setUserUseReserveAsCollateral(address,bool)", 
+            "setUserUseReserveAsCollateral(address,bool)",
             _asset,
             _useAsCollateral
         );
-        
+
         return (address(_lendingPool), 0, callData);
     }
 
@@ -357,13 +357,13 @@ library AaveV2 {
      * Invoke an asset to be used as collateral on Aave from SetToken
      *
      * Allows SetToken to enable/disable a specific deposited asset as collateral
-     * @param _setToken             Address of the SetToken
+     * @param _jasperVault             Address of the SetToken
      * @param _lendingPool          Address of the LendingPool contract
      * @param _asset                The address of the underlying asset deposited
      * @param _useAsCollateral      true` if the user wants to use the deposit as collateral, `false` otherwise
      */
     function invokeSetUserUseReserveAsCollateral(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         ILendingPool _lendingPool,
         address _asset,
         bool _useAsCollateral
@@ -375,10 +375,10 @@ library AaveV2 {
             _asset,
             _useAsCollateral
         );
-        
-        _setToken.invoke(address(_lendingPool), 0, callData);
+
+        _jasperVault.invoke(address(_lendingPool), 0, callData);
     }
-    
+
     /**
      * Get swapBorrowRate calldata from SetToken
      *
@@ -401,25 +401,25 @@ library AaveV2 {
         returns (address, uint256, bytes memory)
     {
         bytes memory callData = abi.encodeWithSignature(
-            "swapBorrowRateMode(address,uint256)", 
+            "swapBorrowRateMode(address,uint256)",
             _asset,
             _rateMode
         );
-        
+
         return (address(_lendingPool), 0, callData);
     }
 
     /**
      * Invoke to swap borrow rate of SetToken
-     * 
+     *
      * Allows SetToken to toggle it's debt between stable and variable mode
-     * @param _setToken         Address of the SetToken
+     * @param _jasperVault         Address of the SetToken
      * @param _lendingPool      Address of the LendingPool contract
      * @param _asset            The address of the underlying asset borrowed
      * @param _rateMode         The rate mode that the user wants to swap to
      */
     function invokeSwapBorrowRateMode(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         ILendingPool _lendingPool,
         address _asset,
         uint256 _rateMode
@@ -431,7 +431,7 @@ library AaveV2 {
             _asset,
             _rateMode
         );
-        
-        _setToken.invoke(address(_lendingPool), 0, callData);
+
+        _jasperVault.invoke(address(_lendingPool), 0, callData);
     }
 }

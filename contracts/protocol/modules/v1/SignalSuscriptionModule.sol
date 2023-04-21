@@ -25,11 +25,13 @@ import {SafeCast} from "@openzeppelin/contracts/utils/SafeCast.sol";
 
 import {IController} from "../../../interfaces/IController.sol";
 import {Invoke} from "../../lib/Invoke.sol";
-import {ISetToken} from "../../../interfaces/ISetToken.sol";
+import {IJasperVault} from "../../../interfaces/IJasperVault.sol";
 import {ModuleBase} from "../../lib/ModuleBase.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {PreciseUnitMath} from "../../../lib/PreciseUnitMath.sol";
 import {AddressArrayUtils} from "../../../lib/AddressArrayUtils.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ISubscribeFeePool} from "../../../interfaces/ISubscribeFeePool.sol";
 
 /**
  * @title TradeModule
@@ -42,93 +44,138 @@ contract SignalSuscriptionModule is ModuleBase, Ownable, ReentrancyGuard {
     using SafeCast for int256;
     using SafeMath for uint256;
 
-    using Invoke for ISetToken;
+    using Invoke for IJasperVault;
 
     using PreciseUnitMath for uint256;
     using AddressArrayUtils for address[];
 
     mapping(address => address[]) public followers;
-    mapping(address => bool) public isFollowing;
-    mapping(address => address) public Signal_provider;
+
     mapping(address => bool) public allowed_Copytrading;
+    mapping(address => bool) public isExectueFollow;
+    uint256 public warningLine;
+    uint256 public unsubscribeLine;
+    //1%=1e16  100%=1e18
+    uint256 public platformFee;
+    address public platform_vault;
+
+    mapping(address => address) public Signal_provider;
+    //1%=1e16  100%=1e18
+    mapping(IJasperVault => uint256) public strategistsFee;
+    mapping(IJasperVault => uint256) private jasperVaultPreBalance;
+
+    ISubscribeFeePool public immutable subscribeFeePool;
+
+    uint256 public platformPercentage;
 
     /* ============ Constructor ============ */
 
-    constructor(IController _controller) public ModuleBase(_controller) {}
+    constructor(
+        IController _controller,
+        ISubscribeFeePool _subscribeFeePool,
+        uint256 _warningLine,
+        uint256 _unsubscribeLine,
+        uint256 _platformPercentage,
+        address _platform_vault
+    ) public ModuleBase(_controller) {
+        warningLine = _warningLine;
+        unsubscribeLine = _unsubscribeLine;
+        platformPercentage = _platformPercentage;
+        subscribeFeePool = _subscribeFeePool;
+        platform_vault = _platform_vault;
+    }
 
     /* ============ External Functions ============ */
 
-    /**
-     * Initializes this module to the SetToken. Only callable by the SetToken's manager.
-     *
-     * @param _setToken                 Instance of the SetToken to initialize
-     */
-    function initialize(ISetToken _setToken)
-        external
-        onlyValidAndPendingSet(_setToken)
-        onlySetManager(_setToken, msg.sender)
-    {
-        _setToken.initializeModule();
+    function exectueFollowStart(
+        address _jasperVault
+    ) external nonReentrant onlyManagerAndValidSet(IJasperVault(_jasperVault)) {
+        require(
+            !isExectueFollow[_jasperVault],
+            "exectueFollow  status not false"
+        );
+        isExectueFollow[_jasperVault] = true;
+    }
+
+    function exectueFollowEnd(
+        address _jasperVault
+    ) external nonReentrant onlyManagerAndValidSet(IJasperVault(_jasperVault)) {
+        require(isExectueFollow[_jasperVault], "exectueFollow status not true");
+        isExectueFollow[_jasperVault] = false;
+    }
+
+    //1%=1e16  100%=1e18
+    function setPlatformAndPlatformFee(
+        address _platform_vault,
+        uint256 _fee
+    ) external nonReentrant onlyOwner {
+        platformFee = _fee;
+        platform_vault = _platform_vault;
     }
 
     /**
-     * Removes this module from the SetToken, via call by the SetToken. Left with empty logic
+     * Initializes this module to the JasperVault. Only callable by the JasperVault's manager.
+     *
+     * @param _jasperVault                 Instance of the JasperVault to initialize
+     */
+    function initialize(
+        IJasperVault _jasperVault
+    )
+        external
+        onlyValidAndPendingSet(_jasperVault)
+        onlySetManager(_jasperVault, msg.sender)
+    {
+        _jasperVault.initializeModule();
+    }
+
+    /**
+     * Removes this module from the JasperVault, via call by the JasperVault. Left with empty logic
      * here because there are no check needed to verify removal.
      */
     function removeModule() external override {}
 
-    function subscribe(ISetToken _setToken, address target)
-        external
-        nonReentrant
-        onlyManagerAndValidSet(_setToken)
-    {
+    function subscribe(
+        IJasperVault _jasperVault,
+        address target
+    ) external nonReentrant onlyManagerAndValidSet(_jasperVault) {
         require(allowed_Copytrading[target], "Unable to subscribe this fund");
-        require(
-            !isFollowing[address(_setToken)],
-            "Signal has been already subscribed"
-        );
-        followers[target].push(address(_setToken));
-        isFollowing[address(_setToken)] = true;
-        Signal_provider[address(_setToken)] = target;
+        uint256 preBalance = controller
+            .getSetValuer()
+            .calculateSetTokenValuation(
+                _jasperVault,
+                _jasperVault.masterToken()
+            );
+        jasperVaultPreBalance[_jasperVault] = preBalance;
+        followers[target].push(address(_jasperVault));
+        Signal_provider[address(_jasperVault)] = target;
     }
 
     function udpate_allowedCopytrading(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         bool can_copy_trading
-    ) external onlyManagerAndValidSet(_setToken) {
-        allowed_Copytrading[address(_setToken)] = can_copy_trading;
+    ) external onlyManagerAndValidSet(_jasperVault) {
+        allowed_Copytrading[address(_jasperVault)] = can_copy_trading;
     }
 
-    function unsubscribe(ISetToken _setToken, address target)
-        external
-        nonReentrant
-        onlyManagerAndValidSet(_setToken)
-    {
-        require(
-            isFollowing[address(_setToken)],
-            "Signal has not been subscribed"
-        );
-        followers[target].removeStorage(address(_setToken));
-        isFollowing[address(_setToken)] = false;
-        delete Signal_provider[address(_setToken)];
+    function unsubscribe(
+        IJasperVault _jasperVault,
+        address target
+    ) external nonReentrant onlyManagerAndValidSet(_jasperVault) {
+        followers[target].removeStorage(address(_jasperVault));
+        delete Signal_provider[address(_jasperVault)];
     }
 
-    function removeFollower(address target, address follower)
-        external
-        nonReentrant
-        onlyOwner
-    {
-        require(isFollowing[follower], "Signal has not been subscribed");
+    function removeFollower(
+        address target,
+        address follower
+    ) external nonReentrant onlyOwner {
         followers[target].removeStorage(follower);
-        isFollowing[follower] = false;
         delete Signal_provider[follower];
     }
 
-    function get_followers(address target)
-        external
-        view
-        returns (address[] memory)
-    {
+    function get_followers(
+        address target
+    ) external view returns (address[] memory) {
         if (allowed_Copytrading[target]) {
             return followers[target];
         } else {
@@ -136,11 +183,78 @@ contract SignalSuscriptionModule is ModuleBase, Ownable, ReentrancyGuard {
         }
     }
 
-    function get_signal_provider(ISetToken _setToken)
-        external
-        view
-        returns (address)
-    {
-        return Signal_provider[address(_setToken)];
+    function get_signal_provider(
+        IJasperVault _jasperVault
+    ) external view returns (address) {
+        return Signal_provider[address(_jasperVault)];
+    }
+
+    //calculate fee
+    function handleFee(
+        IJasperVault _jasperVault
+    ) external nonReentrant onlyManagerAndValidSet(_jasperVault) {
+        address masterToken = _jasperVault.masterToken();
+        uint256 preBalance = jasperVaultPreBalance[_jasperVault];
+        uint256 nexBalance = controller
+            .getSetValuer()
+            .calculateSetTokenValuation(_jasperVault, masterToken);
+
+        if (nexBalance > preBalance) {
+            uint256 totalSupply = _jasperVault.totalSupply();
+            uint256 fee = nexBalance.sub(preBalance).mul(totalSupply);
+            //calculate platformFee
+            uint256 platformFeeBalance = fee.preciseMul(platformFee);
+
+            //calculate strategistsFee
+            address target = Signal_provider[address(_jasperVault)];
+            uint256 _strategistFee = strategistsFee[IJasperVault(target)];
+            uint256 strategistFeeBalance = _strategistFee.preciseMul(
+                _strategistFee
+            );
+            //approve
+            _jasperVault.invokeApprove(
+                masterToken,
+                address(subscribeFeePool),
+                platformFeeBalance.add(strategistFeeBalance)
+            );
+            desposit(
+                _jasperVault,
+                masterToken,
+                platform_vault,
+                platformFeeBalance
+            );
+            desposit(_jasperVault, masterToken, target, strategistFeeBalance);
+            //update position
+            uint256 tokenBalance = IERC20(masterToken).balanceOf(
+                address(_jasperVault)
+            );
+            tokenBalance = tokenBalance.preciseDiv(totalSupply);
+            _updatePosition(_jasperVault, masterToken, tokenBalance, 0);
+        }
+    }
+
+    function desposit(
+        IJasperVault _jasperVault,
+        address _token,
+        address _to,
+        uint256 _amount
+    ) internal {
+        bytes memory callData = abi.encodeWithSignature(
+            "desposit(address,address,uint256)",
+            _token,
+            _to,
+            _amount
+        );
+        _jasperVault.invoke(address(subscribeFeePool), 0, callData);
+    }
+
+    function _updatePosition(
+        IJasperVault _jasperVault,
+        address _token,
+        uint256 _newPositionUnit,
+        uint256 _coinType
+    ) internal {
+        _jasperVault.editCoinType(_token, _coinType);
+        _jasperVault.editDefaultPosition(_token, _newPositionUnit);
     }
 }

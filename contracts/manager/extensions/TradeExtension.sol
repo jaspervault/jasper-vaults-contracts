@@ -17,8 +17,8 @@
 */
 
 pragma solidity 0.6.10;
-
-import { ISetToken } from "@setprotocol/set-protocol-v2/contracts/interfaces/ISetToken.sol";
+pragma experimental "ABIEncoderV2";
+import { IJasperVault } from "../../interfaces/IJasperVault.sol";
 import { ITradeModule } from "@setprotocol/set-protocol-v2/contracts/interfaces/ITradeModule.sol";
 
 import { BaseGlobalExtension } from "../lib/BaseGlobalExtension.sol";
@@ -32,11 +32,17 @@ import { IManagerCore } from "../interfaces/IManagerCore.sol";
  * and the owner the ability to restrict operator(s) permissions with an asset whitelist.
  */
 contract TradeExtension is BaseGlobalExtension {
-
+    struct TradeInfo {
+        string exchangeName;             // Human readable name of the exchange in the integrations registry
+        address sendToken;               // Address of the token to be sent to the exchange
+        uint256 sendQuantity;            // Max units of `sendToken` sent to the exchange
+        address receiveToken;            // Address of the token that will be received from the exchange
+        uint256 minReceiveQuantity;         // Min units of `receiveToken` to be received from the exchange
+        bytes data;                      // Arbitrary bytes to be used to construct trade call data
+    }
     /* ============ Events ============ */
-
     event TradeExtensionInitialized(
-        address indexed _setToken,
+        address indexed _jasperVault,
         address indexed _delegatedManager
     );
 
@@ -60,14 +66,14 @@ contract TradeExtension is BaseGlobalExtension {
     /* ============ External Functions ============ */
 
     /**
-     * ONLY OWNER: Initializes TradeModule on the SetToken associated with the DelegatedManager.
+     * ONLY OWNER: Initializes TradeModule on the JasperVault associated with the DelegatedManager.
      *
      * @param _delegatedManager     Instance of the DelegatedManager to initialize the TradeModule for
      */
     function initializeModule(IDelegatedManager _delegatedManager) external onlyOwnerAndValidManager(_delegatedManager) {
         require(_delegatedManager.isInitializedExtension(address(this)), "Extension must be initialized");
 
-        _initializeModule(_delegatedManager.setToken(), _delegatedManager);
+        _initializeModule(_delegatedManager.jasperVault(), _delegatedManager);
     }
 
     /**
@@ -78,89 +84,72 @@ contract TradeExtension is BaseGlobalExtension {
     function initializeExtension(IDelegatedManager _delegatedManager) external onlyOwnerAndValidManager(_delegatedManager) {
         require(_delegatedManager.isPendingExtension(address(this)), "Extension must be pending");
 
-        ISetToken setToken = _delegatedManager.setToken();
+        IJasperVault jasperVault = _delegatedManager.jasperVault();
 
-        _initializeExtension(setToken, _delegatedManager);
+        _initializeExtension(jasperVault, _delegatedManager);
 
-        emit TradeExtensionInitialized(address(setToken), address(_delegatedManager));
+        emit TradeExtensionInitialized(address(jasperVault), address(_delegatedManager));
     }
 
     /**
-     * ONLY OWNER: Initializes TradeExtension to the DelegatedManager and TradeModule to the SetToken
+     * ONLY OWNER: Initializes TradeExtension to the DelegatedManager and TradeModule to the JasperVault
      *
      * @param _delegatedManager     Instance of the DelegatedManager to initialize
      */
     function initializeModuleAndExtension(IDelegatedManager _delegatedManager) external onlyOwnerAndValidManager(_delegatedManager){
         require(_delegatedManager.isPendingExtension(address(this)), "Extension must be pending");
 
-        ISetToken setToken = _delegatedManager.setToken();
+        IJasperVault jasperVault = _delegatedManager.jasperVault();
 
-        _initializeExtension(setToken, _delegatedManager);
-        _initializeModule(setToken, _delegatedManager);
+        _initializeExtension(jasperVault, _delegatedManager);
+        _initializeModule(jasperVault, _delegatedManager);
 
-        emit TradeExtensionInitialized(address(setToken), address(_delegatedManager));
+        emit TradeExtensionInitialized(address(jasperVault), address(_delegatedManager));
     }
 
     /**
-     * ONLY MANAGER: Remove an existing SetToken and DelegatedManager tracked by the TradeExtension
+     * ONLY MANAGER: Remove an existing JasperVault and DelegatedManager tracked by the TradeExtension
      */
     function removeExtension() external override {
         IDelegatedManager delegatedManager = IDelegatedManager(msg.sender);
-        ISetToken setToken = delegatedManager.setToken();
+        IJasperVault jasperVault = delegatedManager.jasperVault();
 
-        _removeExtension(setToken, delegatedManager);
+        _removeExtension(jasperVault, delegatedManager);
     }
 
-    /**
-     * ONLY OPERATOR: Executes a trade on a supported DEX.
-     * @dev Although the SetToken units are passed in for the send and receive quantities, the total quantity
-     * sent and received is the quantity of SetToken units multiplied by the SetToken totalSupply.
-     *
-     * @param _setToken             Instance of the SetToken to trade
-     * @param _exchangeName         Human readable name of the exchange in the integrations registry
-     * @param _sendToken            Address of the token to be sent to the exchange
-     * @param _sendQuantity         Units of token in SetToken sent to the exchange
-     * @param _receiveToken         Address of the token that will be received from the exchange
-     * @param _minReceiveQuantity   Min units of token in SetToken to be received from the exchange
-     * @param _data                 Arbitrary bytes to be used to construct trade call data
-     */
+
     function trade(
-        ISetToken _setToken,
-        string memory _exchangeName,
-        address _sendToken,
-        uint256 _sendQuantity,
-        address _receiveToken,
-        uint256 _minReceiveQuantity,
-        bytes memory _data
+        IJasperVault _jasperVault,
+        TradeInfo memory _tradeInfo
     )
         external
-        onlyUnSubscribed(_setToken)
-        onlyOperator(_setToken)
-        onlyAllowedAsset(_setToken, _receiveToken)
+        onlySettle(_jasperVault)
+        onlyOperator(_jasperVault)
+        onlyAllowedAsset(_jasperVault, _tradeInfo.receiveToken)
+        ValidAdapter(_jasperVault,address(tradeModule),_tradeInfo.exchangeName)
     {
         bytes memory callData = abi.encodeWithSignature(
             "trade(address,string,address,uint256,address,uint256,bytes)",
-            _setToken,
-            _exchangeName,
-            _sendToken,
-            _sendQuantity,
-            _receiveToken,
-            _minReceiveQuantity,
-            _data
+            _jasperVault,
+            _tradeInfo.exchangeName,
+            _tradeInfo.sendToken,
+            _tradeInfo.sendQuantity,
+            _tradeInfo.receiveToken,
+            _tradeInfo.minReceiveQuantity,
+            _tradeInfo.data
         );
-        _invokeManager(_manager(_setToken), address(tradeModule), callData);
+        _invokeManager(_manager(_jasperVault), address(tradeModule), callData);
     }
-
     /* ============ Internal Functions ============ */
 
     /**
-     * Internal function to initialize TradeModule on the SetToken associated with the DelegatedManager.
+     * Internal function to initialize TradeModule on the JasperVault associated with the DelegatedManager.
      *
-     * @param _setToken             Instance of the SetToken corresponding to the DelegatedManager
+     * @param _jasperVault             Instance of the JasperVault corresponding to the DelegatedManager
      * @param _delegatedManager     Instance of the DelegatedManager to initialize the TradeModule for
      */
-    function _initializeModule(ISetToken _setToken, IDelegatedManager _delegatedManager) internal {
-        bytes memory callData = abi.encodeWithSignature("initialize(address)", _setToken);
+    function _initializeModule(IJasperVault _jasperVault, IDelegatedManager _delegatedManager) internal {
+        bytes memory callData = abi.encodeWithSignature("initialize(address)", _jasperVault);
         _invokeManager(_delegatedManager, address(tradeModule), callData);
     }
 }

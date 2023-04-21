@@ -18,13 +18,13 @@
 pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
 
-import { ISetToken } from "./ISetToken.sol";
+import { IJasperVault } from "./IJasperVault.sol";
 
 interface ITradeModule {
-    function initialize(ISetToken _setToken) external;
+    function initialize(IJasperVault _jasperVault) external;
 
     function trade(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         string memory _exchangeName,
         address _sendToken,
         uint256 _sendQuantity,

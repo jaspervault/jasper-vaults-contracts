@@ -21,7 +21,7 @@ pragma solidity 0.6.10;
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import { IController } from "../../../interfaces/IController.sol";
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
 import { ModuleBase } from "../../../protocol/lib/ModuleBase.sol";
 
 contract ModuleBaseMock is ModuleBase {
@@ -37,22 +37,22 @@ contract ModuleBaseMock is ModuleBase {
     }
 
 
-    function testIsSetPendingInitialization(ISetToken _setToken) external view returns(bool) {
-        return isSetPendingInitialization(_setToken);
+    function testIsSetPendingInitialization(IJasperVault _jasperVault) external view returns(bool) {
+        return isSetPendingInitialization(_jasperVault);
     }
 
-    function testIsSetManager(ISetToken _setToken, address _toCheck) external view returns(bool) {
-        return isSetManager(_setToken, _toCheck);
+    function testIsSetManager(IJasperVault _jasperVault, address _toCheck) external view returns(bool) {
+        return isSetManager(_jasperVault, _toCheck);
     }
 
-    function testIsSetValidAndInitialized(ISetToken _setToken) external view returns(bool) {
-        return isSetValidAndInitialized(_setToken);
+    function testIsSetValidAndInitialized(IJasperVault _jasperVault) external view returns(bool) {
+        return isSetValidAndInitialized(_jasperVault);
     }
 
-    function testOnlyManagerAndValidSet(ISetToken _setToken)
+    function testOnlyManagerAndValidSet(IJasperVault _jasperVault)
         external
         view
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {}
 
     function testGetAndValidateAdapter(string memory _integrationName) external view returns(address) {
@@ -68,23 +68,23 @@ contract ModuleBaseMock is ModuleBase {
     }
 
     function testPayProtocolFeeFromSetToken(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _component,
         uint256 _feeQuantity
     ) external {
-        payProtocolFeeFromSetToken(_setToken, _component, _feeQuantity);
+        payProtocolFeeFromSetToken(_jasperVault, _component, _feeQuantity);
     }
 
-    function testOnlySetManager(ISetToken _setToken)
+    function testOnlySetManager(IJasperVault _jasperVault)
         external
         view
-        onlySetManager(_setToken, msg.sender)
+        onlySetManager(_jasperVault, msg.sender)
     {}
 
-    function testOnlyModule(ISetToken _setToken)
+    function testOnlyModule(IJasperVault _jasperVault)
         external
         view
-        onlyModule(_setToken)
+        onlyModule(_jasperVault)
     {}
 
 
@@ -92,15 +92,15 @@ contract ModuleBaseMock is ModuleBase {
         removed = true;
     }
 
-    function testOnlyValidAndInitializedSet(ISetToken _setToken)
-        external view onlyValidAndInitializedSet(_setToken) {}
+    function testOnlyValidAndInitializedSet(IJasperVault _jasperVault)
+        external view onlyValidAndInitializedSet(_jasperVault) {}
 
-    function testOnlyValidInitialization(ISetToken _setToken)
-        external view onlyValidAndPendingSet(_setToken) {}
+    function testOnlyValidInitialization(IJasperVault _jasperVault)
+        external view onlyValidAndPendingSet(_jasperVault) {}
 
     /* ============ Helper Functions ============ */
 
-    function initializeModuleOnSet(ISetToken _setToken) external {
-        _setToken.initializeModule();
+    function initializeModuleOnSet(IJasperVault _jasperVault) external {
+        _jasperVault.initializeModule();
     }
 }

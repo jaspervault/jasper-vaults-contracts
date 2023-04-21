@@ -28,7 +28,7 @@ import { SignedSafeMath } from "@openzeppelin/contracts/math/SignedSafeMath.sol"
 import { IController } from "../../../interfaces/IController.sol";
 import { IIntegrationRegistry } from "../../../interfaces/IIntegrationRegistry.sol";
 import { Invoke } from "../../lib/Invoke.sol";
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
 import { IAmmAdapter } from "../../../interfaces/IAmmAdapter.sol";
 import { ModuleBase } from "../../lib/ModuleBase.sol";
 import { Position } from "../../lib/Position.sol";
@@ -50,32 +50,32 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
     using SafeMath for uint256;
     using SignedSafeMath for int256;
 
-    using Invoke for ISetToken;
-    using Position for ISetToken;
+    using Invoke for IJasperVault;
+    using Position for IJasperVault;
 
     /* ============ Events ============ */
     event LiquidityAdded(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         address indexed _ammPool,
-        int256 _ammPoolBalancesDelta,     // Change in SetToken AMM Liquidity Pool token balances
+        int256 _ammPoolBalancesDelta,     // Change in JasperVault AMM Liquidity Pool token balances
         address[] _components,
-        int256[] _componentBalancesDelta  // Change in SetToken component token balances
+        int256[] _componentBalancesDelta  // Change in JasperVault component token balances
     );
 
     event LiquidityRemoved(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         address indexed _ammPool,
         int256 _ammPoolBalancesDelta,    // Change in AMM pool token balances
         address[] _components,
-        int256[] _componentBalancesDelta // Change in SetToken component token balances
+        int256[] _componentBalancesDelta // Change in JasperVault component token balances
     );
 
 
     /* ============ Structs ============ */
 
     struct ActionInfo {
-        ISetToken setToken;                         // Instance of SetToken
-        uint256 totalSupply;                        // Total supply of the SetToken
+        IJasperVault jasperVault;                         // Instance of JasperVault
+        uint256 totalSupply;                        // Total supply of the JasperVault
         IAmmAdapter ammAdapter;                     // Instance of amm adapter contract
         address liquidityToken;                     // Address of the AMM pool token
         uint256 preActionLiquidityTokenBalance;     // Balance of liquidity token before add/remove liquidity action
@@ -98,7 +98,7 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
      * SET MANAGER ONLY. Adds liquidity to an AMM pool for a specified AMM. User specifies what components and quantity of
      * components to contribute and the minimum number of liquidity pool tokens to receive.
      *
-     * @param _setToken                 Address of SetToken
+     * @param _jasperVault                 Address of JasperVault
      * @param _ammName                  Human readable name of integration (e.g. CURVE) stored in the IntegrationRegistry
      * @param _ammPool                  Address of the AMM pool; Must be valid according to the Amm Adapter
      * @param _minPoolTokenPositionUnit Minimum number of liquidity pool tokens to receive in position units
@@ -106,7 +106,7 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
      * @param _maxComponentUnits        Quantities of components in position units to contribute
      */
     function addLiquidity(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         string memory _ammName,
         address _ammPool,
         uint256 _minPoolTokenPositionUnit,
@@ -115,10 +115,10 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
     )
         external
         nonReentrant
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
         ActionInfo memory actionInfo = _getActionInfo(
-            _setToken,
+            _jasperVault,
             _ammName,
             _ammPool,
             _components,
@@ -136,7 +136,7 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
 
         int256 liquidityTokenDelta = _updateLiquidityTokenPositions(actionInfo);
 
-        emit LiquidityAdded(_setToken, _ammPool, liquidityTokenDelta, _components, componentsDelta);
+        emit LiquidityAdded(_jasperVault, _ammPool, liquidityTokenDelta, _components, componentsDelta);
     }
 
     /**
@@ -145,7 +145,7 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
      * User specifies what component and component quantity to contribute and the minimum number of
      * liquidity pool tokens to receive.
      *
-     * @param _setToken                 Address of SetToken
+     * @param _jasperVault                 Address of JasperVault
      * @param _ammName                  Human readable name of integration (e.g. CURVE) stored in the IntegrationRegistry
      * @param _ammPool                  Address of the AMM pool; Must be valid according to the Amm Adapter
      * @param _minPoolTokenPositionUnit Minimum number of liquidity pool tokens to receive in position units
@@ -153,7 +153,7 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
      * @param _maxComponentUnit         Quantity of component in position units to contribute
      */
     function addLiquiditySingleAsset(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         string memory _ammName,
         address _ammPool,
         uint256 _minPoolTokenPositionUnit,
@@ -162,10 +162,10 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
     )
         external
         nonReentrant
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
         ActionInfo memory actionInfo = _getActionInfoSingleAsset(
-            _setToken,
+            _jasperVault,
             _ammName,
             _ammPool,
             _component,
@@ -184,7 +184,7 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
         int256 liquidityTokenDelta = _updateLiquidityTokenPositions(actionInfo);
 
         emit LiquidityAdded(
-            _setToken,
+            _jasperVault,
             _ammPool,
             liquidityTokenDelta,
             actionInfo.components,
@@ -196,7 +196,7 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
      * SET MANAGER ONLY. Removes liquidity from an AMM pool for a specified AMM. User specifies the exact number of
      * liquidity pool tokens to provide and the components and minimum quantity of component units to receive
      *
-     * @param _setToken                  Address of SetToken
+     * @param _jasperVault                  Address of JasperVault
      * @param _ammName                   Human readable name of integration (e.g. CURVE) stored in the IntegrationRegistry
      * @param _ammPool                   Address of the AMM pool; Must be valid according to the Amm Adapter
      * @param _poolTokenPositionUnits    Number of liquidity pool tokens to burn
@@ -204,7 +204,7 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
      * @param _minComponentUnitsReceived Minimum quantity of components in position units to receive
      */
     function removeLiquidity(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         string memory _ammName,
         address _ammPool,
         uint256 _poolTokenPositionUnits,
@@ -213,10 +213,10 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
     )
         external
         nonReentrant
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
         ActionInfo memory actionInfo = _getActionInfo(
-            _setToken,
+            _jasperVault,
             _ammName,
             _ammPool,
             _components,
@@ -235,7 +235,7 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
         int256[] memory componentsDelta = _updateComponentPositions(actionInfo);
 
         emit LiquidityRemoved(
-            _setToken,
+            _jasperVault,
             _ammPool,
             liquidityTokenDelta,
             _components,
@@ -248,7 +248,7 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
      * User specifies the exact number of liquidity pool tokens to provide, the components, and minimum quantity of component
      * units to receive
      *
-     * @param _setToken                  Address of SetToken
+     * @param _jasperVault                  Address of JasperVault
      * @param _ammName                   Human readable name of integration (e.g. CURVE) stored in the IntegrationRegistry
      * @param _ammPool                   Address of the AMM pool; Must be valid according to the Amm Adapter
      * @param _poolTokenPositionUnits    Number of liquidity pool tokens to burn
@@ -256,7 +256,7 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
      * @param _minComponentUnitsReceived Minimum quantity of component in position units to receive
      */
     function removeLiquiditySingleAsset(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         string memory _ammName,
         address _ammPool,
         uint256 _poolTokenPositionUnits,
@@ -265,10 +265,10 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
     )
         external
         nonReentrant
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
         ActionInfo memory actionInfo = _getActionInfoSingleAsset(
-            _setToken,
+            _jasperVault,
             _ammName,
             _ammPool,
             _component,
@@ -287,7 +287,7 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
         int256[] memory componentsDelta = _updateComponentPositions(actionInfo);
 
         emit LiquidityRemoved(
-            _setToken,
+            _jasperVault,
             _ammPool,
             liquidityTokenDelta,
             actionInfo.components,
@@ -296,16 +296,16 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
     }
 
     /**
-     * Initializes this module to the SetToken. Only callable by the SetToken's manager.
+     * Initializes this module to the JasperVault. Only callable by the JasperVault's manager.
      *
-     * @param _setToken             Instance of the SetToken to issue
+     * @param _jasperVault             Instance of the JasperVault to issue
      */
-    function initialize(ISetToken _setToken) external onlySetManager(_setToken, msg.sender) onlyValidAndPendingSet(_setToken) {
-        _setToken.initializeModule();
+    function initialize(IJasperVault _jasperVault) external onlySetManager(_jasperVault, msg.sender) onlyValidAndPendingSet(_jasperVault) {
+        _jasperVault.initializeModule();
     }
 
     /**
-     * Removes this module from the SetToken, via call by the SetToken.
+     * Removes this module from the JasperVault, via call by the JasperVault.
      */
     function removeModule() external override {}
 
@@ -313,7 +313,7 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
     /* ============ Internal Functions ============ */
 
     function _getActionInfo(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         string memory _integrationName,
         address _ammPool,
         address[] memory _components,
@@ -326,21 +326,21 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
     {
         ActionInfo memory actionInfo;
 
-        actionInfo.setToken = _setToken;
+        actionInfo.jasperVault = _jasperVault;
 
-        actionInfo.totalSupply = _setToken.totalSupply();
+        actionInfo.totalSupply = _jasperVault.totalSupply();
 
         actionInfo.ammAdapter = IAmmAdapter(getAndValidateAdapter(_integrationName));
 
         actionInfo.liquidityToken = _ammPool;
 
-        actionInfo.preActionLiquidityTokenBalance = IERC20(_ammPool).balanceOf(address(_setToken));
+        actionInfo.preActionLiquidityTokenBalance = IERC20(_ammPool).balanceOf(address(_jasperVault));
 
-        actionInfo.preActionComponentBalances = _getTokenBalances(address(_setToken), _components);
+        actionInfo.preActionComponentBalances = _getTokenBalances(address(_jasperVault), _components);
 
         actionInfo.liquidityQuantity = actionInfo.totalSupply.getDefaultTotalNotional(_poolTokenInPositionUnit);
 
-        actionInfo.totalNotionalComponents = _getTotalNotionalComponents(_setToken, _componentUnits);
+        actionInfo.totalNotionalComponents = _getTotalNotionalComponents(_jasperVault, _componentUnits);
 
         actionInfo.componentUnits = _componentUnits;
 
@@ -350,7 +350,7 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
     }
 
     function _getActionInfoSingleAsset(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         string memory _integrationName,
         address _ammPool,
         address _component,
@@ -368,7 +368,7 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
         maxPositionUnitsToPool[0] = _maxPositionUnitToPool;
 
         return _getActionInfo(
-            _setToken,
+            _jasperVault,
             _integrationName,
             _ammPool,
             components,
@@ -384,7 +384,7 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
             address component = _actionInfo.components[i];
 
             require(
-                _actionInfo.setToken.hasSufficientDefaultUnits(component, _actionInfo.componentUnits[i]),
+                _actionInfo.jasperVault.hasSufficientDefaultUnits(component, _actionInfo.componentUnits[i]),
                 "Unit cant be greater than positions owned"
             );
         }
@@ -398,8 +398,8 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
         }
 
         require(
-            _actionInfo.setToken.hasSufficientDefaultUnits(_actionInfo.liquidityToken, _actionInfo.liquidityQuantity),
-            "SetToken must own enough liquidity token"
+            _actionInfo.jasperVault.hasSufficientDefaultUnits(_actionInfo.liquidityToken, _actionInfo.liquidityQuantity),
+            "JasperVault must own enough liquidity token"
         );
     }
 
@@ -419,7 +419,7 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
 
         // Loop through and approve total notional tokens to spender
         for (uint256 i = 0; i < _actionInfo.components.length ; i++) {
-            _actionInfo.setToken.invokeApprove(
+            _actionInfo.jasperVault.invokeApprove(
                 _actionInfo.components[i],
                 spender,
                 _actionInfo.totalNotionalComponents[i]
@@ -431,7 +431,7 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
         (
             address targetAmm, uint256 callValue, bytes memory methodData
         ) = _actionInfo.ammAdapter.getProvideLiquidityCalldata(
-            address(_actionInfo.setToken),
+            address(_actionInfo.jasperVault),
             _actionInfo.liquidityToken,
             _actionInfo.components,
             _actionInfo.totalNotionalComponents,
@@ -440,14 +440,14 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
 
         _executeComponentApprovals(_actionInfo);
 
-        _actionInfo.setToken.invoke(targetAmm, callValue, methodData);
+        _actionInfo.jasperVault.invoke(targetAmm, callValue, methodData);
     }
 
     function _executeAddLiquiditySingleAsset(ActionInfo memory _actionInfo) internal {
         (
             address targetAmm, uint256 callValue, bytes memory methodData
         ) = _actionInfo.ammAdapter.getProvideLiquiditySingleAssetCalldata(
-            address(_actionInfo.setToken),
+            address(_actionInfo.jasperVault),
             _actionInfo.liquidityToken,
             _actionInfo.components[0],
             _actionInfo.totalNotionalComponents[0],
@@ -456,51 +456,51 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
 
         _executeComponentApprovals(_actionInfo);
 
-        _actionInfo.setToken.invoke(targetAmm, callValue, methodData);
+        _actionInfo.jasperVault.invoke(targetAmm, callValue, methodData);
     }
 
     function _executeRemoveLiquidity(ActionInfo memory _actionInfo) internal {
         (
             address targetAmm, uint256 callValue, bytes memory methodData
         ) = _actionInfo.ammAdapter.getRemoveLiquidityCalldata(
-            address(_actionInfo.setToken),
+            address(_actionInfo.jasperVault),
             _actionInfo.liquidityToken,
             _actionInfo.components,
             _actionInfo.totalNotionalComponents,
             _actionInfo.liquidityQuantity
         );
 
-        _actionInfo.setToken.invokeApprove(
+        _actionInfo.jasperVault.invokeApprove(
             _actionInfo.liquidityToken,
             _actionInfo.ammAdapter.getSpenderAddress(_actionInfo.liquidityToken),
             _actionInfo.liquidityQuantity
         );
 
-        _actionInfo.setToken.invoke(targetAmm, callValue, methodData);
+        _actionInfo.jasperVault.invoke(targetAmm, callValue, methodData);
     }
 
     function _executeRemoveLiquiditySingleAsset(ActionInfo memory _actionInfo) internal {
         (
             address targetAmm, uint256 callValue, bytes memory methodData
         ) = _actionInfo.ammAdapter.getRemoveLiquiditySingleAssetCalldata(
-            address(_actionInfo.setToken),
+            address(_actionInfo.jasperVault),
             _actionInfo.liquidityToken,
             _actionInfo.components[0],
             _actionInfo.totalNotionalComponents[0],
             _actionInfo.liquidityQuantity
         );
 
-        _actionInfo.setToken.invokeApprove(
+        _actionInfo.jasperVault.invokeApprove(
             _actionInfo.liquidityToken,
             _actionInfo.ammAdapter.getSpenderAddress(_actionInfo.liquidityToken),
             _actionInfo.liquidityQuantity
         );
 
-        _actionInfo.setToken.invoke(targetAmm, callValue, methodData);
+        _actionInfo.jasperVault.invoke(targetAmm, callValue, methodData);
     }
 
     function _validateMinimumLiquidityReceived(ActionInfo memory _actionInfo) internal view {
-        uint256 liquidityTokenBalance = IERC20(_actionInfo.liquidityToken).balanceOf(address(_actionInfo.setToken));
+        uint256 liquidityTokenBalance = IERC20(_actionInfo.liquidityToken).balanceOf(address(_actionInfo.jasperVault));
 
         require(
             liquidityTokenBalance >= _actionInfo.liquidityQuantity.add(_actionInfo.preActionLiquidityTokenBalance),
@@ -510,7 +510,7 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
 
     function _validateMinimumUnderlyingReceived(ActionInfo memory _actionInfo) internal view {
         for (uint256 i = 0; i < _actionInfo.components.length; i++) {
-            uint256 underlyingBalance = IERC20(_actionInfo.components[i]).balanceOf(address(_actionInfo.setToken));
+            uint256 underlyingBalance = IERC20(_actionInfo.components[i]).balanceOf(address(_actionInfo.jasperVault));
 
             require(
                 underlyingBalance >= _actionInfo.totalNotionalComponents[i].add(_actionInfo.preActionComponentBalances[i]),
@@ -524,7 +524,7 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
 
         for (uint256 i = 0; i < _actionInfo.components.length; i++) {
 
-            (uint256 currentComponentBalance,,) = _actionInfo.setToken.calculateAndEditDefaultPosition(
+            (uint256 currentComponentBalance,,) = _actionInfo.jasperVault.calculateAndEditDefaultPosition(
                 _actionInfo.components[i],
                 _actionInfo.totalSupply,
                 _actionInfo.preActionComponentBalances[i]
@@ -539,7 +539,7 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
 
     function _updateLiquidityTokenPositions(ActionInfo memory _actionInfo) internal returns(int256) {
 
-        (uint256 currentLiquidityTokenBalance,,) = _actionInfo.setToken.calculateAndEditDefaultPosition(
+        (uint256 currentLiquidityTokenBalance,,) = _actionInfo.jasperVault.calculateAndEditDefaultPosition(
             _actionInfo.liquidityToken,
             _actionInfo.totalSupply,
             _actionInfo.preActionLiquidityTokenBalance
@@ -557,14 +557,14 @@ contract AmmModule is ModuleBase, ReentrancyGuard {
     }
 
     function _getTotalNotionalComponents(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256[] memory _tokenAmounts
     )
         internal
         view
         returns(uint256[] memory)
     {
-        uint256 totalSupply = _setToken.totalSupply();
+        uint256 totalSupply = _jasperVault.totalSupply();
 
         uint256[] memory totalNotionalQuantities = new uint256[](_tokenAmounts.length);
         for (uint256 i = 0; i < _tokenAmounts.length; i++) {

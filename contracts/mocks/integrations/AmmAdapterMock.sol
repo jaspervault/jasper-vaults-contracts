@@ -85,7 +85,7 @@ contract AmmAdapterMock is ERC20 {
     /* ============ Adapter Functions ============ */
 
     function getProvideLiquidityCalldata(
-        address /* _setToken */,
+        address /* _jasperVault */,
         address _pool,
         address[] calldata _components,
         uint256[] calldata _maxTokensIn,
@@ -104,7 +104,7 @@ contract AmmAdapterMock is ERC20 {
     }
 
     function getProvideLiquiditySingleAssetCalldata(
-        address /* _setToken */,
+        address /* _jasperVault */,
         address _pool,
         address _component,
         uint256 _maxTokenIn,
@@ -127,7 +127,7 @@ contract AmmAdapterMock is ERC20 {
     }
 
     function getRemoveLiquidityCalldata(
-        address /* _setToken */,
+        address /* _jasperVault */,
         address _pool,
         address[] calldata _components,
         uint256[] calldata _minTokensOut,
@@ -141,7 +141,7 @@ contract AmmAdapterMock is ERC20 {
     }
 
     function getRemoveLiquiditySingleAssetCalldata(
-        address /* _setToken */,
+        address /* _jasperVault */,
         address _pool,
         address _component,
         uint256 _minTokenOut,
@@ -162,7 +162,7 @@ contract AmmAdapterMock is ERC20 {
         );
         return (address(this), 0, callData);
     }
-    
+
     function isValidPool(address _pool,address[] memory /*_components*/) public view returns(bool) {
         return _pool == address(this) || _pool == approvedToken;
     }

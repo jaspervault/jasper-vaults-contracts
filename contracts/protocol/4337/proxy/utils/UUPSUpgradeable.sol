@@ -18,7 +18,7 @@ import "../ERC1967/ERC1967Upgrade.sol";
  *
  * _Available since v4.1._
  */
-abstract contract UUPSUpgradeable is IERC1822Proxiable, ERC1967Upgrade {
+abstract contract LocalUUPSUpgradeable is IERC1822Proxiable, ERC1967Upgrade {
     /// @custom:oz-upgrades-unsafe-allow state-variable-immutable state-variable-assignment
     address private immutable __self = address(this);
 

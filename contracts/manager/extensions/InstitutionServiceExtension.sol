@@ -19,8 +19,8 @@
 pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
 
-import {ISetToken} from "@setprotocol/set-protocol-v2/contracts/interfaces/ISetToken.sol";
-import {INAVIssuanceModule} from "@setprotocol/set-protocol-v2/contracts/interfaces/INAVIssuanceModule.sol";
+import {IJasperVault} from "../../interfaces/IJasperVault.sol";
+import {INAVIssuanceModule} from "../../interfaces/INAVIssuanceModule.sol";
 import {ISignalSuscriptionModule} from "../../interfaces/ISignalSuscriptionModule.sol";
 
 import {StringArrayUtils} from "@setprotocol/set-protocol-v2/contracts/lib/StringArrayUtils.sol";
@@ -38,7 +38,7 @@ import {IManagerCore} from "../interfaces/IManagerCore.sol";
 contract InstitutionServiceExtension is BaseGlobalExtension {
     using StringArrayUtils for string[];
     event InstitutionServiceExtensionInitialized(
-        address indexed _setToken, // Address of the SetToken which had BatchTradeExtension initialized on their manager
+        address indexed _jasperVault, // Address of the JasperVault which had BatchTradeExtension initialized on their manager
         address indexed _delegatedManager // Address of the DelegatedManager which initialized the BatchTradeExtension
     );
     /* ============ State Variables ============ */
@@ -75,7 +75,7 @@ contract InstitutionServiceExtension is BaseGlobalExtension {
     /* ============ External Functions ============ */
 
     /**
-     * ONLY OWNER: Initializes TradeModule on the SetToken associated with the DelegatedManager.
+     * ONLY OWNER: Initializes TradeModule on the JasperVault associated with the DelegatedManager.
      *
      * @param _delegatedManager     Instance of the DelegatedManager to initialize the TradeModule for
      */
@@ -83,28 +83,28 @@ contract InstitutionServiceExtension is BaseGlobalExtension {
         external
         onlyOwnerAndValidManager(_delegatedManager)
     {
-        _initializeModule(_delegatedManager.setToken(), _delegatedManager);
+        _initializeModule(_delegatedManager.jasperVault(), _delegatedManager);
     }
 
     function initialize(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _target,
         address _reserveAsset,
         uint256 _reserveAssetQuantity,
         address _to
-    ) external onlyOperator(_setToken) {
+    ) external onlyOperator(_jasperVault) {
         bytes memory callData = abi.encodeWithSelector(
             ISignalSuscriptionModule.subscribe.selector,
-            _setToken,
+            _jasperVault,
             _target
         );
         _invokeManager(
-            _manager(_setToken),
+            _manager(_jasperVault),
             address(signalSuscriptionModule),
             callData
         );
         navIssuanceModule.issue(
-            _setToken,
+            _jasperVault,
             _reserveAsset,
             _reserveAssetQuantity,
             0,
@@ -121,18 +121,18 @@ contract InstitutionServiceExtension is BaseGlobalExtension {
         external
         onlyOwnerAndValidManager(_delegatedManager)
     {
-        ISetToken setToken = _delegatedManager.setToken();
+        IJasperVault jasperVault = _delegatedManager.jasperVault();
 
-        _initializeExtension(setToken, _delegatedManager);
+        _initializeExtension(jasperVault, _delegatedManager);
 
         emit InstitutionServiceExtensionInitialized(
-            address(setToken),
+            address(jasperVault),
             address(_delegatedManager)
         );
     }
 
     /**
-     * ONLY OWNER: Initializes CopyTradingExtension to the DelegatedManager and TradeModule to the SetToken
+     * ONLY OWNER: Initializes CopyTradingExtension to the DelegatedManager and TradeModule to the JasperVault
      *
      * @param _delegatedManager     Instance of the DelegatedManager to initialize
      */
@@ -140,31 +140,31 @@ contract InstitutionServiceExtension is BaseGlobalExtension {
         external
         onlyOwnerAndValidManager(_delegatedManager)
     {
-        ISetToken setToken = _delegatedManager.setToken();
+        IJasperVault jasperVault = _delegatedManager.jasperVault();
 
-        _initializeExtension(setToken, _delegatedManager);
-        _initializeModule(setToken, _delegatedManager);
+        _initializeExtension(jasperVault, _delegatedManager);
+        _initializeModule(jasperVault, _delegatedManager);
 
         emit InstitutionServiceExtensionInitialized(
-            address(setToken),
+            address(jasperVault),
             address(_delegatedManager)
         );
     }
 
     /**
-     * ONLY MANAGER: Remove an existing SetToken and DelegatedManager tracked by the CopyTradingExtension
+     * ONLY MANAGER: Remove an existing JasperVault and DelegatedManager tracked by the CopyTradingExtension
      */
     function removeExtension() external override {
         IDelegatedManager delegatedManager = IDelegatedManager(msg.sender);
-        ISetToken setToken = delegatedManager.setToken();
+        IJasperVault jasperVault = delegatedManager.jasperVault();
 
-        _removeExtension(setToken, delegatedManager);
+        _removeExtension(jasperVault, delegatedManager);
     }
 
     /* ============ Internal Functions ============ */
 
     function _initializeModule(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IDelegatedManager _delegatedManager
     ) internal {}
 }

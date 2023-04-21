@@ -18,19 +18,19 @@
 
 pragma solidity 0.6.10;
 
-import { ISetToken } from "@setprotocol/set-protocol-v2/contracts/interfaces/ISetToken.sol";
+import { IJasperVault } from "../../interfaces/IJasperVault.sol";
 
 import { IGlobalExtension } from "../interfaces/IGlobalExtension.sol";
 
 contract ManagerMock {
-    ISetToken public immutable setToken;
+    IJasperVault public immutable jasperVault;
 
     constructor(
-        ISetToken _setToken
+        IJasperVault _jasperVault
     )
         public
     {
-        setToken = _setToken;
+        jasperVault = _jasperVault;
     }
 
     function removeExtensions(address[] memory _extensions) external {

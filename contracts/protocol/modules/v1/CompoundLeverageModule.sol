@@ -29,7 +29,7 @@ import { IComptroller } from "../../../interfaces/external/IComptroller.sol";
 import { IController } from "../../../interfaces/IController.sol";
 import { IDebtIssuanceModule } from "../../../interfaces/IDebtIssuanceModule.sol";
 import { IExchangeAdapter } from "../../../interfaces/IExchangeAdapter.sol";
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
 import { ModuleBase } from "../../lib/ModuleBase.sol";
 
 /**
@@ -45,20 +45,20 @@ import { ModuleBase } from "../../lib/ModuleBase.sol";
  *
  */
 contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
-    using Compound for ISetToken;
+    using Compound for IJasperVault;
 
     /* ============ Structs ============ */
 
     struct EnabledAssets {
-        address[] collateralCTokens;             // Array of enabled cToken collateral assets for a SetToken
-        address[] borrowCTokens;                 // Array of enabled cToken borrow assets for a SetToken
+        address[] collateralCTokens;             // Array of enabled cToken collateral assets for a JasperVault
+        address[] borrowCTokens;                 // Array of enabled cToken borrow assets for a JasperVault
         address[] borrowAssets;                  // Array of underlying borrow assets that map to the array of enabled cToken borrow assets
     }
 
     struct ActionInfo {
-        ISetToken setToken;                      // SetToken instance
+        IJasperVault jasperVault;                      // JasperVault instance
         IExchangeAdapter exchangeAdapter;        // Exchange adapter instance
-        uint256 setTotalSupply;                  // Total supply of SetToken
+        uint256 setTotalSupply;                  // Total supply of JasperVault
         uint256 notionalSendQuantity;            // Total notional quantity sent to exchange
         uint256 minNotionalReceiveQuantity;      // Min total notional received from exchange
         ICErc20 collateralCTokenAsset;           // Address of cToken collateral asset
@@ -69,7 +69,7 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
     /* ============ Events ============ */
 
     event LeverageIncreased(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         IERC20 indexed _borrowAsset,
         IERC20 indexed _collateralAsset,
         IExchangeAdapter _exchangeAdapter,
@@ -79,7 +79,7 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
     );
 
     event LeverageDecreased(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         IERC20 indexed _collateralAsset,
         IERC20 indexed _repayAsset,
         IExchangeAdapter _exchangeAdapter,
@@ -89,19 +89,19 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
     );
 
     event CollateralAssetsUpdated(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         bool indexed _added,
         IERC20[] _assets
     );
 
     event BorrowAssetsUpdated(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         bool indexed _added,
         IERC20[] _assets
     );
 
     event SetTokenStatusUpdated(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         bool indexed _added
     );
 
@@ -135,19 +135,19 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
     // COMP token address
     IERC20 internal compToken;
 
-    // Mapping to efficiently check if cToken market for collateral asset is valid in SetToken
-    mapping(ISetToken => mapping(ICErc20 => bool)) public collateralCTokenEnabled;
+    // Mapping to efficiently check if cToken market for collateral asset is valid in JasperVault
+    mapping(IJasperVault => mapping(ICErc20 => bool)) public collateralCTokenEnabled;
 
-    // Mapping to efficiently check if cToken market for borrow asset is valid in SetToken
-    mapping(ISetToken => mapping(ICErc20 => bool)) public borrowCTokenEnabled;
+    // Mapping to efficiently check if cToken market for borrow asset is valid in JasperVault
+    mapping(IJasperVault => mapping(ICErc20 => bool)) public borrowCTokenEnabled;
 
     // Mapping of enabled collateral and borrow cTokens for syncing positions
-    mapping(ISetToken => EnabledAssets) internal enabledAssets;
+    mapping(IJasperVault => EnabledAssets) internal enabledAssets;
 
-    // Mapping of SetToken to boolean indicating if SetToken is on allow list. Updateable by governance
-    mapping(ISetToken => bool) public allowedSetTokens;
+    // Mapping of JasperVault to boolean indicating if JasperVault is on allow list. Updateable by governance
+    mapping(IJasperVault => bool) public allowedSetTokens;
 
-    // Boolean that returns if any SetToken can initialize this module. If false, then subject to allow list
+    // Boolean that returns if any JasperVault can initialize this module. If false, then subject to allow list
     bool public anySetAllowed;
 
 
@@ -193,7 +193,7 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
      * MANAGER ONLY: Increases leverage for a given collateral position using an enabled borrow asset that is enabled.
      * Performs a DEX trade, exchanging the borrow asset for collateral asset.
      *
-     * @param _setToken             Instance of the SetToken
+     * @param _jasperVault             Instance of the JasperVault
      * @param _borrowAsset          Address of asset being borrowed for leverage
      * @param _collateralAsset      Address of collateral asset (underlying of cToken)
      * @param _borrowQuantity       Borrow quantity of asset in position units
@@ -202,7 +202,7 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
      * @param _tradeData            Arbitrary data for trade
      */
     function lever(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IERC20 _borrowAsset,
         IERC20 _collateralAsset,
         uint256 _borrowQuantity,
@@ -212,12 +212,12 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
     )
         external
         nonReentrant
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
         // For levering up, send quantity is derived from borrow asset and receive quantity is derived from
         // collateral asset
         ActionInfo memory leverInfo = _createAndValidateActionInfo(
-            _setToken,
+            _jasperVault,
             _borrowAsset,
             _collateralAsset,
             _borrowQuantity,
@@ -226,20 +226,20 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
             true
         );
 
-        _borrow(leverInfo.setToken, leverInfo.borrowCTokenAsset, leverInfo.notionalSendQuantity);
+        _borrow(leverInfo.jasperVault, leverInfo.borrowCTokenAsset, leverInfo.notionalSendQuantity);
 
         uint256 postTradeReceiveQuantity = _executeTrade(leverInfo, _borrowAsset, _collateralAsset, _tradeData);
 
-        uint256 protocolFee = _accrueProtocolFee(_setToken, _collateralAsset, postTradeReceiveQuantity);
+        uint256 protocolFee = _accrueProtocolFee(_jasperVault, _collateralAsset, postTradeReceiveQuantity);
 
         uint256 postTradeCollateralQuantity = postTradeReceiveQuantity.sub(protocolFee);
 
-        _mintCToken(leverInfo.setToken, leverInfo.collateralCTokenAsset, _collateralAsset, postTradeCollateralQuantity);
+        _mintCToken(leverInfo.jasperVault, leverInfo.collateralCTokenAsset, _collateralAsset, postTradeCollateralQuantity);
 
         _updateLeverPositions(leverInfo, _borrowAsset);
 
         emit LeverageIncreased(
-            _setToken,
+            _jasperVault,
             _borrowAsset,
             _collateralAsset,
             leverInfo.exchangeAdapter,
@@ -252,7 +252,7 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
     /**
      * MANAGER ONLY: Decrease leverage for a given collateral position using an enabled borrow asset that is enabled
      *
-     * @param _setToken             Instance of the SetToken
+     * @param _jasperVault             Instance of the JasperVault
      * @param _collateralAsset      Address of collateral asset (underlying of cToken)
      * @param _repayAsset           Address of asset being repaid
      * @param _redeemQuantity       Quantity of collateral asset to delever
@@ -261,7 +261,7 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
      * @param _tradeData            Arbitrary data for trade
      */
     function delever(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IERC20 _collateralAsset,
         IERC20 _repayAsset,
         uint256 _redeemQuantity,
@@ -271,12 +271,12 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
     )
         external
         nonReentrant
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
         // Note: for delevering, send quantity is derived from collateral asset and receive quantity is derived from
         // repay asset
         ActionInfo memory deleverInfo = _createAndValidateActionInfo(
-            _setToken,
+            _jasperVault,
             _collateralAsset,
             _repayAsset,
             _redeemQuantity,
@@ -285,20 +285,20 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
             false
         );
 
-        _redeemUnderlying(deleverInfo.setToken, deleverInfo.collateralCTokenAsset, deleverInfo.notionalSendQuantity);
+        _redeemUnderlying(deleverInfo.jasperVault, deleverInfo.collateralCTokenAsset, deleverInfo.notionalSendQuantity);
 
         uint256 postTradeReceiveQuantity = _executeTrade(deleverInfo, _collateralAsset, _repayAsset, _tradeData);
 
-        uint256 protocolFee = _accrueProtocolFee(_setToken, _repayAsset, postTradeReceiveQuantity);
+        uint256 protocolFee = _accrueProtocolFee(_jasperVault, _repayAsset, postTradeReceiveQuantity);
 
         uint256 repayQuantity = postTradeReceiveQuantity.sub(protocolFee);
 
-        _repayBorrow(deleverInfo.setToken, deleverInfo.borrowCTokenAsset, _repayAsset, repayQuantity);
+        _repayBorrow(deleverInfo.jasperVault, deleverInfo.borrowCTokenAsset, _repayAsset, repayQuantity);
 
         _updateLeverPositions(deleverInfo, _repayAsset);
 
         emit LeverageDecreased(
-            _setToken,
+            _jasperVault,
             _collateralAsset,
             _repayAsset,
             deleverInfo.exchangeAdapter,
@@ -312,7 +312,7 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
      * MANAGER ONLY: Pays down the borrow asset to 0 selling off a given collateral asset. Any extra received
      * borrow asset is updated as equity. No protocol fee is charged.
      *
-     * @param _setToken             Instance of the SetToken
+     * @param _jasperVault             Instance of the JasperVault
      * @param _collateralAsset      Address of collateral asset (underlying of cToken)
      * @param _repayAsset           Address of asset being repaid (underlying asset e.g. DAI)
      * @param _redeemQuantity       Quantity of collateral asset to delever
@@ -320,7 +320,7 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
      * @param _tradeData            Arbitrary data for trade
      */
     function deleverToZeroBorrowBalance(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IERC20 _collateralAsset,
         IERC20 _repayAsset,
         uint256 _redeemQuantity,
@@ -329,15 +329,15 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
     )
         external
         nonReentrant
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
-        uint256 notionalRedeemQuantity = _redeemQuantity.preciseMul(_setToken.totalSupply());
+        uint256 notionalRedeemQuantity = _redeemQuantity.preciseMul(_jasperVault.totalSupply());
 
-        require(borrowCTokenEnabled[_setToken][underlyingToCToken[_repayAsset]], "Borrow not enabled");
-        uint256 notionalRepayQuantity = underlyingToCToken[_repayAsset].borrowBalanceCurrent(address(_setToken));
+        require(borrowCTokenEnabled[_jasperVault][underlyingToCToken[_repayAsset]], "Borrow not enabled");
+        uint256 notionalRepayQuantity = underlyingToCToken[_repayAsset].borrowBalanceCurrent(address(_jasperVault));
 
         ActionInfo memory deleverInfo = _createAndValidateActionInfoNotional(
-            _setToken,
+            _jasperVault,
             _collateralAsset,
             _repayAsset,
             notionalRedeemQuantity,
@@ -346,15 +346,15 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
             false
         );
 
-        _redeemUnderlying(deleverInfo.setToken, deleverInfo.collateralCTokenAsset, deleverInfo.notionalSendQuantity);
+        _redeemUnderlying(deleverInfo.jasperVault, deleverInfo.collateralCTokenAsset, deleverInfo.notionalSendQuantity);
 
         _executeTrade(deleverInfo, _collateralAsset, _repayAsset, _tradeData);
 
         // We use notionalRepayQuantity vs. Compound's max value uint256(-1) to handle WETH properly
-        _repayBorrow(deleverInfo.setToken, deleverInfo.borrowCTokenAsset, _repayAsset, notionalRepayQuantity);
+        _repayBorrow(deleverInfo.jasperVault, deleverInfo.borrowCTokenAsset, _repayAsset, notionalRepayQuantity);
 
         // Update default position first to save gas on editing borrow position
-        _setToken.calculateAndEditDefaultPosition(
+        _jasperVault.calculateAndEditDefaultPosition(
             address(_repayAsset),
             deleverInfo.setTotalSupply,
             deleverInfo.preTradeReceiveTokenBalance
@@ -363,7 +363,7 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
         _updateLeverPositions(deleverInfo, _repayAsset);
 
         emit LeverageDecreased(
-            _setToken,
+            _jasperVault,
             _collateralAsset,
             _repayAsset,
             deleverInfo.exchangeAdapter,
@@ -379,46 +379,46 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
      * - Collateral assets may come out of sync when a position is liquidated
      * - Borrow assets may come out of sync when interest is accrued or position is liquidated and borrow is repaid
      *
-     * @param _setToken               Instance of the SetToken
+     * @param _jasperVault               Instance of the JasperVault
      * @param _shouldAccrueInterest   Boolean indicating whether use current block interest rate value or stored value
      */
-    function sync(ISetToken _setToken, bool _shouldAccrueInterest) public nonReentrant onlyValidAndInitializedSet(_setToken) {
-        uint256 setTotalSupply = _setToken.totalSupply();
+    function sync(IJasperVault _jasperVault, bool _shouldAccrueInterest) public nonReentrant onlyValidAndInitializedSet(_jasperVault) {
+        uint256 setTotalSupply = _jasperVault.totalSupply();
 
         // Only sync positions when Set supply is not 0. This preserves debt and collateral positions on issuance / redemption
         if (setTotalSupply > 0) {
             // Loop through collateral assets
-            address[] memory collateralCTokens = enabledAssets[_setToken].collateralCTokens;
+            address[] memory collateralCTokens = enabledAssets[_jasperVault].collateralCTokens;
             for(uint256 i = 0; i < collateralCTokens.length; i++) {
                 ICErc20 collateralCToken = ICErc20(collateralCTokens[i]);
-                uint256 previousPositionUnit = _setToken.getDefaultPositionRealUnit(address(collateralCToken)).toUint256();
-                uint256 newPositionUnit = _getCollateralPosition(_setToken, collateralCToken, setTotalSupply);
+                uint256 previousPositionUnit = _jasperVault.getDefaultPositionRealUnit(address(collateralCToken)).toUint256();
+                uint256 newPositionUnit = _getCollateralPosition(_jasperVault, collateralCToken, setTotalSupply);
 
-                // Note: Accounts for if position does not exist on SetToken but is tracked in enabledAssets
+                // Note: Accounts for if position does not exist on JasperVault but is tracked in enabledAssets
                 if (previousPositionUnit != newPositionUnit) {
-                  _updateCollateralPosition(_setToken, collateralCToken, newPositionUnit);
+                  _updateCollateralPosition(_jasperVault, collateralCToken, newPositionUnit);
                 }
             }
 
             // Loop through borrow assets
-            address[] memory borrowCTokens = enabledAssets[_setToken].borrowCTokens;
-            address[] memory borrowAssets = enabledAssets[_setToken].borrowAssets;
+            address[] memory borrowCTokens = enabledAssets[_jasperVault].borrowCTokens;
+            address[] memory borrowAssets = enabledAssets[_jasperVault].borrowAssets;
             for(uint256 i = 0; i < borrowCTokens.length; i++) {
                 ICErc20 borrowCToken = ICErc20(borrowCTokens[i]);
                 IERC20 borrowAsset = IERC20(borrowAssets[i]);
 
-                int256 previousPositionUnit = _setToken.getExternalPositionRealUnit(address(borrowAsset), address(this));
+                int256 previousPositionUnit = _jasperVault.getExternalPositionRealUnit(address(borrowAsset), address(this));
 
                 int256 newPositionUnit = _getBorrowPosition(
-                    _setToken,
+                    _jasperVault,
                     borrowCToken,
                     setTotalSupply,
                     _shouldAccrueInterest
                 );
 
-                // Note: Accounts for if position does not exist on SetToken but is tracked in enabledAssets
+                // Note: Accounts for if position does not exist on JasperVault but is tracked in enabledAssets
                 if (newPositionUnit != previousPositionUnit) {
-                    _updateBorrowPosition(_setToken, borrowAsset, newPositionUnit);
+                    _updateBorrowPosition(_jasperVault, borrowAsset, newPositionUnit);
                 }
             }
         }
@@ -426,218 +426,218 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
 
 
     /**
-     * MANAGER ONLY: Initializes this module to the SetToken. Only callable by the SetToken's manager. Note: managers can enable
-     * collateral and borrow assets that don't exist as positions on the SetToken
+     * MANAGER ONLY: Initializes this module to the JasperVault. Only callable by the JasperVault's manager. Note: managers can enable
+     * collateral and borrow assets that don't exist as positions on the JasperVault
      *
-     * @param _setToken             Instance of the SetToken to initialize
-     * @param _collateralAssets     Underlying tokens to be enabled as collateral in the SetToken
-     * @param _borrowAssets         Underlying tokens to be enabled as borrow in the SetToken
+     * @param _jasperVault             Instance of the JasperVault to initialize
+     * @param _collateralAssets     Underlying tokens to be enabled as collateral in the JasperVault
+     * @param _borrowAssets         Underlying tokens to be enabled as borrow in the JasperVault
      */
     function initialize(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IERC20[] memory _collateralAssets,
         IERC20[] memory _borrowAssets
     )
         external
-        onlySetManager(_setToken, msg.sender)
-        onlyValidAndPendingSet(_setToken)
+        onlySetManager(_jasperVault, msg.sender)
+        onlyValidAndPendingSet(_jasperVault)
     {
         if (!anySetAllowed) {
-            require(allowedSetTokens[_setToken], "Not allowed SetToken");
+            require(allowedSetTokens[_jasperVault], "Not allowed JasperVault");
         }
 
         // Initialize module before trying register
-        _setToken.initializeModule();
+        _jasperVault.initializeModule();
 
         // Get debt issuance module registered to this module and require that it is initialized
-        require(_setToken.isInitializedModule(getAndValidateAdapter(DEFAULT_ISSUANCE_MODULE_NAME)), "Issuance not initialized");
+        require(_jasperVault.isInitializedModule(getAndValidateAdapter(DEFAULT_ISSUANCE_MODULE_NAME)), "Issuance not initialized");
 
         // Try if register exists on any of the modules including the debt issuance module
-        address[] memory modules = _setToken.getModules();
+        address[] memory modules = _jasperVault.getModules();
         for(uint256 i = 0; i < modules.length; i++) {
-            try IDebtIssuanceModule(modules[i]).registerToIssuanceModule(_setToken) {} catch {}
+            try IDebtIssuanceModule(modules[i]).registerToIssuanceModule(_jasperVault) {} catch {}
         }
 
         // Enable collateral and borrow assets on Compound
-        addCollateralAssets(_setToken, _collateralAssets);
+        addCollateralAssets(_jasperVault, _collateralAssets);
 
-        addBorrowAssets(_setToken, _borrowAssets);
+        addBorrowAssets(_jasperVault, _borrowAssets);
     }
 
     /**
-     * MANAGER ONLY: Removes this module from the SetToken, via call by the SetToken. Compound Settings and manager enabled
+     * MANAGER ONLY: Removes this module from the JasperVault, via call by the JasperVault. Compound Settings and manager enabled
      * cTokens are deleted. Markets are exited on Comptroller (only valid if borrow balances are zero)
      */
-    function removeModule() external override onlyValidAndInitializedSet(ISetToken(msg.sender)) {
-        ISetToken setToken = ISetToken(msg.sender);
+    function removeModule() external override onlyValidAndInitializedSet(IJasperVault(msg.sender)) {
+        IJasperVault jasperVault = IJasperVault(msg.sender);
 
-        // Sync Compound and SetToken positions prior to any removal action
-        sync(setToken, true);
+        // Sync Compound and JasperVault positions prior to any removal action
+        sync(jasperVault, true);
 
-        address[] memory borrowCTokens = enabledAssets[setToken].borrowCTokens;
+        address[] memory borrowCTokens = enabledAssets[jasperVault].borrowCTokens;
         for (uint256 i = 0; i < borrowCTokens.length; i++) {
             ICErc20 cToken = ICErc20(borrowCTokens[i]);
 
             // Will exit only if token isn't also being used as collateral
-            if(!collateralCTokenEnabled[setToken][cToken]) {
+            if(!collateralCTokenEnabled[jasperVault][cToken]) {
                 // Note: if there is an existing borrow balance, will revert and market cannot be exited on Compound
-                setToken.invokeExitMarket(cToken, comptroller);
+                jasperVault.invokeExitMarket(cToken, comptroller);
             }
 
-            delete borrowCTokenEnabled[setToken][cToken];
+            delete borrowCTokenEnabled[jasperVault][cToken];
         }
 
-        address[] memory collateralCTokens = enabledAssets[setToken].collateralCTokens;
+        address[] memory collateralCTokens = enabledAssets[jasperVault].collateralCTokens;
         for (uint256 i = 0; i < collateralCTokens.length; i++) {
             ICErc20 cToken = ICErc20(collateralCTokens[i]);
 
-            setToken.invokeExitMarket(cToken, comptroller);
+            jasperVault.invokeExitMarket(cToken, comptroller);
 
-            delete collateralCTokenEnabled[setToken][cToken];
+            delete collateralCTokenEnabled[jasperVault][cToken];
         }
 
-        delete enabledAssets[setToken];
+        delete enabledAssets[jasperVault];
 
         // Try if unregister exists on any of the modules
-        address[] memory modules = setToken.getModules();
+        address[] memory modules = jasperVault.getModules();
         for(uint256 i = 0; i < modules.length; i++) {
-            try IDebtIssuanceModule(modules[i]).unregisterFromIssuanceModule(setToken) {} catch {}
+            try IDebtIssuanceModule(modules[i]).unregisterFromIssuanceModule(jasperVault) {} catch {}
         }
     }
 
     /**
-     * MANAGER ONLY: Add registration of this module on debt issuance module for the SetToken. Note: if the debt issuance module is not added to SetToken
+     * MANAGER ONLY: Add registration of this module on debt issuance module for the JasperVault. Note: if the debt issuance module is not added to JasperVault
      * before this module is initialized, then this function needs to be called if the debt issuance module is later added and initialized to prevent state
      * inconsistencies
      *
-     * @param _setToken             Instance of the SetToken
+     * @param _jasperVault             Instance of the JasperVault
      * @param _debtIssuanceModule   Debt issuance module address to register
      */
-    function registerToModule(ISetToken _setToken, IDebtIssuanceModule _debtIssuanceModule) external onlyManagerAndValidSet(_setToken) {
-        require(_setToken.isInitializedModule(address(_debtIssuanceModule)), "Issuance not initialized");
+    function registerToModule(IJasperVault _jasperVault, IDebtIssuanceModule _debtIssuanceModule) external onlyManagerAndValidSet(_jasperVault) {
+        require(_jasperVault.isInitializedModule(address(_debtIssuanceModule)), "Issuance not initialized");
 
-        _debtIssuanceModule.registerToIssuanceModule(_setToken);
+        _debtIssuanceModule.registerToIssuanceModule(_jasperVault);
     }
 
     /**
      * MANAGER ONLY: Add enabled collateral assets. Collateral assets are tracked for syncing positions and entered in Compound markets
      *
-     * @param _setToken             Instance of the SetToken
+     * @param _jasperVault             Instance of the JasperVault
      * @param _newCollateralAssets  Addresses of new collateral underlying assets
      */
-    function addCollateralAssets(ISetToken _setToken, IERC20[] memory _newCollateralAssets) public onlyManagerAndValidSet(_setToken) {
+    function addCollateralAssets(IJasperVault _jasperVault, IERC20[] memory _newCollateralAssets) public onlyManagerAndValidSet(_jasperVault) {
         for(uint256 i = 0; i < _newCollateralAssets.length; i++) {
             ICErc20 cToken = underlyingToCToken[_newCollateralAssets[i]];
             require(address(cToken) != address(0), "cToken must exist");
-            require(!collateralCTokenEnabled[_setToken][cToken], "Collateral enabled");
+            require(!collateralCTokenEnabled[_jasperVault][cToken], "Collateral enabled");
 
             // Note: Will only enter market if cToken is not enabled as a borrow asset as well
-            if (!borrowCTokenEnabled[_setToken][cToken]) {
-                _setToken.invokeEnterMarkets(cToken, comptroller);
+            if (!borrowCTokenEnabled[_jasperVault][cToken]) {
+                _jasperVault.invokeEnterMarkets(cToken, comptroller);
             }
 
-            collateralCTokenEnabled[_setToken][cToken] = true;
-            enabledAssets[_setToken].collateralCTokens.push(address(cToken));
+            collateralCTokenEnabled[_jasperVault][cToken] = true;
+            enabledAssets[_jasperVault].collateralCTokens.push(address(cToken));
         }
 
-        emit CollateralAssetsUpdated(_setToken, true, _newCollateralAssets);
+        emit CollateralAssetsUpdated(_jasperVault, true, _newCollateralAssets);
     }
 
     /**
      * MANAGER ONLY: Remove collateral asset. Collateral asset exited in Compound markets
      * If there is a borrow balance, collateral asset cannot be removed
      *
-     * @param _setToken             Instance of the SetToken
+     * @param _jasperVault             Instance of the JasperVault
      * @param _collateralAssets     Addresses of collateral underlying assets to remove
      */
-    function removeCollateralAssets(ISetToken _setToken, IERC20[] memory _collateralAssets) external onlyManagerAndValidSet(_setToken) {
-        // Sync Compound and SetToken positions prior to any removal action
-        sync(_setToken, true);
+    function removeCollateralAssets(IJasperVault _jasperVault, IERC20[] memory _collateralAssets) external onlyManagerAndValidSet(_jasperVault) {
+        // Sync Compound and JasperVault positions prior to any removal action
+        sync(_jasperVault, true);
 
         for(uint256 i = 0; i < _collateralAssets.length; i++) {
             ICErc20 cToken = underlyingToCToken[_collateralAssets[i]];
-            require(collateralCTokenEnabled[_setToken][cToken], "Collateral not enabled");
+            require(collateralCTokenEnabled[_jasperVault][cToken], "Collateral not enabled");
 
             // Note: Will only exit market if cToken is not enabled as a borrow asset as well
             // If there is an existing borrow balance, will revert and market cannot be exited on Compound
-            if (!borrowCTokenEnabled[_setToken][cToken]) {
-                _setToken.invokeExitMarket(cToken, comptroller);
+            if (!borrowCTokenEnabled[_jasperVault][cToken]) {
+                _jasperVault.invokeExitMarket(cToken, comptroller);
             }
 
-            delete collateralCTokenEnabled[_setToken][cToken];
-            enabledAssets[_setToken].collateralCTokens.removeStorage(address(cToken));
+            delete collateralCTokenEnabled[_jasperVault][cToken];
+            enabledAssets[_jasperVault].collateralCTokens.removeStorage(address(cToken));
         }
 
-        emit CollateralAssetsUpdated(_setToken, false, _collateralAssets);
+        emit CollateralAssetsUpdated(_jasperVault, false, _collateralAssets);
     }
 
     /**
      * MANAGER ONLY: Add borrow asset. Borrow asset is tracked for syncing positions and entered in Compound markets
      *
-     * @param _setToken             Instance of the SetToken
+     * @param _jasperVault             Instance of the JasperVault
      * @param _newBorrowAssets      Addresses of borrow underlying assets to add
      */
-    function addBorrowAssets(ISetToken _setToken, IERC20[] memory _newBorrowAssets) public onlyManagerAndValidSet(_setToken) {
+    function addBorrowAssets(IJasperVault _jasperVault, IERC20[] memory _newBorrowAssets) public onlyManagerAndValidSet(_jasperVault) {
         for(uint256 i = 0; i < _newBorrowAssets.length; i++) {
             IERC20 newBorrowAsset = _newBorrowAssets[i];
             ICErc20 cToken = underlyingToCToken[newBorrowAsset];
             require(address(cToken) != address(0), "cToken must exist");
-            require(!borrowCTokenEnabled[_setToken][cToken], "Borrow enabled");
+            require(!borrowCTokenEnabled[_jasperVault][cToken], "Borrow enabled");
 
             // Note: Will only enter market if cToken is not enabled as a borrow asset as well
-            if (!collateralCTokenEnabled[_setToken][cToken]) {
-                _setToken.invokeEnterMarkets(cToken, comptroller);
+            if (!collateralCTokenEnabled[_jasperVault][cToken]) {
+                _jasperVault.invokeEnterMarkets(cToken, comptroller);
             }
 
-            borrowCTokenEnabled[_setToken][cToken] = true;
-            enabledAssets[_setToken].borrowCTokens.push(address(cToken));
-            enabledAssets[_setToken].borrowAssets.push(address(newBorrowAsset));
+            borrowCTokenEnabled[_jasperVault][cToken] = true;
+            enabledAssets[_jasperVault].borrowCTokens.push(address(cToken));
+            enabledAssets[_jasperVault].borrowAssets.push(address(newBorrowAsset));
         }
 
-        emit BorrowAssetsUpdated(_setToken, true, _newBorrowAssets);
+        emit BorrowAssetsUpdated(_jasperVault, true, _newBorrowAssets);
     }
 
     /**
      * MANAGER ONLY: Remove borrow asset. Borrow asset is exited in Compound markets
      * If there is a borrow balance, borrow asset cannot be removed
      *
-     * @param _setToken             Instance of the SetToken
+     * @param _jasperVault             Instance of the JasperVault
      * @param _borrowAssets         Addresses of borrow underlying assets to remove
      */
-    function removeBorrowAssets(ISetToken _setToken, IERC20[] memory _borrowAssets) external onlyManagerAndValidSet(_setToken) {
-        // Sync Compound and SetToken positions prior to any removal action
-        sync(_setToken, true);
+    function removeBorrowAssets(IJasperVault _jasperVault, IERC20[] memory _borrowAssets) external onlyManagerAndValidSet(_jasperVault) {
+        // Sync Compound and JasperVault positions prior to any removal action
+        sync(_jasperVault, true);
 
         for(uint256 i = 0; i < _borrowAssets.length; i++) {
             ICErc20 cToken = underlyingToCToken[_borrowAssets[i]];
-            require(borrowCTokenEnabled[_setToken][cToken], "Borrow not enabled");
+            require(borrowCTokenEnabled[_jasperVault][cToken], "Borrow not enabled");
 
             // Note: Will only exit market if cToken is not enabled as a collateral asset as well
             // If there is an existing borrow balance, will revert and market cannot be exited on Compound
-            if (!collateralCTokenEnabled[_setToken][cToken]) {
-                _setToken.invokeExitMarket(cToken, comptroller);
+            if (!collateralCTokenEnabled[_jasperVault][cToken]) {
+                _jasperVault.invokeExitMarket(cToken, comptroller);
             }
 
-            delete borrowCTokenEnabled[_setToken][cToken];
-            enabledAssets[_setToken].borrowCTokens.removeStorage(address(cToken));
-            enabledAssets[_setToken].borrowAssets.removeStorage(address(_borrowAssets[i]));
+            delete borrowCTokenEnabled[_jasperVault][cToken];
+            enabledAssets[_jasperVault].borrowCTokens.removeStorage(address(cToken));
+            enabledAssets[_jasperVault].borrowAssets.removeStorage(address(_borrowAssets[i]));
         }
 
-        emit BorrowAssetsUpdated(_setToken, false, _borrowAssets);
+        emit BorrowAssetsUpdated(_jasperVault, false, _borrowAssets);
     }
 
     /**
-     * GOVERNANCE ONLY: Add or remove allowed SetToken to initialize this module. Only callable by governance.
+     * GOVERNANCE ONLY: Add or remove allowed JasperVault to initialize this module. Only callable by governance.
      *
-     * @param _setToken             Instance of the SetToken
+     * @param _jasperVault             Instance of the JasperVault
      */
-    function updateAllowedSetToken(ISetToken _setToken, bool _status) external onlyOwner {
-        allowedSetTokens[_setToken] = _status;
-        emit SetTokenStatusUpdated(_setToken, _status);
+    function updateAllowedSetToken(IJasperVault _jasperVault, bool _status) external onlyOwner {
+        allowedSetTokens[_jasperVault] = _status;
+        emit SetTokenStatusUpdated(_jasperVault, _status);
     }
 
     /**
-     * GOVERNANCE ONLY: Toggle whether any SetToken is allowed to initialize this module. Only callable by governance.
+     * GOVERNANCE ONLY: Toggle whether any JasperVault is allowed to initialize this module. Only callable by governance.
      *
      * @param _anySetAllowed             Bool indicating whether allowedSetTokens is enabled
      */
@@ -672,72 +672,72 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
     }
 
     /**
-     * MODULE ONLY: Hook called prior to issuance to sync positions on SetToken. Only callable by valid module.
+     * MODULE ONLY: Hook called prior to issuance to sync positions on JasperVault. Only callable by valid module.
      *
-     * @param _setToken             Instance of the SetToken
+     * @param _jasperVault             Instance of the JasperVault
      */
-    function moduleIssueHook(ISetToken _setToken, uint256 /* _setTokenQuantity */) external onlyModule(_setToken) {
-        sync(_setToken, false);
+    function moduleIssueHook(IJasperVault _jasperVault, uint256 /* _setTokenQuantity */) external onlyModule(_jasperVault) {
+        sync(_jasperVault, false);
     }
 
     /**
-     * MODULE ONLY: Hook called prior to redemption to sync positions on SetToken. For redemption, always use current borrowed balance after interest accrual.
+     * MODULE ONLY: Hook called prior to redemption to sync positions on JasperVault. For redemption, always use current borrowed balance after interest accrual.
      * Only callable by valid module.
      *
-     * @param _setToken             Instance of the SetToken
+     * @param _jasperVault             Instance of the JasperVault
      */
-    function moduleRedeemHook(ISetToken _setToken, uint256 /* _setTokenQuantity */) external onlyModule(_setToken) {
-        sync(_setToken, true);
+    function moduleRedeemHook(IJasperVault _jasperVault, uint256 /* _setTokenQuantity */) external onlyModule(_jasperVault) {
+        sync(_jasperVault, true);
     }
 
     /**
      * MODULE ONLY: Hook called prior to looping through each component on issuance. Invokes borrow in order for module to return debt to issuer. Only callable by valid module.
      *
-     * @param _setToken             Instance of the SetToken
-     * @param _setTokenQuantity     Quantity of SetToken
+     * @param _jasperVault             Instance of the JasperVault
+     * @param _setTokenQuantity     Quantity of JasperVault
      * @param _component            Address of component
      */
-    function componentIssueHook(ISetToken _setToken, uint256 _setTokenQuantity, IERC20 _component, bool /* _isEquity */) external onlyModule(_setToken) {
-        int256 componentDebt = _setToken.getExternalPositionRealUnit(address(_component), address(this));
+    function componentIssueHook(IJasperVault _jasperVault, uint256 _setTokenQuantity, IERC20 _component, bool /* _isEquity */) external onlyModule(_jasperVault) {
+        int256 componentDebt = _jasperVault.getExternalPositionRealUnit(address(_component), address(this));
 
         require(componentDebt < 0, "Component must be negative");
 
         uint256 notionalDebt = componentDebt.mul(-1).toUint256().preciseMul(_setTokenQuantity);
 
-        _borrow(_setToken, underlyingToCToken[_component], notionalDebt);
+        _borrow(_jasperVault, underlyingToCToken[_component], notionalDebt);
     }
 
     /**
      * MODULE ONLY: Hook called prior to looping through each component on redemption. Invokes repay after issuance module transfers debt from issuer. Only callable by valid module.
      *
-     * @param _setToken             Instance of the SetToken
-     * @param _setTokenQuantity     Quantity of SetToken
+     * @param _jasperVault             Instance of the JasperVault
+     * @param _setTokenQuantity     Quantity of JasperVault
      * @param _component            Address of component
      */
-    function componentRedeemHook(ISetToken _setToken, uint256 _setTokenQuantity, IERC20 _component, bool /* _isEquity */) external onlyModule(_setToken) {
-        int256 componentDebt = _setToken.getExternalPositionRealUnit(address(_component), address(this));
+    function componentRedeemHook(IJasperVault _jasperVault, uint256 _setTokenQuantity, IERC20 _component, bool /* _isEquity */) external onlyModule(_jasperVault) {
+        int256 componentDebt = _jasperVault.getExternalPositionRealUnit(address(_component), address(this));
 
         require(componentDebt < 0, "Component must be negative");
 
         uint256 notionalDebt = componentDebt.mul(-1).toUint256().preciseMulCeil(_setTokenQuantity);
 
-        _repayBorrow(_setToken, underlyingToCToken[_component], _component, notionalDebt);
+        _repayBorrow(_jasperVault, underlyingToCToken[_component], _component, notionalDebt);
     }
 
 
     /* ============ External Getter Functions ============ */
 
     /**
-     * Get enabled assets for SetToken. Returns an array of enabled cTokens that are collateral assets and an
+     * Get enabled assets for JasperVault. Returns an array of enabled cTokens that are collateral assets and an
      * array of underlying that are borrow assets.
      *
      * @return                    Collateral cToken assets that are enabled
      * @return                    Underlying borrowed assets that are enabled.
      */
-    function getEnabledAssets(ISetToken _setToken) external view returns(address[] memory, address[] memory) {
+    function getEnabledAssets(IJasperVault _jasperVault) external view returns(address[] memory, address[] memory) {
         return (
-            enabledAssets[_setToken].collateralCTokens,
-            enabledAssets[_setToken].borrowAssets
+            enabledAssets[_jasperVault].collateralCTokens,
+            enabledAssets[_jasperVault].borrowAssets
         );
     }
 
@@ -747,56 +747,56 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
      * Mints the specified cToken from the underlying of the specified notional quantity. If cEther, the WETH must be
      * unwrapped as it only accepts the underlying ETH.
      */
-    function _mintCToken(ISetToken _setToken, ICErc20 _cToken, IERC20 _underlyingToken, uint256 _mintNotional) internal {
+    function _mintCToken(IJasperVault _jasperVault, ICErc20 _cToken, IERC20 _underlyingToken, uint256 _mintNotional) internal {
         if (_cToken == cEther) {
-            _setToken.invokeUnwrapWETH(address(weth), _mintNotional);
+            _jasperVault.invokeUnwrapWETH(address(weth), _mintNotional);
 
-            _setToken.invokeMintCEther(_cToken, _mintNotional);
+            _jasperVault.invokeMintCEther(_cToken, _mintNotional);
         } else {
-            _setToken.invokeApprove(address(_underlyingToken), address(_cToken), _mintNotional);
+            _jasperVault.invokeApprove(address(_underlyingToken), address(_cToken), _mintNotional);
 
-            _setToken.invokeMintCToken(_cToken, _mintNotional);
+            _jasperVault.invokeMintCToken(_cToken, _mintNotional);
         }
     }
 
     /**
-     * Invoke redeem from SetToken. If cEther, then also wrap ETH into WETH.
+     * Invoke redeem from JasperVault. If cEther, then also wrap ETH into WETH.
      */
-    function _redeemUnderlying(ISetToken _setToken, ICErc20 _cToken, uint256 _redeemNotional) internal {
-        _setToken.invokeRedeemUnderlying(_cToken, _redeemNotional);
+    function _redeemUnderlying(IJasperVault _jasperVault, ICErc20 _cToken, uint256 _redeemNotional) internal {
+        _jasperVault.invokeRedeemUnderlying(_cToken, _redeemNotional);
 
         if (_cToken == cEther) {
-            _setToken.invokeWrapWETH(address(weth), _redeemNotional);
+            _jasperVault.invokeWrapWETH(address(weth), _redeemNotional);
         }
     }
 
     /**
-     * Invoke repay from SetToken. If cEther then unwrap WETH into ETH.
+     * Invoke repay from JasperVault. If cEther then unwrap WETH into ETH.
      */
-    function _repayBorrow(ISetToken _setToken, ICErc20 _cToken, IERC20 _underlyingToken, uint256 _repayNotional) internal {
+    function _repayBorrow(IJasperVault _jasperVault, ICErc20 _cToken, IERC20 _underlyingToken, uint256 _repayNotional) internal {
         if (_cToken == cEther) {
-            _setToken.invokeUnwrapWETH(address(weth), _repayNotional);
+            _jasperVault.invokeUnwrapWETH(address(weth), _repayNotional);
 
-            _setToken.invokeRepayBorrowCEther(_cToken, _repayNotional);
+            _jasperVault.invokeRepayBorrowCEther(_cToken, _repayNotional);
         } else {
             // Approve to cToken
-            _setToken.invokeApprove(address(_underlyingToken), address(_cToken), _repayNotional);
-            _setToken.invokeRepayBorrowCToken(_cToken, _repayNotional);
+            _jasperVault.invokeApprove(address(_underlyingToken), address(_cToken), _repayNotional);
+            _jasperVault.invokeRepayBorrowCToken(_cToken, _repayNotional);
         }
     }
 
     /**
-     * Invoke the SetToken to interact with the specified cToken to borrow the cToken's underlying of the specified borrowQuantity.
+     * Invoke the JasperVault to interact with the specified cToken to borrow the cToken's underlying of the specified borrowQuantity.
      */
-    function _borrow(ISetToken _setToken, ICErc20 _cToken, uint256 _notionalBorrowQuantity) internal {
-        _setToken.invokeBorrow(_cToken, _notionalBorrowQuantity);
+    function _borrow(IJasperVault _jasperVault, ICErc20 _cToken, uint256 _notionalBorrowQuantity) internal {
+        _jasperVault.invokeBorrow(_cToken, _notionalBorrowQuantity);
         if (_cToken == cEther) {
-            _setToken.invokeWrapWETH(address(weth), _notionalBorrowQuantity);
+            _jasperVault.invokeWrapWETH(address(weth), _notionalBorrowQuantity);
         }
     }
 
     /**
-     * Invokes approvals, gets trade call data from exchange adapter and invokes trade from SetToken
+     * Invokes approvals, gets trade call data from exchange adapter and invokes trade from JasperVault
      *
      * @return receiveTokenQuantity The quantity of tokens received post-trade
      */
@@ -809,10 +809,10 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
         internal
         returns (uint256)
     {
-         ISetToken setToken = _actionInfo.setToken;
+         IJasperVault jasperVault = _actionInfo.jasperVault;
          uint256 notionalSendQuantity = _actionInfo.notionalSendQuantity;
 
-         setToken.invokeApprove(
+         jasperVault.invokeApprove(
             address(_sendToken),
             _actionInfo.exchangeAdapter.getSpender(),
             notionalSendQuantity
@@ -825,15 +825,15 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
         ) = _actionInfo.exchangeAdapter.getTradeCalldata(
             address(_sendToken),
             address(_receiveToken),
-            address(setToken),
+            address(jasperVault),
             notionalSendQuantity,
             _actionInfo.minNotionalReceiveQuantity,
             _data
         );
 
-        setToken.invoke(targetExchange, callValue, methodData);
+        jasperVault.invoke(targetExchange, callValue, methodData);
 
-        uint256 receiveTokenQuantity = _receiveToken.balanceOf(address(setToken)).sub(_actionInfo.preTradeReceiveTokenBalance);
+        uint256 receiveTokenQuantity = _receiveToken.balanceOf(address(jasperVault)).sub(_actionInfo.preTradeReceiveTokenBalance);
         require(
             receiveTokenQuantity >= _actionInfo.minNotionalReceiveQuantity,
             "Slippage too high"
@@ -843,12 +843,12 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
     }
 
     /**
-     * Calculates protocol fee on module and pays protocol fee from SetToken
+     * Calculates protocol fee on module and pays protocol fee from JasperVault
      */
-    function _accrueProtocolFee(ISetToken _setToken, IERC20 _receiveToken, uint256 _exchangedQuantity) internal returns(uint256) {
+    function _accrueProtocolFee(IJasperVault _jasperVault, IERC20 _receiveToken, uint256 _exchangedQuantity) internal returns(uint256) {
         uint256 protocolFeeTotal = getModuleFee(PROTOCOL_TRADE_FEE_INDEX, _exchangedQuantity);
 
-        payProtocolFeeFromSetToken(_setToken, address(_receiveToken), protocolFeeTotal);
+        payProtocolFeeFromSetToken(_jasperVault, address(_receiveToken), protocolFeeTotal);
 
         return protocolFeeTotal;
     }
@@ -858,20 +858,20 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
      */
     function _updateLeverPositions(ActionInfo memory actionInfo, IERC20 _borrowAsset) internal {
         _updateCollateralPosition(
-            actionInfo.setToken,
+            actionInfo.jasperVault,
             actionInfo.collateralCTokenAsset,
             _getCollateralPosition(
-                actionInfo.setToken,
+                actionInfo.jasperVault,
                 actionInfo.collateralCTokenAsset,
                 actionInfo.setTotalSupply
             )
         );
 
         _updateBorrowPosition(
-            actionInfo.setToken,
+            actionInfo.jasperVault,
             _borrowAsset,
             _getBorrowPosition(
-                actionInfo.setToken,
+                actionInfo.jasperVault,
                 actionInfo.borrowCTokenAsset,
                 actionInfo.setTotalSupply,
                 false // Do not accrue interest
@@ -879,19 +879,22 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
         );
     }
 
-    function _updateCollateralPosition(ISetToken _setToken, ICErc20 _cToken, uint256 _newPositionUnit) internal {
-        _setToken.editDefaultPosition(address(_cToken), _newPositionUnit);
+    function _updateCollateralPosition(IJasperVault _jasperVault, ICErc20 _cToken, uint256 _newPositionUnit) public {
+        _jasperVault.editCoinType(address(_cToken),2);
+        _jasperVault.editDefaultPosition(address(_cToken), _newPositionUnit);
+
     }
 
-    function _updateBorrowPosition(ISetToken _setToken, IERC20 _underlyingToken, int256 _newPositionUnit) internal {
-        _setToken.editExternalPosition(address(_underlyingToken), address(this), _newPositionUnit, "");
+    function _updateBorrowPosition(IJasperVault _jasperVault, IERC20 _underlyingToken, int256 _newPositionUnit) internal {
+        _jasperVault.editExternalCoinType(address(_underlyingToken),address(this),2);        
+        _jasperVault.editExternalPosition(address(_underlyingToken), address(this), _newPositionUnit, "");
     }
 
     /**
      * Construct the ActionInfo struct for lever and delever
      */
     function _createAndValidateActionInfo(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IERC20 _sendToken,
         IERC20 _receiveToken,
         uint256 _sendQuantityUnits,
@@ -903,10 +906,10 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
         view
         returns(ActionInfo memory)
     {
-        uint256 totalSupply = _setToken.totalSupply();
+        uint256 totalSupply = _jasperVault.totalSupply();
 
         return _createAndValidateActionInfoNotional(
-            _setToken,
+            _jasperVault,
             _sendToken,
             _receiveToken,
             _sendQuantityUnits.preciseMul(totalSupply),
@@ -920,7 +923,7 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
      * Construct the ActionInfo struct for lever and delever accepting notional units
      */
     function _createAndValidateActionInfoNotional(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IERC20 _sendToken,
         IERC20 _receiveToken,
         uint256 _notionalSendQuantity,
@@ -932,16 +935,16 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
         view
         returns(ActionInfo memory)
     {
-        uint256 totalSupply = _setToken.totalSupply();
+        uint256 totalSupply = _jasperVault.totalSupply();
         ActionInfo memory actionInfo = ActionInfo ({
             exchangeAdapter: IExchangeAdapter(getAndValidateAdapter(_tradeAdapterName)),
-            setToken: _setToken,
+            jasperVault: _jasperVault,
             collateralCTokenAsset: _isLever ? underlyingToCToken[_receiveToken] : underlyingToCToken[_sendToken],
             borrowCTokenAsset: _isLever ? underlyingToCToken[_sendToken] : underlyingToCToken[_receiveToken],
             setTotalSupply: totalSupply,
             notionalSendQuantity: _notionalSendQuantity,
             minNotionalReceiveQuantity: _minNotionalReceiveQuantity,
-            preTradeReceiveTokenBalance: IERC20(_receiveToken).balanceOf(address(_setToken))
+            preTradeReceiveTokenBalance: IERC20(_receiveToken).balanceOf(address(_jasperVault))
         });
 
         _validateCommon(actionInfo);
@@ -952,14 +955,14 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
 
 
     function _validateCommon(ActionInfo memory _actionInfo) internal view {
-        require(collateralCTokenEnabled[_actionInfo.setToken][_actionInfo.collateralCTokenAsset], "Collateral not enabled");
-        require(borrowCTokenEnabled[_actionInfo.setToken][_actionInfo.borrowCTokenAsset], "Borrow not enabled");
+        require(collateralCTokenEnabled[_actionInfo.jasperVault][_actionInfo.collateralCTokenAsset], "Collateral not enabled");
+        require(borrowCTokenEnabled[_actionInfo.jasperVault][_actionInfo.borrowCTokenAsset], "Borrow not enabled");
         require(_actionInfo.collateralCTokenAsset != _actionInfo.borrowCTokenAsset, "Must be different");
         require(_actionInfo.notionalSendQuantity > 0, "Quantity is 0");
     }
 
-    function _getCollateralPosition(ISetToken _setToken, ICErc20 _cToken, uint256 _setTotalSupply) internal view returns (uint256) {
-        uint256 collateralNotionalBalance = _cToken.balanceOf(address(_setToken));
+    function _getCollateralPosition(IJasperVault _jasperVault, ICErc20 _cToken, uint256 _setTotalSupply) internal view returns (uint256) {
+        uint256 collateralNotionalBalance = _cToken.balanceOf(address(_jasperVault));
         return collateralNotionalBalance.preciseDiv(_setTotalSupply);
     }
 
@@ -967,8 +970,8 @@ contract CompoundLeverageModule is ModuleBase, ReentrancyGuard, Ownable {
      * Get borrow position. If should accrue interest is true, then accrue interest on Compound and use current borrow balance, else use the stored value to save gas.
      * Use the current value for debt redemption, when we need to calculate the exact units of debt that needs to be repaid.
      */
-    function _getBorrowPosition(ISetToken _setToken, ICErc20 _cToken, uint256 _setTotalSupply, bool _shouldAccrueInterest) internal returns (int256) {
-        uint256 borrowNotionalBalance = _shouldAccrueInterest ? _cToken.borrowBalanceCurrent(address(_setToken)) : _cToken.borrowBalanceStored(address(_setToken));
+    function _getBorrowPosition(IJasperVault _jasperVault, ICErc20 _cToken, uint256 _setTotalSupply, bool _shouldAccrueInterest) internal returns (int256) {
+        uint256 borrowNotionalBalance = _shouldAccrueInterest ? _cToken.borrowBalanceCurrent(address(_jasperVault)) : _cToken.borrowBalanceStored(address(_jasperVault));
         // Round negative away from 0
         int256 borrowPositionUnit = borrowNotionalBalance.preciseDivCeil(_setTotalSupply).toInt256().mul(-1);
 

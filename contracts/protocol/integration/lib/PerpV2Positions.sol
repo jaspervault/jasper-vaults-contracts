@@ -24,7 +24,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import { AddressArrayUtils } from "../../../lib/AddressArrayUtils.sol";
 import { IAccountBalance } from "../../../interfaces/external/perp-v2/IAccountBalance.sol";
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
 import { Position } from "../../../protocol/lib/Position.sol";
 import { PreciseUnitMath } from "../../../lib/PreciseUnitMath.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/SafeCast.sol";
@@ -37,12 +37,12 @@ import { UnitConversionUtils } from "../../../lib/UnitConversionUtils.sol";
  * Collection of PerpV2 getter functions.
  */
 library PerpV2Positions {
-    using Position for ISetToken;
+    using Position for IJasperVault;
     using SignedSafeMath for int256;
     using SafeCast for uint256;
     using PreciseUnitMath for int256;
     using AddressArrayUtils for address[];
-    
+
     struct PositionNotionalInfo {
         address baseToken;              // Virtual token minted by the Perp protocol
         int256 baseBalance;             // Base position notional quantity in 10**18 decimals. When negative, position is short
@@ -58,33 +58,33 @@ library PerpV2Positions {
     /**
      * @dev Retrieves net quote balance of all open positions.
      *
-     * @param _setToken             Instance of SetToken
-     * @param _baseTokens           PerpV2 market addresses in which SetToken has positions
+     * @param _jasperVault             Instance of JasperVault
+     * @param _baseTokens           PerpV2 market addresses in which JasperVault has positions
      * @param _perpAccountBalance   Instance of PerpV2 AccountBalance
      * @return netQuoteBalance      Net quote balance of all open positions
      */
     function getNetQuoteBalance(
-        ISetToken _setToken, 
-        address[] memory _baseTokens, 
+        IJasperVault _jasperVault,
+        address[] memory _baseTokens,
         IAccountBalance _perpAccountBalance
-    ) 
-        external 
-        view 
-        returns (int256 netQuoteBalance) 
+    )
+        external
+        view
+        returns (int256 netQuoteBalance)
     {
         uint256 numBaseTokens = _baseTokens.length;
         for (uint256 i = 0; i < numBaseTokens; i++) {
             netQuoteBalance = netQuoteBalance.add(
-                _perpAccountBalance.getQuote(address(_setToken), _baseTokens[i])
+                _perpAccountBalance.getQuote(address(_jasperVault), _baseTokens[i])
             );
         }
     }
 
     /**
-     * @dev Returns a PositionUnitNotionalInfo array representing all positions open for the SetToken.
+     * @dev Returns a PositionUnitNotionalInfo array representing all positions open for the JasperVault.
      *
-     * @param _setToken             Instance of SetToken
-     * @param _baseTokens           PerpV2 market addresses in which SetToken has positions
+     * @param _jasperVault             Instance of JasperVault
+     * @param _baseTokens           PerpV2 market addresses in which JasperVault has positions
      * @param _perpAccountBalance   Instance of PerpV2 AccountBalance
      *
      * @return PositionUnitInfo array, in which each element has properties:
@@ -94,13 +94,13 @@ library PerpV2Positions {
      *         + quoteBalance: USDC quote asset balance as notional quantity (10**18)
      */
     function getPositionNotionalInfo(
-        ISetToken _setToken, 
-        address[] memory _baseTokens, 
+        IJasperVault _jasperVault,
+        address[] memory _baseTokens,
         IAccountBalance _perpAccountBalance
-    ) 
-        public 
-        view 
-        returns (PositionNotionalInfo[] memory) 
+    )
+        public
+        view
+        returns (PositionNotionalInfo[] memory)
     {
         uint256 numBaseTokens = _baseTokens.length;
         PositionNotionalInfo[] memory positionInfo = new PositionNotionalInfo[](numBaseTokens);
@@ -110,11 +110,11 @@ library PerpV2Positions {
             positionInfo[i] = PositionNotionalInfo({
                 baseToken: baseToken,
                 baseBalance: _perpAccountBalance.getBase(
-                    address(_setToken),
+                    address(_jasperVault),
                     baseToken
                 ),
                 quoteBalance: _perpAccountBalance.getQuote(
-                    address(_setToken),
+                    address(_jasperVault),
                     baseToken
                 )
             });
@@ -122,12 +122,12 @@ library PerpV2Positions {
 
         return positionInfo;
     }
-    
+
     /**
-     * @dev Returns a PerpV2Positions.PositionUnitInfo array representing all positions open for the SetToken.
+     * @dev Returns a PerpV2Positions.PositionUnitInfo array representing all positions open for the JasperVault.
      *
-     * @param _setToken             Instance of SetToken
-     * @param _baseTokens           PerpV2 market addresses in which SetToken has positions
+     * @param _jasperVault             Instance of JasperVault
+     * @param _baseTokens           PerpV2 market addresses in which JasperVault has positions
      * @param _perpAccountBalance   Instance of PerpV2 AccountBalance
      *
      * @return PerpV2Positions.PositionUnitInfo array, in which each element has properties:
@@ -137,21 +137,21 @@ library PerpV2Positions {
      *         + quoteUnit: USDC quote asset balance as position unit (10**18)
      */
     function getPositionUnitInfo(
-        ISetToken _setToken, 
-        address[] memory _baseTokens, 
+        IJasperVault _jasperVault,
+        address[] memory _baseTokens,
         IAccountBalance _perpAccountBalance
-    ) 
-        external 
-        view 
-        returns (PositionUnitInfo[] memory) 
+    )
+        external
+        view
+        returns (PositionUnitInfo[] memory)
     {
-        int256 totalSupply = _setToken.totalSupply().toInt256();
+        int256 totalSupply = _jasperVault.totalSupply().toInt256();
         PositionNotionalInfo[] memory positionNotionalInfo = getPositionNotionalInfo(
-            _setToken,
+            _jasperVault,
             _baseTokens,
             _perpAccountBalance
         );
-        
+
         uint256 positionLength = positionNotionalInfo.length;
         PositionUnitInfo[] memory positionUnitInfo = new PositionUnitInfo[](positionLength);
 
@@ -171,11 +171,11 @@ library PerpV2Positions {
      * @dev Returns issuance or redemption adjustments in the format expected by `SlippageIssuanceModule`.
      * The last recorded externalPositionUnit (current) is subtracted from a dynamically generated
      * externalPositionUnit (new) and set in an `equityAdjustments` array which is the same length as
-     * the SetToken's components array, at the same index the collateral token occupies in the components
+     * the JasperVault's components array, at the same index the collateral token occupies in the components
      * array. All other values are left unset (0). An empty-value components length debtAdjustments
      * array is also returned.
      *
-     * @param _setToken                         Instance of the SetToken
+     * @param _jasperVault                         Instance of the JasperVault
      * @param _adjustComponent                  Address of component token whose position unit is to be adjusted
      * @param _currentExternalPositionUnit      Current external position unit of `_adjustComponent`
      * @param _newExternalPositionUnit          New external position unit of `_adjustComponent`
@@ -183,7 +183,7 @@ library PerpV2Positions {
      * @return int256[]                         Components-length array of zeroes (debt adjustements)
      */
     function formatAdjustments(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _adjustComponent,
         int256 _currentExternalPositionUnit,
         int256 _newExternalPositionUnit
@@ -192,7 +192,7 @@ library PerpV2Positions {
         view
         returns (int256[] memory, int256[] memory)
     {
-        address[] memory components = _setToken.getComponents();
+        address[] memory components = _jasperVault.getComponents();
 
         int256[] memory equityAdjustments = new int256[](components.length);
         int256[] memory debtAdjustments = new int256[](components.length);

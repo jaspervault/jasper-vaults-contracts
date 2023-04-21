@@ -18,13 +18,12 @@
 
 pragma solidity 0.6.10;
 
-import {ISetToken} from "@setprotocol/set-protocol-v2/contracts/interfaces/ISetToken.sol";
+import {IJasperVault} from "../../interfaces/IJasperVault.sol";
 import {ISignalSuscriptionModule} from "../../interfaces/ISignalSuscriptionModule.sol";
 
 import {BaseGlobalExtension} from "../lib/BaseGlobalExtension.sol";
 import {IDelegatedManager} from "../interfaces/IDelegatedManager.sol";
 import {IManagerCore} from "../interfaces/IManagerCore.sol";
-
 
 /**
  * @title TradeExtension
@@ -37,42 +36,39 @@ contract SignalSuscriptionExtension is BaseGlobalExtension {
     /* ============ Events ============ */
 
     event SignalSuscriptionExtensionInitialized(
-        address indexed _setToken,
+        address indexed _jasperVault,
         address indexed _delegatedManager
     );
-    
+
     // event SetSubscribeTarget(
-    //      address indexed _setToken,
+    //      address indexed _jasperVault,
     //      address target
     // );
-    event SetSubscribeStatus(
-         ISetToken indexed _setToken,
-         bool status
-    );
+    event SetSubscribeStatus(IJasperVault indexed _jasperVault, uint256 status);
 
     event SetWhiteList(
-         ISetToken indexed _setToken,
-         address user,
-         bool status
+        IJasperVault indexed _jasperVault,
+        address user,
+        bool status
     );
     /* ============ Modifiers ============ */
-    modifier ValidWhiteList(ISetToken _setToken){
-        require(whiteList[_setToken][msg.sender],"user is not in the whitelist");        
+    modifier ValidWhitelist(IJasperVault _jasperVault) {
+        require(
+            whiteList[_jasperVault][msg.sender],
+            "user is not in the whitelist"
+        );
         _;
-    } 
+    }
     /* ============ State Variables ============ */
 
     // Instance of SignalSuscriptionModule
     ISignalSuscriptionModule public immutable signalSuscriptionModule;
-    
-    //setToken subscribe address
-    // mapping(ISetToken=>address) public subscribeTargetList;
-    
-    //setToken subscribe  status
-    // mapping(ISetToken=>bool) public subscribeStatusList;
+
+
 
     //whiteList
-    mapping(ISetToken=>mapping(address=>bool)) public whiteList;
+    mapping(IJasperVault => mapping(address => bool)) public whiteList;
+
     /* ============ Constructor ============ */
 
     constructor(
@@ -83,30 +79,31 @@ contract SignalSuscriptionExtension is BaseGlobalExtension {
     }
 
     /* ============ External Functions ============ */
-    function setWhiteList(ISetToken _setToken,address user,bool status) external  onlyOperator(_setToken) {
-         require(!isContract(user),"user is not wallet address");
-         bool _status=whiteList[_setToken][user];
-         require(_status==status,"status set invalid");
-         whiteList[_setToken][user]=status;
-         emit SetWhiteList(_setToken,user,status);
+    function setWhiteList(
+        IJasperVault _jasperVault,
+        address[] memory users,
+        bool status
+    ) external onlyOperator(_jasperVault) {
+        for (uint256 i = 0; i < users.length; i++) {
+            whiteList[_jasperVault][users[i]] = status;
+            emit SetWhiteList(_jasperVault, users[i], status);
+        }
     }
 
-
     /**
-     * ONLY OWNER: Initializes SignalSuscriptionModule on the SetToken associated with the DelegatedManager.
+     * ONLY OWNER: Initializes SignalSuscriptionModule on the JasperVault associated with the DelegatedManager.
      *
      * @param _delegatedManager     Instance of the DelegatedManager to initialize the TradeModule for
      */
-    function initializeModule(IDelegatedManager _delegatedManager)
-        external
-        onlyOwnerAndValidManager(_delegatedManager)
-    {
+    function initializeModule(
+        IDelegatedManager _delegatedManager
+    ) external onlyOwnerAndValidManager(_delegatedManager) {
         require(
             _delegatedManager.isInitializedExtension(address(this)),
             "Extension must be initialized"
         );
 
-        _initializeModule(_delegatedManager.setToken(), _delegatedManager);
+        _initializeModule(_delegatedManager.jasperVault(), _delegatedManager);
     }
 
     /**
@@ -114,140 +111,174 @@ contract SignalSuscriptionExtension is BaseGlobalExtension {
      *
      * @param _delegatedManager     Instance of the DelegatedManager to initialize
      */
-    function initializeExtension(IDelegatedManager _delegatedManager)
-        external
-        onlyOwnerAndValidManager(_delegatedManager)
-    {
+    function initializeExtension(
+        IDelegatedManager _delegatedManager
+    ) external onlyOwnerAndValidManager(_delegatedManager) {
         require(
             _delegatedManager.isPendingExtension(address(this)),
             "Extension must be pending"
         );
 
-        ISetToken setToken = _delegatedManager.setToken();
+        IJasperVault jasperVault = _delegatedManager.jasperVault();
 
-        _initializeExtension(setToken, _delegatedManager);
+        _initializeExtension(jasperVault, _delegatedManager);
 
         emit SignalSuscriptionExtensionInitialized(
-            address(setToken),
+            address(jasperVault),
             address(_delegatedManager)
         );
     }
 
     /**
-     * ONLY OWNER: Initializes TradeExtension to the DelegatedManager and TradeModule to the SetToken
+     * ONLY OWNER: Initializes TradeExtension to the DelegatedManager and TradeModule to the JasperVault
      *
      * @param _delegatedManager     Instance of the DelegatedManager to initialize
      */
-    function initializeModuleAndExtension(IDelegatedManager _delegatedManager)
-        external
-        onlyOwnerAndValidManager(_delegatedManager)
-    {
+    function initializeModuleAndExtension(
+        IDelegatedManager _delegatedManager
+    ) external onlyOwnerAndValidManager(_delegatedManager) {
         require(
             _delegatedManager.isPendingExtension(address(this)),
             "Extension must be pending"
         );
 
-        ISetToken setToken = _delegatedManager.setToken();
+        IJasperVault jasperVault = _delegatedManager.jasperVault();
 
-        _initializeExtension(setToken, _delegatedManager);
-        _initializeModule(setToken, _delegatedManager);
+        _initializeExtension(jasperVault, _delegatedManager);
+        _initializeModule(jasperVault, _delegatedManager);
 
         emit SignalSuscriptionExtensionInitialized(
-            address(setToken),
+            address(jasperVault),
             address(_delegatedManager)
         );
     }
 
     /**
-     * ONLY MANAGER: Remove an existing SetToken and DelegatedManager tracked by the TradeExtension
+     * ONLY MANAGER: Remove an existing JasperVault and DelegatedManager tracked by the TradeExtension
      */
     function removeExtension() external override {
         IDelegatedManager delegatedManager = IDelegatedManager(msg.sender);
-        ISetToken setToken = delegatedManager.setToken();
+        IJasperVault jasperVault = delegatedManager.jasperVault();
 
-        _removeExtension(setToken, delegatedManager);
+        _removeExtension(jasperVault, delegatedManager);
     }
 
-    function subscribe(ISetToken _setToken, address target)
+    function subscribe(
+        IJasperVault _jasperVault,
+        address target
+    )
         external
-        onlyUnSubscribed(_setToken)
-        ValidWhiteList(_setToken)
-        onlyOperator(_setToken)
+        onlySettle(_jasperVault)
+        ValidWhitelist(_jasperVault)
+        onlyOperator(_jasperVault)
     {
         bytes memory callData = abi.encodeWithSelector(
             ISignalSuscriptionModule.subscribe.selector,
-            _setToken,
+            _jasperVault,
             target
         );
         _invokeManager(
-            _manager(_setToken),
+            _manager(_jasperVault),
             address(signalSuscriptionModule),
             callData
         );
-         _manager(_setToken).setSubscribeStatus(true);
-        emit SetSubscribeStatus(_setToken,true);
+        _manager(_jasperVault).setSubscribeStatus(1);
+        emit SetSubscribeStatus(_jasperVault, 1);
     }
 
     function udpate_allowedCopytrading(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         bool can_copy_trading
-    ) external onlyOperator(_setToken) {
+    ) external onlyOperator(_jasperVault) {
         bytes memory callData = abi.encodeWithSelector(
             ISignalSuscriptionModule.udpate_allowedCopytrading.selector,
-            _setToken,
+            _jasperVault,
             can_copy_trading
         );
         _invokeManager(
-            _manager(_setToken),
+            _manager(_jasperVault),
             address(signalSuscriptionModule),
             callData
         );
     }
 
-    function unsubscribe(ISetToken _setToken, address target)
+    function unsubscribe(
+        IJasperVault _jasperVault,
+        address target
+    )
         external
-        onlySubscribed(_setToken)
-        ValidWhiteList(_setToken)
-        onlyOperator(_setToken)
+        onlySubscribed(_jasperVault)
+        ValidWhitelist(_jasperVault)
+        onlyOperator(_jasperVault)
     {
         bytes memory callData = abi.encodeWithSelector(
             ISignalSuscriptionModule.unsubscribe.selector,
-            _setToken,
+            _jasperVault,
             target
         );
         _invokeManager(
-            _manager(_setToken),
+            _manager(_jasperVault),
             address(signalSuscriptionModule),
             callData
         );
-         _manager(_setToken).setSubscribeStatus(false);
-        emit SetSubscribeStatus(_setToken,false);
+        _manager(_jasperVault).setSubscribeStatus(0);
+        emit SetSubscribeStatus(_jasperVault, 0);
+    }
+
+
+
+
+
+    function exectueFollowEnd(address _jasperVault) external {
+         bytes memory callData = abi.encodeWithSelector(
+            ISignalSuscriptionModule.exectueFollowEnd.selector,
+            _jasperVault
+        );     
+        _invokeManager(
+            _manager(IJasperVault(_jasperVault)),
+            address(signalSuscriptionModule),
+            callData
+        );        
+    }
+
+    /* ============ view Functions ============ */
+    function getFollowers(address _jasperVault) external view returns(address[] memory){
+        return signalSuscriptionModule.get_followers(_jasperVault);
+    }
+ 
+    function getExectueFollow(address _jasperVault) external view returns(bool){
+        return  signalSuscriptionModule.isExectueFollow(_jasperVault);
+    }
+
+    function warnLine() external  view returns(uint256){
+        return signalSuscriptionModule.warnLine();
+    }
+
+
+    function unsubscribeLine() external  view returns(uint256){
+        return signalSuscriptionModule.unsubscribeLine();
     }
 
     /* ============ Internal Functions ============ */
 
     /**
-     * Internal function to initialize TradeModule on the SetToken associated with the DelegatedManager.
+     * Internal function to initialize TradeModule on the JasperVault associated with the DelegatedManager.
      *
-     * @param _setToken             Instance of the SetToken corresponding to the DelegatedManager
+     * @param _jasperVault             Instance of the JasperVault corresponding to the DelegatedManager
      * @param _delegatedManager     Instance of the DelegatedManager to initialize the TradeModule for
      */
     function _initializeModule(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IDelegatedManager _delegatedManager
     ) internal {
         bytes memory callData = abi.encodeWithSignature(
             "initialize(address)",
-            _setToken
+            _jasperVault
         );
         _invokeManager(
             _delegatedManager,
             address(signalSuscriptionModule),
             callData
         );
-    }
-
-    function isContract(address addr) internal view returns(bool){
-        uint size;assembly { size:=extcodesize(addr) } return size>0;
     }
 }

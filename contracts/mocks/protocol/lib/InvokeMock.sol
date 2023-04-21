@@ -18,7 +18,7 @@
 
 pragma solidity 0.6.10;
 
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
 import { Invoke } from "../../../protocol/lib/Invoke.sol";
 
 contract InvokeMock {
@@ -26,43 +26,43 @@ contract InvokeMock {
     /* ============ External Functions ============ */
 
     function testInvokeApprove(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _token,
         address _spender,
         uint256 _quantity
     ) external {
-        Invoke.invokeApprove(_setToken, _token, _spender, _quantity);
+        Invoke.invokeApprove(_jasperVault, _token, _spender, _quantity);
     }
 
     function testInvokeTransfer(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _token,
         address _spender,
         uint256 _quantity
     ) external {
-        Invoke.invokeTransfer(_setToken, _token, _spender, _quantity);
+        Invoke.invokeTransfer(_jasperVault, _token, _spender, _quantity);
     }
 
     function testStrictInvokeTransfer(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _token,
         address _spender,
         uint256 _quantity
     ) external {
-        Invoke.strictInvokeTransfer(_setToken, _token, _spender, _quantity);
+        Invoke.strictInvokeTransfer(_jasperVault, _token, _spender, _quantity);
     }
 
-    function testInvokeUnwrapWETH(ISetToken _setToken, address _weth, uint256 _quantity) external {
-        Invoke.invokeUnwrapWETH(_setToken, _weth, _quantity);
+    function testInvokeUnwrapWETH(IJasperVault _jasperVault, address _weth, uint256 _quantity) external {
+        Invoke.invokeUnwrapWETH(_jasperVault, _weth, _quantity);
     }
 
-    function testInvokeWrapWETH(ISetToken _setToken, address _weth, uint256 _quantity) external {
-        Invoke.invokeWrapWETH(_setToken, _weth, _quantity);
+    function testInvokeWrapWETH(IJasperVault _jasperVault, address _weth, uint256 _quantity) external {
+        Invoke.invokeWrapWETH(_jasperVault, _weth, _quantity);
     }
 
     /* ============ Helper Functions ============ */
 
-    function initializeModuleOnSet(ISetToken _setToken) external {
-        _setToken.initializeModule();
+    function initializeModuleOnSet(IJasperVault _jasperVault) external {
+        _jasperVault.initializeModule();
     }
 }

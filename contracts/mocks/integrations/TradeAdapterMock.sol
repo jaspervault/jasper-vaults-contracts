@@ -37,7 +37,7 @@ contract TradeAdapterMock {
         uint256 balance = ERC20(_token).balanceOf(address(this));
         require(ERC20(_token).transfer(msg.sender, balance), "ERC20 transfer failed");
     }
-    
+
     /* ============ Trade Functions ============ */
 
     function trade(
@@ -76,7 +76,7 @@ contract TradeAdapterMock {
         view
         returns (address, uint256, bytes memory)
     {
-        // Encode method data for SetToken to invoke
+        // Encode method data for JasperVault to invoke
         bytes memory methodData = abi.encodeWithSignature(
             "trade(address,address,address,uint256,uint256)",
             _sourceToken,

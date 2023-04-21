@@ -22,7 +22,7 @@ pragma experimental "ABIEncoderV2";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { SafeMath } from "@openzeppelin/contracts/math/SafeMath.sol";
 
-import { ISetToken } from "@setprotocol/set-protocol-v2/contracts/interfaces/ISetToken.sol";
+import { IJasperVault } from "../../interfaces/IJasperVault.sol";
 import { IIssuanceModule } from "@setprotocol/set-protocol-v2/contracts/interfaces/IIssuanceModule.sol";
 import { PreciseUnitMath } from "@setprotocol/set-protocol-v2/contracts/lib/PreciseUnitMath.sol";
 
@@ -49,12 +49,12 @@ contract IssuanceExtension is BaseGlobalExtension {
     /* ============ Events ============ */
 
     event IssuanceExtensionInitialized(
-        address indexed _setToken,
+        address indexed _jasperVault,
         address indexed _delegatedManager
     );
 
     event FeesDistributed(
-        address _setToken,
+        address _jasperVault,
         address indexed _ownerFeeRecipient,
         address indexed _methodologist,
         uint256 _ownerTake,
@@ -84,10 +84,10 @@ contract IssuanceExtension is BaseGlobalExtension {
      * ANYONE CALLABLE: Distributes fees accrued to the DelegatedManager. Calculates fees for
      * owner and methodologist, and sends to owner fee recipient and methodologist respectively.
      */
-    function distributeFees(ISetToken _setToken) public {
-        IDelegatedManager delegatedManager = _manager(_setToken);
+    function distributeFees(IJasperVault _jasperVault) public {
+        IDelegatedManager delegatedManager = _manager(_jasperVault);
 
-        uint256 totalFees = _setToken.balanceOf(address(delegatedManager));
+        uint256 totalFees = _jasperVault.balanceOf(address(delegatedManager));
 
         address methodologist = delegatedManager.methodologist();
         address ownerFeeRecipient = delegatedManager.ownerFeeRecipient();
@@ -96,18 +96,18 @@ contract IssuanceExtension is BaseGlobalExtension {
         uint256 methodologistTake = totalFees.sub(ownerTake);
 
         if (ownerTake > 0) {
-            delegatedManager.transferTokens(address(_setToken), ownerFeeRecipient, ownerTake);
+            delegatedManager.transferTokens(address(_jasperVault), ownerFeeRecipient, ownerTake);
         }
 
         if (methodologistTake > 0) {
-            delegatedManager.transferTokens(address(_setToken), methodologist, methodologistTake);
+            delegatedManager.transferTokens(address(_jasperVault), methodologist, methodologistTake);
         }
 
-        emit FeesDistributed(address(_setToken), ownerFeeRecipient, methodologist, ownerTake, methodologistTake);
+        emit FeesDistributed(address(_jasperVault), ownerFeeRecipient, methodologist, ownerTake, methodologistTake);
     }
 
     /**
-     * ONLY OWNER: Initializes IssuanceModule on the SetToken associated with the DelegatedManager.
+     * ONLY OWNER: Initializes IssuanceModule on the JasperVault associated with the DelegatedManager.
      *
      * @param _delegatedManager             Instance of the DelegatedManager to initialize the IssuanceModule for
      * @param _maxManagerFee                Maximum fee that can be charged on issue and redeem
@@ -130,7 +130,7 @@ contract IssuanceExtension is BaseGlobalExtension {
         require(_delegatedManager.isInitializedExtension(address(this)), "Extension must be initialized");
 
         _initializeModule(
-            _delegatedManager.setToken(),
+            _delegatedManager.jasperVault(),
             _delegatedManager,
             _maxManagerFee,
             _managerIssueFee,
@@ -148,15 +148,15 @@ contract IssuanceExtension is BaseGlobalExtension {
     function initializeExtension(IDelegatedManager _delegatedManager) external onlyOwnerAndValidManager(_delegatedManager) {
         require(_delegatedManager.isPendingExtension(address(this)), "Extension must be pending");
 
-        ISetToken setToken = _delegatedManager.setToken();
+        IJasperVault jasperVault = _delegatedManager.jasperVault();
 
-        _initializeExtension(setToken, _delegatedManager);
+        _initializeExtension(jasperVault, _delegatedManager);
 
-        emit IssuanceExtensionInitialized(address(setToken), address(_delegatedManager));
+        emit IssuanceExtensionInitialized(address(jasperVault), address(_delegatedManager));
     }
 
     /**
-     * ONLY OWNER: Initializes IssuanceExtension to the DelegatedManager and IssuanceModule to the SetToken
+     * ONLY OWNER: Initializes IssuanceExtension to the DelegatedManager and IssuanceModule to the JasperVault
      *
      * @param _delegatedManager             Instance of the DelegatedManager to initialize
      * @param _maxManagerFee                Maximum fee that can be charged on issue and redeem
@@ -178,11 +178,11 @@ contract IssuanceExtension is BaseGlobalExtension {
     {
         require(_delegatedManager.isPendingExtension(address(this)), "Extension must be pending");
 
-        ISetToken setToken = _delegatedManager.setToken();
+        IJasperVault jasperVault = _delegatedManager.jasperVault();
 
-        _initializeExtension(setToken, _delegatedManager);
+        _initializeExtension(jasperVault, _delegatedManager);
         _initializeModule(
-            setToken,
+            jasperVault,
             _delegatedManager,
             _maxManagerFee,
             _managerIssueFee,
@@ -191,67 +191,67 @@ contract IssuanceExtension is BaseGlobalExtension {
             _managerIssuanceHook
         );
 
-        emit IssuanceExtensionInitialized(address(setToken), address(_delegatedManager));
+        emit IssuanceExtensionInitialized(address(jasperVault), address(_delegatedManager));
     }
 
     /**
-     * ONLY MANAGER: Remove an existing SetToken and DelegatedManager tracked by the IssuanceExtension
+     * ONLY MANAGER: Remove an existing JasperVault and DelegatedManager tracked by the IssuanceExtension
      */
     function removeExtension() external override {
         IDelegatedManager delegatedManager = IDelegatedManager(msg.sender);
-        ISetToken setToken = delegatedManager.setToken();
+        IJasperVault jasperVault = delegatedManager.jasperVault();
 
-        _removeExtension(setToken, delegatedManager);
+        _removeExtension(jasperVault, delegatedManager);
     }
 
     /**
      * ONLY OWNER: Updates issuance fee on IssuanceModule.
      *
-     * @param _setToken     Instance of the SetToken to update issue fee for
+     * @param _jasperVault     Instance of the JasperVault to update issue fee for
      * @param _newFee       New issue fee percentage in precise units (1% = 1e16, 100% = 1e18)
      */
-    function updateIssueFee(ISetToken _setToken, uint256 _newFee)
+    function updateIssueFee(IJasperVault _jasperVault, uint256 _newFee)
         external
-        onlyOwner(_setToken)
+        onlyOwner(_jasperVault)
     {
-        bytes memory callData = abi.encodeWithSignature("updateIssueFee(address,uint256)", _setToken, _newFee);
-        _invokeManager(_manager(_setToken), address(issuanceModule), callData);
+        bytes memory callData = abi.encodeWithSignature("updateIssueFee(address,uint256)", _jasperVault, _newFee);
+        _invokeManager(_manager(_jasperVault), address(issuanceModule), callData);
     }
 
     /**
      * ONLY OWNER: Updates redemption fee on IssuanceModule.
      *
-     * @param _setToken     Instance of the SetToken to update redeem fee for
+     * @param _jasperVault     Instance of the JasperVault to update redeem fee for
      * @param _newFee       New redeem fee percentage in precise units (1% = 1e16, 100% = 1e18)
      */
-    function updateRedeemFee(ISetToken _setToken, uint256 _newFee)
+    function updateRedeemFee(IJasperVault _jasperVault, uint256 _newFee)
         external
-        onlyOwner(_setToken)
+        onlyOwner(_jasperVault)
     {
-        bytes memory callData = abi.encodeWithSignature("updateRedeemFee(address,uint256)", _setToken, _newFee);
-        _invokeManager(_manager(_setToken), address(issuanceModule), callData);
+        bytes memory callData = abi.encodeWithSignature("updateRedeemFee(address,uint256)", _jasperVault, _newFee);
+        _invokeManager(_manager(_jasperVault), address(issuanceModule), callData);
     }
 
     /**
      * ONLY OWNER: Updates fee recipient on IssuanceModule
      *
-     * @param _setToken         Instance of the SetToken to update fee recipient for
+     * @param _jasperVault         Instance of the JasperVault to update fee recipient for
      * @param _newFeeRecipient  Address of new fee recipient. This should be the address of the DelegatedManager
      */
-    function updateFeeRecipient(ISetToken _setToken, address _newFeeRecipient)
+    function updateFeeRecipient(IJasperVault _jasperVault, address _newFeeRecipient)
         external
-        onlyOwner(_setToken)
+        onlyOwner(_jasperVault)
     {
-        bytes memory callData = abi.encodeWithSignature("updateFeeRecipient(address,address)", _setToken, _newFeeRecipient);
-        _invokeManager(_manager(_setToken), address(issuanceModule), callData);
+        bytes memory callData = abi.encodeWithSignature("updateFeeRecipient(address,address)", _jasperVault, _newFeeRecipient);
+        _invokeManager(_manager(_jasperVault), address(issuanceModule), callData);
     }
 
     /* ============ Internal Functions ============ */
 
     /**
-     * Internal function to initialize IssuanceModule on the SetToken associated with the DelegatedManager.
+     * Internal function to initialize IssuanceModule on the JasperVault associated with the DelegatedManager.
      *
-     * @param _setToken                     Instance of the SetToken corresponding to the DelegatedManager
+     * @param _jasperVault                     Instance of the JasperVault corresponding to the DelegatedManager
      * @param _delegatedManager             Instance of the DelegatedManager to initialize the TradeModule for
      * @param _maxManagerFee                Maximum fee that can be charged on issue and redeem
      * @param _managerIssueFee              Fee to charge on issuance
@@ -260,7 +260,7 @@ contract IssuanceExtension is BaseGlobalExtension {
      * @param _managerIssuanceHook          Instance of the contract with the Pre-Issuance Hook function
      */
     function _initializeModule(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IDelegatedManager _delegatedManager,
         uint256 _maxManagerFee,
         uint256 _managerIssueFee,
@@ -272,7 +272,7 @@ contract IssuanceExtension is BaseGlobalExtension {
     {
         bytes memory callData = abi.encodeWithSignature(
             "initialize(address,uint256,uint256,uint256,address,address)",
-            _setToken,
+            _jasperVault,
             _maxManagerFee,
             _managerIssueFee,
             _managerRedeemFee,

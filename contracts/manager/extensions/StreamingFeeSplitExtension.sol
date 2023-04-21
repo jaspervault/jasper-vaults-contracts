@@ -19,17 +19,16 @@
 pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
 
-import { Address } from "@openzeppelin/contracts/utils/Address.sol";
-import { SafeMath } from "@openzeppelin/contracts/math/SafeMath.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+import {SafeMath} from "@openzeppelin/contracts/math/SafeMath.sol";
 
-import { ISetToken } from "@setprotocol/set-protocol-v2/contracts/interfaces/ISetToken.sol";
-import { IStreamingFeeModule } from "@setprotocol/set-protocol-v2/contracts/interfaces/IStreamingFeeModule.sol";
-import { PreciseUnitMath } from "@setprotocol/set-protocol-v2/contracts/lib/PreciseUnitMath.sol";
+import { IJasperVault } from "../../interfaces/IJasperVault.sol";
+import {IStreamingFeeModule} from "../../interfaces/IStreamingFeeModule.sol";
+import {PreciseUnitMath} from "@setprotocol/set-protocol-v2/contracts/lib/PreciseUnitMath.sol";
 
-import { BaseGlobalExtension } from "../lib/BaseGlobalExtension.sol";
-import { IDelegatedManager } from "../interfaces/IDelegatedManager.sol";
-import { IManagerCore } from "../interfaces/IManagerCore.sol";
-
+import {BaseGlobalExtension} from "../lib/BaseGlobalExtension.sol";
+import {IDelegatedManager} from "../interfaces/IDelegatedManager.sol";
+import {IManagerCore} from "../interfaces/IManagerCore.sol";
 
 /**
  * @title StreamingFeeSplitExtension
@@ -50,12 +49,12 @@ contract StreamingFeeSplitExtension is BaseGlobalExtension {
     /* ============ Events ============ */
 
     event StreamingFeeSplitExtensionInitialized(
-        address indexed _setToken,
+        address indexed _jasperVault,
         address indexed _delegatedManager
     );
 
     event FeesDistributed(
-        address _setToken,
+        address _jasperVault,
         address indexed _ownerFeeRecipient,
         address indexed _methodologist,
         uint256 _ownerTake,
@@ -72,10 +71,7 @@ contract StreamingFeeSplitExtension is BaseGlobalExtension {
     constructor(
         IManagerCore _managerCore,
         IStreamingFeeModule _streamingFeeModule
-    )
-        public
-        BaseGlobalExtension(_managerCore)
-    {
+    ) public BaseGlobalExtension(_managerCore) {
         streamingFeeModule = _streamingFeeModule;
     }
 
@@ -85,33 +81,49 @@ contract StreamingFeeSplitExtension is BaseGlobalExtension {
      * ANYONE CALLABLE: Accrues fees from streaming fee module. Gets resulting balance after fee accrual, calculates fees for
      * owner and methodologist, and sends to owner fee recipient and methodologist respectively.
      */
-    function accrueFeesAndDistribute(ISetToken _setToken) public {
+    function accrueFeesAndDistribute(IJasperVault _jasperVault) public {
         // Emits a FeeActualized event
-        streamingFeeModule.accrueFee(_setToken);
+        streamingFeeModule.accrueFee(_jasperVault);
 
-        IDelegatedManager delegatedManager = _manager(_setToken);
+        IDelegatedManager delegatedManager = _manager(_jasperVault);
 
-        uint256 totalFees = _setToken.balanceOf(address(delegatedManager));
+        uint256 totalFees = _jasperVault.balanceOf(address(delegatedManager));
 
         address methodologist = delegatedManager.methodologist();
         address ownerFeeRecipient = delegatedManager.ownerFeeRecipient();
 
-        uint256 ownerTake = totalFees.preciseMul(delegatedManager.ownerFeeSplit());
+        uint256 ownerTake = totalFees.preciseMul(
+            delegatedManager.ownerFeeSplit()
+        );
         uint256 methodologistTake = totalFees.sub(ownerTake);
 
         if (ownerTake > 0) {
-            delegatedManager.transferTokens(address(_setToken), ownerFeeRecipient, ownerTake);
+            delegatedManager.transferTokens(
+                address(_jasperVault),
+                ownerFeeRecipient,
+                ownerTake
+            );
         }
 
         if (methodologistTake > 0) {
-            delegatedManager.transferTokens(address(_setToken), methodologist, methodologistTake);
+            delegatedManager.transferTokens(
+                address(_jasperVault),
+                methodologist,
+                methodologistTake
+            );
         }
 
-        emit FeesDistributed(address(_setToken), ownerFeeRecipient, methodologist, ownerTake, methodologistTake);
+        emit FeesDistributed(
+            address(_jasperVault),
+            ownerFeeRecipient,
+            methodologist,
+            ownerTake,
+            methodologistTake
+        );
     }
 
     /**
-     * ONLY OWNER: Initializes StreamingFeeModule on the SetToken associated with the DelegatedManager.
+     * ONLY OWNER: Initializes StreamingFeeModule on the JasperVault associated with the DelegatedManager.
      *
      * @param _delegatedManager     Instance of the DelegatedManager to initialize the StreamingFeeModule for
      * @param _settings             FeeState struct defining fee parameters for StreamingFeeModule initialization
@@ -119,13 +131,17 @@ contract StreamingFeeSplitExtension is BaseGlobalExtension {
     function initializeModule(
         IDelegatedManager _delegatedManager,
         IStreamingFeeModule.FeeState memory _settings
-    )
-        external
-        onlyOwnerAndValidManager(_delegatedManager)
-    {
-        require(_delegatedManager.isInitializedExtension(address(this)), "Extension must be initialized");
+    ) external onlyOwnerAndValidManager(_delegatedManager) {
+        require(
+            _delegatedManager.isInitializedExtension(address(this)),
+            "Extension must be initialized"
+        );
 
-        _initializeModule(_delegatedManager.setToken(), _delegatedManager, _settings);
+        _initializeModule(
+            _delegatedManager.jasperVault(),
+            _delegatedManager,
+            _settings
+        );
     }
 
     /**
@@ -133,18 +149,26 @@ contract StreamingFeeSplitExtension is BaseGlobalExtension {
      *
      * @param _delegatedManager     Instance of the DelegatedManager to initialize
      */
-    function initializeExtension(IDelegatedManager _delegatedManager) external onlyOwnerAndValidManager(_delegatedManager) {
-        require(_delegatedManager.isPendingExtension(address(this)), "Extension must be pending");
+    function initializeExtension(
+        IDelegatedManager _delegatedManager
+    ) external onlyOwnerAndValidManager(_delegatedManager) {
+        require(
+            _delegatedManager.isPendingExtension(address(this)),
+            "Extension must be pending"
+        );
 
-        ISetToken setToken = _delegatedManager.setToken();
+        IJasperVault jasperVault = _delegatedManager.jasperVault();
 
-        _initializeExtension(setToken, _delegatedManager);
+        _initializeExtension(jasperVault, _delegatedManager);
 
-        emit StreamingFeeSplitExtensionInitialized(address(setToken), address(_delegatedManager));
+        emit StreamingFeeSplitExtensionInitialized(
+            address(jasperVault),
+            address(_delegatedManager)
+        );
     }
 
     /**
-     * ONLY OWNER: Initializes StreamingFeeSplitExtension to the DelegatedManager and StreamingFeeModule to the SetToken
+     * ONLY OWNER: Initializes StreamingFeeSplitExtension to the DelegatedManager and StreamingFeeModule to the JasperVault
      *
      * @param _delegatedManager     Instance of the DelegatedManager to initialize
      * @param _settings             FeeState struct defining fee parameters for StreamingFeeModule initialization
@@ -152,28 +176,31 @@ contract StreamingFeeSplitExtension is BaseGlobalExtension {
     function initializeModuleAndExtension(
         IDelegatedManager _delegatedManager,
         IStreamingFeeModule.FeeState memory _settings
-    )
-        external
-        onlyOwnerAndValidManager(_delegatedManager)
-    {
-        require(_delegatedManager.isPendingExtension(address(this)), "Extension must be pending");
+    ) external onlyOwnerAndValidManager(_delegatedManager) {
+        require(
+            _delegatedManager.isPendingExtension(address(this)),
+            "Extension must be pending"
+        );
 
-        ISetToken setToken = _delegatedManager.setToken();
+        IJasperVault jasperVault = _delegatedManager.jasperVault();
 
-        _initializeExtension(setToken, _delegatedManager);
-        _initializeModule(setToken, _delegatedManager, _settings);
+        _initializeExtension(jasperVault, _delegatedManager);
+        _initializeModule(jasperVault, _delegatedManager, _settings);
 
-        emit StreamingFeeSplitExtensionInitialized(address(setToken), address(_delegatedManager));
+        emit StreamingFeeSplitExtensionInitialized(
+            address(jasperVault),
+            address(_delegatedManager)
+        );
     }
 
     /**
-     * ONLY MANAGER: Remove an existing SetToken and DelegatedManager tracked by the StreamingFeeSplitExtension
+     * ONLY MANAGER: Remove an existing JasperVault and DelegatedManager tracked by the StreamingFeeSplitExtension
      */
     function removeExtension() external override {
         IDelegatedManager delegatedManager = IDelegatedManager(msg.sender);
-        ISetToken setToken = delegatedManager.setToken();
+        IJasperVault jasperVault = delegatedManager.jasperVault();
 
-        _removeExtension(setToken, delegatedManager);
+        _removeExtension(jasperVault, delegatedManager);
     }
 
     /**
@@ -181,51 +208,70 @@ contract StreamingFeeSplitExtension is BaseGlobalExtension {
      *
      * NOTE: This will accrue streaming fees though not send to owner fee recipient and methodologist.
      *
-     * @param _setToken     Instance of the SetToken to update streaming fee for
+     * @param _jasperVault     Instance of the JasperVault to update streaming fee for
      * @param _newFee       Percent of Set accruing to fee extension annually (1% = 1e16, 100% = 1e18)
      */
-    function updateStreamingFee(ISetToken _setToken, uint256 _newFee)
-        external
-        onlyOwner(_setToken)
-    {
-        bytes memory callData = abi.encodeWithSignature("updateStreamingFee(address,uint256)", _setToken, _newFee);
-        _invokeManager(_manager(_setToken), address(streamingFeeModule), callData);
+    function updateStreamingFee(
+        IJasperVault _jasperVault,
+        uint256 _newFee
+    ) external onlyOwner(_jasperVault) {
+        bytes memory callData = abi.encodeWithSignature(
+            "updateStreamingFee(address,uint256)",
+            _jasperVault,
+            _newFee
+        );
+        _invokeManager(
+            _manager(_jasperVault),
+            address(streamingFeeModule),
+            callData
+        );
     }
 
     /**
      * ONLY OWNER: Updates fee recipient on StreamingFeeModule
      *
-     * @param _setToken         Instance of the SetToken to update fee recipient for
+     * @param _jasperVault         Instance of the JasperVault to update fee recipient for
      * @param _newFeeRecipient  Address of new fee recipient. This should be the address of the DelegatedManager
      */
-    function updateFeeRecipient(ISetToken _setToken, address _newFeeRecipient)
-        external
-        onlyOwner(_setToken)
-    {
-        bytes memory callData = abi.encodeWithSignature("updateFeeRecipient(address,address)", _setToken, _newFeeRecipient);
-        _invokeManager(_manager(_setToken), address(streamingFeeModule), callData);
+    function updateFeeRecipient(
+        IJasperVault _jasperVault,
+        address _newFeeRecipient
+    ) external onlyOwner(_jasperVault) {
+        bytes memory callData = abi.encodeWithSignature(
+            "updateFeeRecipient(address,address)",
+            _jasperVault,
+            _newFeeRecipient
+        );
+        _invokeManager(
+            _manager(_jasperVault),
+            address(streamingFeeModule),
+            callData
+        );
     }
 
     /* ============ Internal Functions ============ */
 
     /**
-     * Internal function to initialize StreamingFeeModule on the SetToken associated with the DelegatedManager.
+     * Internal function to initialize StreamingFeeModule on the JasperVault associated with the DelegatedManager.
      *
-     * @param _setToken                     Instance of the SetToken corresponding to the DelegatedManager
+     * @param _jasperVault                     Instance of the JasperVault corresponding to the DelegatedManager
      * @param _delegatedManager     Instance of the DelegatedManager to initialize the TradeModule for
      * @param _settings             FeeState struct defining fee parameters for StreamingFeeModule initialization
      */
     function _initializeModule(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IDelegatedManager _delegatedManager,
         IStreamingFeeModule.FeeState memory _settings
-    )
-        internal
-    {
+    ) internal {
         bytes memory callData = abi.encodeWithSignature(
-            "initialize(address,(address,uint256,uint256,uint256))",
-            _setToken,
-            _settings);
-        _invokeManager(_delegatedManager, address(streamingFeeModule), callData);
+            "initialize(address,(address,uint256,uint256,uint256,uint256))",
+            _jasperVault,
+            _settings
+        );
+        _invokeManager(
+            _delegatedManager,
+            address(streamingFeeModule),
+            callData
+        );
     }
 }

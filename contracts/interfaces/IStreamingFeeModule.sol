@@ -18,7 +18,7 @@
 pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
 
-import { ISetToken } from "./ISetToken.sol";
+import {IJasperVault} from "./IJasperVault.sol";
 
 interface IStreamingFeeModule {
     struct FeeState {
@@ -26,12 +26,26 @@ interface IStreamingFeeModule {
         uint256 maxStreamingFeePercentage;
         uint256 streamingFeePercentage;
         uint256 lastStreamingFeeTimestamp;
+        uint256 profitSharingPercentage;
     }
 
-    function feeStates(ISetToken _setToken) external view returns (FeeState memory);
-    function getFee(ISetToken _setToken) external view returns (uint256);
-    function accrueFee(ISetToken _setToken) external;
-    function updateStreamingFee(ISetToken _setToken, uint256 _newFee) external;
-    function updateFeeRecipient(ISetToken _setToken, address _newFeeRecipient) external;
-    function initialize(ISetToken _setToken, FeeState memory _settings) external;
+    function feeStates(
+        IJasperVault _jasperVault
+    ) external view returns (FeeState memory);
+
+    function getFee(IJasperVault _jasperVault) external view returns (uint256);
+
+    function accrueFee(IJasperVault _jasperVault) external;
+
+    function updateStreamingFee(IJasperVault _jasperVault, uint256 _newFee) external;
+
+    function updateFeeRecipient(
+        IJasperVault _jasperVault,
+        address _newFeeRecipient
+    ) external;
+
+    function initialize(
+        IJasperVault _jasperVault,
+        FeeState memory _settings
+    ) external;
 }

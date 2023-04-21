@@ -24,7 +24,7 @@ import { ICErc20 } from "../../interfaces/external/ICErc20.sol";
 contract ComptrollerMock {
     address public comp;
     uint256 public compAmount;
-    address public setToken;
+    address public jasperVault;
     ICErc20[] public allMarkets;
     mapping(address => uint) public compAccrued;
 
@@ -34,9 +34,9 @@ contract ComptrollerMock {
         allMarkets.push(ICErc20(_collateralCToken));
     }
 
-    // Initialize SetToken address which will send/receive tokens for the trade
-    function addSetTokenAddress(address _setToken) external {
-        setToken = _setToken;
+    // Initialize JasperVault address which will send/receive tokens for the trade
+    function addSetTokenAddress(address _jasperVault) external {
+        jasperVault = _jasperVault;
     }
 
     function setCompAmount(uint256 _compAmount) external {

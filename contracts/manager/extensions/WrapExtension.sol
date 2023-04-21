@@ -19,13 +19,15 @@
 pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
 
-import {ISetToken} from "@setprotocol/set-protocol-v2/contracts/interfaces/ISetToken.sol";
+import {IJasperVault} from "../../interfaces/IJasperVault.sol";
 import {IWETH} from "@setprotocol/set-protocol-v2/contracts/interfaces/external/IWETH.sol";
 import {IWrapModuleV2} from "@setprotocol/set-protocol-v2/contracts/interfaces/IWrapModuleV2.sol";
 
 import {BaseGlobalExtension} from "../lib/BaseGlobalExtension.sol";
 import {IDelegatedManager} from "../interfaces/IDelegatedManager.sol";
 import {IManagerCore} from "../interfaces/IManagerCore.sol";
+import {ISignalSuscriptionModule} from "../../interfaces/ISignalSuscriptionModule.sol";
+
 /**
  * @title WrapExtension
  * @author Set Protocol
@@ -39,14 +41,34 @@ contract WrapExtension is BaseGlobalExtension {
     /* ============ Events ============ */
 
     event WrapExtensionInitialized(
-        address indexed _setToken,
+        address indexed _jasperVault,
         address indexed _delegatedManager
     );
-
+    event InvokeFail(
+        address indexed _manage,
+        address _wrapModule,
+        string _reason,
+        bytes _callData
+    );
+    struct WrapInfo {
+        address underlyingToken;
+        address wrappedToken;
+        uint256 underlyingUnits;
+        string integrationName;
+        bytes wrapData;
+    }
+    struct UnwrapInfo {
+        address underlyingToken;
+        address wrappedToken;
+        uint256 wrappedUnits;
+        string integrationName;
+        bytes unwrapData;
+    }
     /* ============ State Variables ============ */
 
     // Instance of WrapModuleV2
     IWrapModuleV2 public immutable wrapModule;
+    ISignalSuscriptionModule public immutable signalSuscriptionModule;
 
     /* ============ Constructor ============ */
 
@@ -56,25 +78,26 @@ contract WrapExtension is BaseGlobalExtension {
      * @param _managerCore              Address of ManagerCore contract
      * @param _wrapModule               Address of WrapModuleV2 contract
      */
-    constructor(IManagerCore _managerCore, IWrapModuleV2 _wrapModule)
-        public
-        BaseGlobalExtension(_managerCore)
-    {
+    constructor(
+        IManagerCore _managerCore,
+        IWrapModuleV2 _wrapModule,
+        ISignalSuscriptionModule _signalSuscriptionModule
+    ) public BaseGlobalExtension(_managerCore) {
         wrapModule = _wrapModule;
+        signalSuscriptionModule = _signalSuscriptionModule;
     }
 
     /* ============ External Functions ============ */
 
     /**
-     * ONLY OWNER: Initializes WrapModuleV2 on the SetToken associated with the DelegatedManager.
+     * ONLY OWNER: Initializes WrapModuleV2 on the JasperVault associated with the DelegatedManager.
      *
      * @param _delegatedManager     Instance of the DelegatedManager to initialize the WrapModuleV2 for
      */
-    function initializeModule(IDelegatedManager _delegatedManager)
-        external
-        onlyOwnerAndValidManager(_delegatedManager)
-    {
-        _initializeModule(_delegatedManager.setToken(), _delegatedManager);
+    function initializeModule(
+        IDelegatedManager _delegatedManager
+    ) external onlyOwnerAndValidManager(_delegatedManager) {
+        _initializeModule(_delegatedManager.jasperVault(), _delegatedManager);
     }
 
     /**
@@ -82,197 +105,400 @@ contract WrapExtension is BaseGlobalExtension {
      *
      * @param _delegatedManager     Instance of the DelegatedManager to initialize
      */
-    function initializeExtension(IDelegatedManager _delegatedManager)
-        external
-        onlyOwnerAndValidManager(_delegatedManager)
-    {
-        ISetToken setToken = _delegatedManager.setToken();
+    function initializeExtension(
+        IDelegatedManager _delegatedManager
+    ) external onlyOwnerAndValidManager(_delegatedManager) {
+        IJasperVault jasperVault = _delegatedManager.jasperVault();
 
-        _initializeExtension(setToken, _delegatedManager);
+        _initializeExtension(jasperVault, _delegatedManager);
 
         emit WrapExtensionInitialized(
-            address(setToken),
+            address(jasperVault),
             address(_delegatedManager)
         );
     }
 
     /**
-     * ONLY OWNER: Initializes WrapExtension to the DelegatedManager and TradeModule to the SetToken
+     * ONLY OWNER: Initializes WrapExtension to the DelegatedManager and TradeModule to the JasperVault
      *
      * @param _delegatedManager     Instance of the DelegatedManager to initialize
      */
-    function initializeModuleAndExtension(IDelegatedManager _delegatedManager)
-        external
-        onlyOwnerAndValidManager(_delegatedManager)
-    {
-        ISetToken setToken = _delegatedManager.setToken();
+    function initializeModuleAndExtension(
+        IDelegatedManager _delegatedManager
+    ) external onlyOwnerAndValidManager(_delegatedManager) {
+        IJasperVault jasperVault = _delegatedManager.jasperVault();
 
-        _initializeExtension(setToken, _delegatedManager);
-        _initializeModule(setToken, _delegatedManager);
+        _initializeExtension(jasperVault, _delegatedManager);
+        _initializeModule(jasperVault, _delegatedManager);
 
         emit WrapExtensionInitialized(
-            address(setToken),
+            address(jasperVault),
             address(_delegatedManager)
         );
     }
 
     /**
-     * ONLY MANAGER: Remove an existing SetToken and DelegatedManager tracked by the WrapExtension
+     * ONLY MANAGER: Remove an existing JasperVault and DelegatedManager tracked by the WrapExtension
      */
     function removeExtension() external override {
         IDelegatedManager delegatedManager = IDelegatedManager(msg.sender);
-        ISetToken setToken = delegatedManager.setToken();
+        IJasperVault jasperVault = delegatedManager.jasperVault();
 
-        _removeExtension(setToken, delegatedManager);
+        _removeExtension(jasperVault, delegatedManager);
     }
 
-    /**
-     * ONLY OPERATOR: Instructs the SetToken to wrap an underlying asset into a wrappedToken via a specified adapter.
-     *
-     * @param _setToken             Instance of the SetToken
-     * @param _underlyingToken      Address of the component to be wrapped
-     * @param _wrappedToken         Address of the desired wrapped token
-     * @param _underlyingUnits      Quantity of underlying units in Position units
-     * @param _integrationName      Name of wrap module integration (mapping on integration registry)
-     * @param _wrapData             Arbitrary bytes to pass into the WrapV2Adapter
-     */
     function wrap(
-        ISetToken _setToken,
-        address _underlyingToken,
-        address _wrappedToken,
-        uint256 _underlyingUnits,
-        string calldata _integrationName,
-        bytes memory _wrapData
+        IJasperVault _jasperVault,
+        WrapInfo memory _wrapInfo
     )
         external
-        onlyUnSubscribed(_setToken)
-        onlyOperator(_setToken)
-        onlyAllowedAsset(_setToken, _wrappedToken)
+        onlySettle(_jasperVault)
+        onlyOperator(_jasperVault)
+        onlyAllowedAsset(_jasperVault, _wrapInfo.wrappedToken)
+        ValidAdapter(
+            _jasperVault,
+            address(wrapModule),
+            _wrapInfo.integrationName
+        )
     {
         bytes memory callData = abi.encodeWithSelector(
             IWrapModuleV2.wrap.selector,
-            _setToken,
-            _underlyingToken,
-            _wrappedToken,
-            _underlyingUnits,
-            _integrationName,
-            _wrapData
+            _jasperVault,
+            _wrapInfo.underlyingToken,
+            _wrapInfo.wrappedToken,
+            _wrapInfo.underlyingUnits,
+            _wrapInfo.integrationName,
+            _wrapInfo.wrapData
         );
-        _invokeManager(_manager(_setToken), address(wrapModule), callData);
+        _invokeManager(_manager(_jasperVault), address(wrapModule), callData);
     }
 
-    /**
-     * ONLY OPERATOR: Instructs the SetToken to wrap Ether into a wrappedToken via a specified adapter. Since SetTokens
-     * only hold WETH, in order to support protocols that collateralize with Ether the SetToken's WETH must be unwrapped
-     * first before sending to the external protocol.
-     *
-     * @param _setToken             Instance of the SetToken
-     * @param _wrappedToken         Address of the desired wrapped token
-     * @param _underlyingUnits      Quantity of underlying units in Position units
-     * @param _integrationName      Name of wrap module integration (mapping on integration registry)
-     * @param _wrapData             Arbitrary bytes to pass into the WrapV2Adapter
-     */
     function wrapWithEther(
-        ISetToken _setToken,
-        address _wrappedToken,
-        uint256 _underlyingUnits,
-        string calldata _integrationName,
-        bytes memory _wrapData
-    ) external onlyUnSubscribed(_setToken)  onlyOperator(_setToken) {
-        bytes memory callData = abi.encodeWithSelector(
-            IWrapModuleV2.wrapWithEther.selector,
-            _setToken,
-            _wrappedToken,
-            _underlyingUnits,
-            _integrationName,
-            _wrapData
-        );
-        _invokeManager(_manager(_setToken), address(wrapModule), callData);
-    }
-
-    /**
-     * ONLY OPERATOR: Instructs the SetToken to unwrap a wrapped asset into its underlying via a specified adapter.
-     *
-     * @param _setToken             Instance of the SetToken
-     * @param _underlyingToken      Address of the underlying asset
-     * @param _wrappedToken         Address of the component to be unwrapped
-     * @param _wrappedUnits         Quantity of wrapped tokens in Position units
-     * @param _integrationName      ID of wrap module integration (mapping on integration registry)
-     * @param _unwrapData           Arbitrary bytes to pass into the WrapV2Adapter
-     */
-    function unwrap(
-        ISetToken _setToken,
-        address _underlyingToken,
-        address _wrappedToken,
-        uint256 _wrappedUnits,
-        string calldata _integrationName,
-        bytes memory _unwrapData
+        IJasperVault _jasperVault,
+        WrapInfo memory _wrapInfo
     )
         external
-        onlyUnSubscribed(_setToken)
-        onlyOperator(_setToken)
-        onlyAllowedAsset(_setToken, _underlyingToken)
+        onlySettle(_jasperVault)
+        onlyOperator(_jasperVault)
+        ValidAdapter(
+            _jasperVault,
+            address(wrapModule),
+            _wrapInfo.integrationName
+        )
+    {
+        bytes memory callData = abi.encodeWithSelector(
+            IWrapModuleV2.wrapWithEther.selector,
+            _jasperVault,
+            _wrapInfo.wrappedToken,
+            _wrapInfo.underlyingUnits,
+            _wrapInfo.integrationName,
+            _wrapInfo.wrapData
+        );
+        _invokeManager(_manager(_jasperVault), address(wrapModule), callData);
+    }
+
+    function unwrap(
+        IJasperVault _jasperVault,
+        UnwrapInfo memory _unwrapInfo
+    )
+        external
+        onlySettle(_jasperVault)
+        onlyOperator(_jasperVault)
+        onlyAllowedAsset(_jasperVault, _unwrapInfo.underlyingToken)
+        ValidAdapter(
+            _jasperVault,
+            address(wrapModule),
+            _unwrapInfo.integrationName
+        )
     {
         bytes memory callData = abi.encodeWithSelector(
             IWrapModuleV2.unwrap.selector,
-            _setToken,
-            _underlyingToken,
-            _wrappedToken,
-            _wrappedUnits,
-            _integrationName,
-            _unwrapData
+            _jasperVault,
+            _unwrapInfo.underlyingToken,
+            _unwrapInfo.wrappedToken,
+            _unwrapInfo.wrappedUnits,
+            _unwrapInfo.integrationName,
+            _unwrapInfo.unwrapData
         );
-        _invokeManager(_manager(_setToken), address(wrapModule), callData);
+        _invokeManager(_manager(_jasperVault), address(wrapModule), callData);
     }
 
-    /**
-     * ONLY OPERATOR: Instructs the SetToken to unwrap a wrapped asset collateralized by Ether into Wrapped Ether. Since
-     * external protocol will send back Ether that Ether must be Wrapped into WETH in order to be accounted for by SetToken.
-     *
-     * @param _setToken                 Instance of the SetToken
-     * @param _wrappedToken             Address of the component to be unwrapped
-     * @param _wrappedUnits             Quantity of wrapped tokens in Position units
-     * @param _integrationName          ID of wrap module integration (mapping on integration registry)
-     * @param _unwrapData           Arbitrary bytes to pass into the WrapV2Adapter
-     */
     function unwrapWithEther(
-        ISetToken _setToken,
-        address _wrappedToken,
-        uint256 _wrappedUnits,
-        string calldata _integrationName,
-        bytes memory _unwrapData
+        IJasperVault _jasperVault,
+        UnwrapInfo memory _unwrapInfo
     )
         external
-        onlyUnSubscribed(_setToken)
-        onlyOperator(_setToken)
-        onlyAllowedAsset(_setToken, address(wrapModule.weth()))
+        onlySettle(_jasperVault)
+        onlyOperator(_jasperVault)
+        onlyAllowedAsset(_jasperVault, address(wrapModule.weth()))
+        ValidAdapter(
+            _jasperVault,
+            address(wrapModule),
+            _unwrapInfo.integrationName
+        )
     {
         bytes memory callData = abi.encodeWithSelector(
             IWrapModuleV2.unwrapWithEther.selector,
-            _setToken,
-            _wrappedToken,
-            _wrappedUnits,
-            _integrationName,
-            _unwrapData
+            _jasperVault,
+            _unwrapInfo.wrappedToken,
+            _unwrapInfo.wrappedUnits,
+            _unwrapInfo.integrationName,
+            _unwrapInfo.unwrapData
         );
-        _invokeManager(_manager(_setToken), address(wrapModule), callData);
+        _invokeManager(_manager(_jasperVault), address(wrapModule), callData);
+    }
+
+    function wrapWithFollowers(
+        IJasperVault _jasperVault,
+        WrapInfo memory _wrapInfo
+    )
+        external
+        onlySettle(_jasperVault)
+        onlyOperator(_jasperVault)
+        onlyAllowedAsset(_jasperVault, _wrapInfo.wrappedToken)
+        ValidAdapter(
+            _jasperVault,
+            address(wrapModule),
+            _wrapInfo.integrationName
+        )
+    {
+        bytes memory callData = abi.encodeWithSelector(
+            ISignalSuscriptionModule.exectueFollowStart.selector,
+            address(_jasperVault)
+        );
+        _invokeManager(_manager(_jasperVault), address(signalSuscriptionModule), callData);
+
+        callData = abi.encodeWithSelector(
+            IWrapModuleV2.wrap.selector,
+            _jasperVault,
+            _wrapInfo.underlyingToken,
+            _wrapInfo.wrappedToken,
+            _wrapInfo.underlyingUnits,
+            _wrapInfo.integrationName,
+            _wrapInfo.wrapData
+        );
+        _invokeManager(_manager(_jasperVault), address(wrapModule), callData);
+        _executeWrapWithFollowers(_jasperVault, _wrapInfo);
+    }
+
+    function _executeWrapWithFollowers(
+        IJasperVault _jasperVault,
+        WrapInfo memory _wrapInfo
+    ) internal {
+        address[] memory followers = signalSuscriptionModule.get_followers(
+            address(_jasperVault)
+        );
+        for (uint256 i = 0; i < followers.length; i++) {
+            bytes memory callData = abi.encodeWithSelector(
+                IWrapModuleV2.wrap.selector,
+                IJasperVault(followers[i]),
+                _wrapInfo.underlyingToken,
+                _wrapInfo.wrappedToken,
+                _wrapInfo.underlyingUnits,
+                _wrapInfo.integrationName,
+                _wrapInfo.wrapData
+            );
+            _execute(
+                _manager(IJasperVault(followers[i])),
+                address(wrapModule),
+                callData
+            );
+        }
+    }
+
+    function wrapEtherWithFollowers(
+        IJasperVault _jasperVault,
+        WrapInfo memory _wrapInfo
+    )
+        external
+        onlySettle(_jasperVault)
+        onlyOperator(_jasperVault)
+        ValidAdapter(
+            _jasperVault,
+            address(wrapModule),
+            _wrapInfo.integrationName
+        )
+    {
+         bytes memory callData = abi.encodeWithSelector(
+            ISignalSuscriptionModule.exectueFollowStart.selector,
+            address(_jasperVault)
+        );
+        _invokeManager(_manager(_jasperVault), address(signalSuscriptionModule), callData);
+         callData = abi.encodeWithSelector(
+            IWrapModuleV2.wrapWithEther.selector,
+            _jasperVault,
+            _wrapInfo.wrappedToken,
+            _wrapInfo.underlyingUnits,
+            _wrapInfo.integrationName,
+            _wrapInfo.wrapData
+        );
+
+        _invokeManager(_manager(_jasperVault), address(wrapModule), callData);
+        _executeWrapEtherWithFollowers(_jasperVault, _wrapInfo);
+    }
+
+    function _executeWrapEtherWithFollowers(
+        IJasperVault _jasperVault,
+        WrapInfo memory _wrapInfo
+    ) internal {
+        address[] memory followers = signalSuscriptionModule.get_followers(
+            address(_jasperVault)
+        );
+        for (uint256 i = 0; i < followers.length; i++) {
+            bytes memory callData = abi.encodeWithSelector(
+                IWrapModuleV2.wrap.selector,
+                IJasperVault(followers[i]),
+                _wrapInfo.wrappedToken,
+                _wrapInfo.underlyingUnits,
+                _wrapInfo.integrationName,
+                _wrapInfo.wrapData
+            );
+            _execute(
+                _manager(IJasperVault(followers[i])),
+                address(wrapModule),
+                callData
+            );
+        }
+    }
+
+    function unwrapWithFollowers(
+        IJasperVault _jasperVault,
+        UnwrapInfo memory _unwrapInfo
+    )
+        external
+        onlySettle(_jasperVault)
+        onlyOperator(_jasperVault)
+        onlyAllowedAsset(_jasperVault, _unwrapInfo.underlyingToken)
+        ValidAdapter(
+            _jasperVault,
+            address(wrapModule),
+            _unwrapInfo.integrationName
+        )
+    {
+        bytes memory callData = abi.encodeWithSelector(
+            ISignalSuscriptionModule.exectueFollowStart.selector,
+            address(_jasperVault)
+        );
+        _invokeManager(_manager(_jasperVault), address(signalSuscriptionModule), callData);
+        callData = abi.encodeWithSelector(
+            IWrapModuleV2.unwrap.selector,
+            _jasperVault,
+            _unwrapInfo.underlyingToken,
+            _unwrapInfo.wrappedToken,
+            _unwrapInfo.wrappedUnits,
+            _unwrapInfo.integrationName,
+            _unwrapInfo.unwrapData
+        );
+        _invokeManager(_manager(_jasperVault), address(wrapModule), callData);
+        _executeUnwrapWithFollowers(_jasperVault, _unwrapInfo);
+    }
+
+    function _executeUnwrapWithFollowers(
+        IJasperVault _jasperVault,
+        UnwrapInfo memory _unwrapInfo
+    ) internal {
+        address[] memory followers = signalSuscriptionModule.get_followers(
+            address(_jasperVault)
+        );
+        for (uint256 i = 0; i < followers.length; i++) {
+            bytes memory callData = abi.encodeWithSelector(
+                IWrapModuleV2.unwrap.selector,
+                IJasperVault(followers[i]),
+                _unwrapInfo.underlyingToken,
+                _unwrapInfo.wrappedToken,
+                _unwrapInfo.wrappedUnits,
+                _unwrapInfo.integrationName,
+                _unwrapInfo.unwrapData
+            );
+            _execute(
+                _manager(IJasperVault(followers[i])),
+                address(wrapModule),
+                callData
+            );
+        }
+    }
+
+    function unwrapWithEtherWithFollowers(
+        IJasperVault _jasperVault,
+        UnwrapInfo memory _unwrapInfo
+    )
+        external
+        onlySettle(_jasperVault)
+        onlyOperator(_jasperVault)
+        onlyAllowedAsset(_jasperVault, address(wrapModule.weth()))
+        ValidAdapter(
+            _jasperVault,
+            address(wrapModule),
+            _unwrapInfo.integrationName
+        )
+    {
+         bytes memory callData = abi.encodeWithSelector(
+            ISignalSuscriptionModule.exectueFollowStart.selector,
+            address(_jasperVault)
+        );
+        _invokeManager(_manager(_jasperVault), address(signalSuscriptionModule), callData);
+        callData = abi.encodeWithSelector(
+            IWrapModuleV2.unwrapWithEther.selector,
+            _jasperVault,
+            _unwrapInfo.wrappedToken,
+            _unwrapInfo.wrappedUnits,
+            _unwrapInfo.integrationName,
+            _unwrapInfo.unwrapData
+        );
+        _invokeManager(_manager(_jasperVault), address(wrapModule), callData);
+        _executeUnwrapEtherWithFollowers(_jasperVault, _unwrapInfo);
+    }
+
+    function _executeUnwrapEtherWithFollowers(
+        IJasperVault _jasperVault,
+        UnwrapInfo memory _unwrapInfo
+    ) internal {
+        address[] memory followers = signalSuscriptionModule.get_followers(
+            address(_jasperVault)
+        );
+        for (uint256 i = 0; i < followers.length; i++) {
+            bytes memory callData = abi.encodeWithSelector(
+                IWrapModuleV2.unwrap.selector,
+                IJasperVault(followers[i]),
+                _unwrapInfo.wrappedToken,
+                _unwrapInfo.wrappedUnits,
+                _unwrapInfo.integrationName,
+                _unwrapInfo.unwrapData
+            );
+            _execute(
+                _manager(IJasperVault(followers[i])),
+                address(wrapModule),
+                callData
+            );
+        }
     }
 
     /* ============ Internal Functions ============ */
+    function _execute(
+        IDelegatedManager manager,
+        address module,
+        bytes memory callData
+    ) internal {
+        try manager.interactManager(module, callData) {} catch Error(
+            string memory reason
+        ) {
+            emit InvokeFail(address(manager), module, reason, callData);
+        }
+    }
 
     /**
-     * Internal function to initialize WrapModuleV2 on the SetToken associated with the DelegatedManager.
+     * Internal function to initialize WrapModuleV2 on the JasperVault associated with the DelegatedManager.
      *
-     * @param _setToken             Instance of the SetToken corresponding to the DelegatedManager
+     * @param _jasperVault             Instance of the JasperVault corresponding to the DelegatedManager
      * @param _delegatedManager     Instance of the DelegatedManager to initialize the WrapModuleV2 for
      */
     function _initializeModule(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IDelegatedManager _delegatedManager
     ) internal {
         bytes memory callData = abi.encodeWithSelector(
             IWrapModuleV2.initialize.selector,
-            _setToken
+            _jasperVault
         );
         _invokeManager(_delegatedManager, address(wrapModule), callData);
     }

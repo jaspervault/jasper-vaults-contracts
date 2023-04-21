@@ -19,7 +19,7 @@
 pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
 
-import {ISetToken} from "@setprotocol/set-protocol-v2/contracts/interfaces/ISetToken.sol";
+import { IJasperVault } from "../../interfaces/IJasperVault.sol";
 import {ITradeModule} from "@setprotocol/set-protocol-v2/contracts/interfaces/ITradeModule.sol";
 import {ISignalSuscriptionModule} from "../../interfaces/ISignalSuscriptionModule.sol";
 
@@ -62,19 +62,19 @@ contract CopyTradingExtension is BaseGlobalExtension {
     );
 
     event BatchTradeExtensionInitialized(
-        address indexed _setToken, // Address of the SetToken which had CopyTradingExtension initialized on their manager
+        address indexed _jasperVault, // Address of the JasperVault which had CopyTradingExtension initialized on their manager
         address indexed _delegatedManager // Address of the DelegatedManager which initialized the CopyTradingExtension
     );
 
     event StringTradeFailed(
-        address indexed _setToken, // Address of the SetToken which the failed trade targeted
+        address indexed _jasperVault, // Address of the JasperVault which the failed trade targeted
         bool indexed _isFollower, // Index of trade that failed in _trades parameter of batchTrade call
         string _reason, // String reason for the trade failure
         TradeInfo _tradeInfo // Input TradeInfo of the failed trade
     );
 
     event BytesTradeFailed(
-        address indexed _setToken, // Address of the SetToken which the failed trade targeted
+        address indexed _jasperVault, // Address of the JasperVault which the failed trade targeted
         bool indexed _isFollower, // Index of trade that failed in _trades parameter of batchTrade call
         bytes _lowLevelData, // Bytes low level data reason for the trade failure
         TradeInfo _tradeInfo // Input TradeInfo of the failed trade
@@ -179,7 +179,7 @@ contract CopyTradingExtension is BaseGlobalExtension {
     }
 
     /**
-     * ONLY OWNER: Initializes TradeModule on the SetToken associated with the DelegatedManager.
+     * ONLY OWNER: Initializes TradeModule on the JasperVault associated with the DelegatedManager.
      *
      * @param _delegatedManager     Instance of the DelegatedManager to initialize the TradeModule for
      */
@@ -187,7 +187,7 @@ contract CopyTradingExtension is BaseGlobalExtension {
         external
         onlyOwnerAndValidManager(_delegatedManager)
     {
-        _initializeModule(_delegatedManager.setToken(), _delegatedManager);
+        _initializeModule(_delegatedManager.jasperVault(), _delegatedManager);
     }
 
     /**
@@ -199,18 +199,18 @@ contract CopyTradingExtension is BaseGlobalExtension {
         external
         onlyOwnerAndValidManager(_delegatedManager)
     {
-        ISetToken setToken = _delegatedManager.setToken();
+        IJasperVault jasperVault = _delegatedManager.jasperVault();
 
-        _initializeExtension(setToken, _delegatedManager);
+        _initializeExtension(jasperVault, _delegatedManager);
 
         emit BatchTradeExtensionInitialized(
-            address(setToken),
+            address(jasperVault),
             address(_delegatedManager)
         );
     }
 
     /**
-     * ONLY OWNER: Initializes CopyTradingExtension to the DelegatedManager and TradeModule to the SetToken
+     * ONLY OWNER: Initializes CopyTradingExtension to the DelegatedManager and TradeModule to the JasperVault
      *
      * @param _delegatedManager     Instance of the DelegatedManager to initialize
      */
@@ -218,58 +218,67 @@ contract CopyTradingExtension is BaseGlobalExtension {
         external
         onlyOwnerAndValidManager(_delegatedManager)
     {
-        ISetToken setToken = _delegatedManager.setToken();
+        IJasperVault jasperVault = _delegatedManager.jasperVault();
 
-        _initializeExtension(setToken, _delegatedManager);
-        _initializeModule(setToken, _delegatedManager);
+        _initializeExtension(jasperVault, _delegatedManager);
+        _initializeModule(jasperVault, _delegatedManager);
 
         emit BatchTradeExtensionInitialized(
-            address(setToken),
+            address(jasperVault),
             address(_delegatedManager)
         );
     }
 
     /**
-     * ONLY MANAGER: Remove an existing SetToken and DelegatedManager tracked by the CopyTradingExtension
+     * ONLY MANAGER: Remove an existing JasperVault and DelegatedManager tracked by the CopyTradingExtension
      */
     function removeExtension() external override {
         IDelegatedManager delegatedManager = IDelegatedManager(msg.sender);
-        ISetToken setToken = delegatedManager.setToken();
+        IJasperVault jasperVault = delegatedManager.jasperVault();
 
-        _removeExtension(setToken, delegatedManager);
+        _removeExtension(jasperVault, delegatedManager);
     }
 
     /**
      * ONLY OPERATOR: Executes a batch of trades on a supported DEX. If any individual trades fail, events are emitted.
-     * @dev Although the SetToken units are passed in for the send and receive quantities, the total quantity
-     * sent and received is the quantity of component units multiplied by the SetToken totalSupply.
+     * @dev Although the JasperVault units are passed in for the send and receive quantities, the total quantity
+     * sent and received is the quantity of component units multiplied by the JasperVault totalSupply.
      *
-     * @param _setToken             Instance of the SetToken to trade
+     * @param _jasperVault             Instance of the JasperVault to trade
      * @param _trades               Array of TradeInfo structs containing information about trades
      */
-    function batchTrade(ISetToken _setToken, TradeInfo[] memory _trades)
+    function batchTrade(IJasperVault _jasperVault, TradeInfo[] memory _trades)
         external
-        onlyUnSubscribed(_setToken)
-        onlyOperator(_setToken)
+        onlySettle(_jasperVault)
+        onlyOperator(_jasperVault)
     {
         uint256 tradesLength = _trades.length;
         for (uint256 i = 0; i < tradesLength; i++) {
-            _executeTrade(_setToken, _trades[i]);
+            _executeTrade(_jasperVault, _trades[i]);
         }
     }
 
     function batchTradeWithFollowers(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         TradeInfo[] memory _trades
-    ) external 
-       onlyUnSubscribed(_setToken)
-       onlyOperator(_setToken) {
+    ) external
+       onlySettle(_jasperVault)
+       onlyOperator(_jasperVault) {
+        bytes memory callData = abi.encodeWithSelector(
+            ISignalSuscriptionModule.exectueFollowStart.selector,
+            address(_jasperVault)
+        );
+        _invokeManager(_manager(_jasperVault), address(signalSuscriptionModule), callData);
+
         address[] memory followers = signalSuscriptionModule.get_followers(
-            address(_setToken)
+            address(_jasperVault)
         );
         uint256 tradesLength = _trades.length;
         for (uint256 i = 0; i < tradesLength; i++) {
-            _executeTrade(_setToken, _trades[i]);
+            if(!ValidAdapterByModule(_jasperVault,address(tradeModule),_trades[i].exchangeName)){
+               continue;
+            }
+            _executeTrade(_jasperVault, _trades[i]);
             for (uint256 m = 0; m < followers.length; m++) {
                 TradeInfo memory newTrade = TradeInfo({
                     exchangeName: _trades[i].exchangeName,
@@ -280,7 +289,8 @@ contract CopyTradingExtension is BaseGlobalExtension {
                     data: _trades[i].data,
                     isFollower: true
                 });
-                _executeTrade(ISetToken(followers[m]), newTrade);
+                _executeTrade(IJasperVault(followers[m]), newTrade);
+
             }
         }
     }
@@ -304,10 +314,10 @@ contract CopyTradingExtension is BaseGlobalExtension {
         emit IntegrationAdded(_integrationName);
     }
 
-    function _executeTrade(ISetToken _setToken, TradeInfo memory tradeInfo)
+    function _executeTrade(IJasperVault _jasperVault, TradeInfo memory tradeInfo)
         internal
     {
-        IDelegatedManager manager = _manager(_setToken);
+        IDelegatedManager manager = _manager(_jasperVault);
         require(
             isIntegration[tradeInfo.exchangeName],
             "Must be allowed integration"
@@ -319,7 +329,7 @@ contract CopyTradingExtension is BaseGlobalExtension {
 
         bytes memory callData = abi.encodeWithSelector(
             ITradeModule.trade.selector,
-            _setToken,
+            _jasperVault,
             tradeInfo.exchangeName,
             tradeInfo.sendToken,
             tradeInfo.sendQuantity,
@@ -327,6 +337,8 @@ contract CopyTradingExtension is BaseGlobalExtension {
             tradeInfo.receiveQuantity,
             tradeInfo.data
         );
+        
+
 
         // ZeroEx (for example) throws custom errors which slip through OpenZeppelin's
         // functionCallWithValue error management and surface here as `bytes`. These should be
@@ -335,14 +347,14 @@ contract CopyTradingExtension is BaseGlobalExtension {
             manager.interactManager(address(tradeModule), callData)
         {} catch Error(string memory reason) {
             emit StringTradeFailed(
-                address(_setToken),
+                address(_jasperVault),
                 tradeInfo.isFollower,
                 reason,
                 tradeInfo
             );
         } catch (bytes memory lowLevelData) {
             emit BytesTradeFailed(
-                address(_setToken),
+                address(_jasperVault),
                 tradeInfo.isFollower,
                 lowLevelData,
                 tradeInfo
@@ -350,19 +362,21 @@ contract CopyTradingExtension is BaseGlobalExtension {
         }
     }
 
+
+
     /**
-     * Internal function to initialize TradeModule on the SetToken associated with the DelegatedManager.
+     * Internal function to initialize TradeModule on the JasperVault associated with the DelegatedManager.
      *
-     * @param _setToken             Instance of the SetToken corresponding to the DelegatedManager
+     * @param _jasperVault             Instance of the JasperVault corresponding to the DelegatedManager
      * @param _delegatedManager     Instance of the DelegatedManager to initialize the TradeModule for
      */
     function _initializeModule(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IDelegatedManager _delegatedManager
     ) internal {
         bytes memory callData = abi.encodeWithSelector(
             ITradeModule.initialize.selector,
-            _setToken
+            _jasperVault
         );
         _invokeManager(_delegatedManager, address(tradeModule), callData);
     }

@@ -17,8 +17,8 @@
 */
 pragma solidity 0.6.10;
 
-import { ISetToken } from "../interfaces/ISetToken.sol";
+import { IJasperVault } from "../interfaces/IJasperVault.sol";
 
 interface ISetValuer {
-    function calculateSetTokenValuation(ISetToken _setToken, address _quoteAsset) external view returns (uint256);
+    function calculateSetTokenValuation(IJasperVault _jasperVault, address _quoteAsset) external view returns (uint256);
 }

@@ -20,7 +20,7 @@ pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
 
 import { IComptroller } from "../../../interfaces/external/IComptroller.sol";
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
 
 /**
  * @title CompClaimAdapter
@@ -50,28 +50,28 @@ contract CompClaimAdapter {
     /* ============ External Getter Functions ============ */
 
     /**
-     * Generates the calldata for claiming all COMP tokens for the SetToken.
+     * Generates the calldata for claiming all COMP tokens for the JasperVault.
      * https://compound.finance/docs/comptroller#claim-comp
      *
-     * @param _setToken     Set token address
+     * @param _jasperVault     Set token address
      *
      * @return address      Comptroller holding claimable COMP (aka RewardPool)
      * @return uint256      Unused, since it claims total claimable balance
      * @return bytes        Claim calldata
      */
-    function getClaimCallData(ISetToken _setToken, address /* _rewardPool */) external view returns (address, uint256, bytes memory) {
-        bytes memory callData = abi.encodeWithSignature("claimComp(address)", _setToken);
+    function getClaimCallData(IJasperVault _jasperVault, address /* _rewardPool */) external view returns (address, uint256, bytes memory) {
+        bytes memory callData = abi.encodeWithSignature("claimComp(address)", _jasperVault);
 
         return (address(comptroller), 0, callData);
     }
 
     /**
-     * Returns balance of COMP for SetToken
+     * Returns balance of COMP for JasperVault
      *
      * @return uint256      Claimable COMP balance
      */
-    function getRewardsAmount(ISetToken _setToken, address /* _rewardPool */) external view returns(uint256) {
-        return comptroller.compAccrued(address(_setToken));
+    function getRewardsAmount(IJasperVault _jasperVault, address /* _rewardPool */) external view returns(uint256) {
+        return comptroller.compAccrued(address(_jasperVault));
     }
 
     /**

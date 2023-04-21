@@ -23,7 +23,7 @@ import { SafeMath } from "@openzeppelin/contracts/math/SafeMath.sol";
 import { IController } from "../../../interfaces/IController.sol";
 import { IManagerIssuanceHook } from "../../../interfaces/IManagerIssuanceHook.sol";
 import { Invoke } from "../../lib/Invoke.sol";
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
 import { ModuleBase } from "../../lib/ModuleBase.sol";
 import { Position } from "../../lib/Position.sol";
 import { PreciseUnitMath } from "../../../lib/PreciseUnitMath.sol";
@@ -32,13 +32,13 @@ import { PreciseUnitMath } from "../../../lib/PreciseUnitMath.sol";
  * @title BasicIssuanceModule
  * @author Set Protocol
  *
- * Module that enables issuance and redemption functionality on a SetToken. This is a module that is
+ * Module that enables issuance and redemption functionality on a JasperVault. This is a module that is
  * required to bring the totalSupply of a Set above 0.
  */
 contract BasicIssuanceModule is ModuleBase, ReentrancyGuard {
-    using Invoke for ISetToken;
-    using Position for ISetToken.Position;
-    using Position for ISetToken;
+    using Invoke for IJasperVault;
+    using Position for IJasperVault.Position;
+    using Position for IJasperVault;
     using PreciseUnitMath for uint256;
     using SafeMath for uint256;
     using SafeCast for int256;
@@ -46,14 +46,14 @@ contract BasicIssuanceModule is ModuleBase, ReentrancyGuard {
     /* ============ Events ============ */
 
     event SetTokenIssued(
-        address indexed _setToken,
+        address indexed _jasperVault,
         address indexed _issuer,
         address indexed _to,
         address _hookContract,
         uint256 _quantity
     );
     event SetTokenRedeemed(
-        address indexed _setToken,
+        address indexed _jasperVault,
         address indexed _redeemer,
         address indexed _to,
         uint256 _quantity
@@ -61,8 +61,8 @@ contract BasicIssuanceModule is ModuleBase, ReentrancyGuard {
 
     /* ============ State Variables ============ */
 
-    // Mapping of SetToken to Issuance hook configurations
-    mapping(ISetToken => IManagerIssuanceHook) public managerIssuanceHook;
+    // Mapping of JasperVault to Issuance hook configurations
+    mapping(IJasperVault => IManagerIssuanceHook) public managerIssuanceHook;
 
     /* ============ Constructor ============ */
 
@@ -76,110 +76,110 @@ contract BasicIssuanceModule is ModuleBase, ReentrancyGuard {
     /* ============ External Functions ============ */
 
     /**
-     * Deposits the SetToken's position components into the SetToken and mints the SetToken of the given quantity
+     * Deposits the JasperVault's position components into the JasperVault and mints the JasperVault of the given quantity
      * to the specified _to address. This function only handles Default Positions (positionState = 0).
      *
-     * @param _setToken             Instance of the SetToken contract
-     * @param _quantity             Quantity of the SetToken to mint
-     * @param _to                   Address to mint SetToken to
+     * @param _jasperVault             Instance of the JasperVault contract
+     * @param _quantity             Quantity of the JasperVault to mint
+     * @param _to                   Address to mint JasperVault to
      */
     function issue(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _quantity,
         address _to
     )
         external
         nonReentrant
-        onlyValidAndInitializedSet(_setToken)
+        onlyValidAndInitializedSet(_jasperVault)
     {
         require(_quantity > 0, "Issue quantity must be > 0");
 
-        address hookContract = _callPreIssueHooks(_setToken, _quantity, msg.sender, _to);
+        address hookContract = _callPreIssueHooks(_jasperVault, _quantity, msg.sender, _to);
 
         (
             address[] memory components,
             uint256[] memory componentQuantities
-        ) = getRequiredComponentUnitsForIssue(_setToken, _quantity);
+        ) = getRequiredComponentUnitsForIssue(_jasperVault, _quantity);
 
-        // For each position, transfer the required underlying to the SetToken
+        // For each position, transfer the required underlying to the JasperVault
         for (uint256 i = 0; i < components.length; i++) {
-            // Transfer the component to the SetToken
+            // Transfer the component to the JasperVault
             transferFrom(
                 IERC20(components[i]),
                 msg.sender,
-                address(_setToken),
+                address(_jasperVault),
                 componentQuantities[i]
             );
         }
 
-        // Mint the SetToken
-        _setToken.mint(_to, _quantity);
+        // Mint the JasperVault
+        _jasperVault.mint(_to, _quantity);
 
-        emit SetTokenIssued(address(_setToken), msg.sender, _to, hookContract, _quantity);
+        emit SetTokenIssued(address(_jasperVault), msg.sender, _to, hookContract, _quantity);
     }
 
     /**
-     * Redeems the SetToken's positions and sends the components of the given
+     * Redeems the JasperVault's positions and sends the components of the given
      * quantity to the caller. This function only handles Default Positions (positionState = 0).
      *
-     * @param _setToken             Instance of the SetToken contract
-     * @param _quantity             Quantity of the SetToken to redeem
+     * @param _jasperVault             Instance of the JasperVault contract
+     * @param _quantity             Quantity of the JasperVault to redeem
      * @param _to                   Address to send component assets to
      */
     function redeem(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _quantity,
         address _to
     )
         external
         nonReentrant
-        onlyValidAndInitializedSet(_setToken)
+        onlyValidAndInitializedSet(_jasperVault)
     {
         require(_quantity > 0, "Redeem quantity must be > 0");
 
-        // Burn the SetToken - ERC20's internal burn already checks that the user has enough balance
-        _setToken.burn(msg.sender, _quantity);
+        // Burn the JasperVault - ERC20's internal burn already checks that the user has enough balance
+        _jasperVault.burn(msg.sender, _quantity);
 
-        // For each position, invoke the SetToken to transfer the tokens to the user
-        address[] memory components = _setToken.getComponents();
+        // For each position, invoke the JasperVault to transfer the tokens to the user
+        address[] memory components = _jasperVault.getComponents();
         for (uint256 i = 0; i < components.length; i++) {
             address component = components[i];
-            require(!_setToken.hasExternalPosition(component), "Only default positions are supported");
+            require(!_jasperVault.hasExternalPosition(component), "Only default positions are supported");
 
-            uint256 unit = _setToken.getDefaultPositionRealUnit(component).toUint256();
+            uint256 unit = _jasperVault.getDefaultPositionRealUnit(component).toUint256();
 
             // Use preciseMul to round down to ensure overcollateration when small redeem quantities are provided
             uint256 componentQuantity = _quantity.preciseMul(unit);
 
-            // Instruct the SetToken to transfer the component to the user
-            _setToken.strictInvokeTransfer(
+            // Instruct the JasperVault to transfer the component to the user
+            _jasperVault.strictInvokeTransfer(
                 component,
                 _to,
                 componentQuantity
             );
         }
 
-        emit SetTokenRedeemed(address(_setToken), msg.sender, _to, _quantity);
+        emit SetTokenRedeemed(address(_jasperVault), msg.sender, _to, _quantity);
     }
 
     /**
-     * Initializes this module to the SetToken with issuance-related hooks. Only callable by the SetToken's manager.
+     * Initializes this module to the JasperVault with issuance-related hooks. Only callable by the JasperVault's manager.
      * Hook addresses are optional. Address(0) means that no hook will be called
      *
-     * @param _setToken             Instance of the SetToken to issue
+     * @param _jasperVault             Instance of the JasperVault to issue
      * @param _preIssueHook         Instance of the Manager Contract with the Pre-Issuance Hook function
      */
     function initialize(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IManagerIssuanceHook _preIssueHook
     )
         external
-        onlySetManager(_setToken, msg.sender)
-        onlyValidAndPendingSet(_setToken)
+        onlySetManager(_jasperVault, msg.sender)
+        onlyValidAndPendingSet(_jasperVault)
     {
-        managerIssuanceHook[_setToken] = _preIssueHook;
+        managerIssuanceHook[_jasperVault] = _preIssueHook;
 
-        _setToken.initializeModule();
+        _jasperVault.initializeModule();
     }
 
     /**
@@ -193,30 +193,30 @@ contract BasicIssuanceModule is ModuleBase, ReentrancyGuard {
     /* ============ External Getter Functions ============ */
 
     /**
-     * Retrieves the addresses and units required to mint a particular quantity of SetToken.
+     * Retrieves the addresses and units required to mint a particular quantity of JasperVault.
      *
-     * @param _setToken             Instance of the SetToken to issue
-     * @param _quantity             Quantity of SetToken to issue
+     * @param _jasperVault             Instance of the JasperVault to issue
+     * @param _quantity             Quantity of JasperVault to issue
      * @return address[]            List of component addresses
      * @return uint256[]            List of component units required to issue the quantity of SetTokens
      */
     function getRequiredComponentUnitsForIssue(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _quantity
     )
         public
         view
-        onlyValidAndInitializedSet(_setToken)
+        onlyValidAndInitializedSet(_jasperVault)
         returns (address[] memory, uint256[] memory)
     {
-        address[] memory components = _setToken.getComponents();
+        address[] memory components = _jasperVault.getComponents();
 
         uint256[] memory notionalUnits = new uint256[](components.length);
 
         for (uint256 i = 0; i < components.length; i++) {
-            require(!_setToken.hasExternalPosition(components[i]), "Only default positions are supported");
+            require(!_jasperVault.hasExternalPosition(components[i]), "Only default positions are supported");
 
-            notionalUnits[i] = _setToken.getDefaultPositionRealUnit(components[i]).toUint256().preciseMulCeil(_quantity);
+            notionalUnits[i] = _jasperVault.getDefaultPositionRealUnit(components[i]).toUint256().preciseMulCeil(_quantity);
         }
 
         return (components, notionalUnits);
@@ -229,7 +229,7 @@ contract BasicIssuanceModule is ModuleBase, ReentrancyGuard {
      * can contain arbitrary logic including validations, external function calls, etc.
      */
     function _callPreIssueHooks(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _quantity,
         address _caller,
         address _to
@@ -237,9 +237,9 @@ contract BasicIssuanceModule is ModuleBase, ReentrancyGuard {
         internal
         returns(address)
     {
-        IManagerIssuanceHook preIssueHook = managerIssuanceHook[_setToken];
+        IManagerIssuanceHook preIssueHook = managerIssuanceHook[_jasperVault];
         if (address(preIssueHook) != address(0)) {
-            preIssueHook.invokePreIssueHook(_setToken, _quantity, _caller, _to);
+            preIssueHook.invokePreIssueHook(_jasperVault, _quantity, _caller, _to);
             return address(preIssueHook);
         }
 

@@ -19,16 +19,15 @@
 pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
 
-import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import { SafeCast } from "@openzeppelin/contracts/utils/SafeCast.sol";
-import { SafeMath } from "@openzeppelin/contracts/math/SafeMath.sol";
-import { SignedSafeMath } from "@openzeppelin/contracts/math/SignedSafeMath.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/SafeCast.sol";
+import {SafeMath} from "@openzeppelin/contracts/math/SafeMath.sol";
+import {SignedSafeMath} from "@openzeppelin/contracts/math/SignedSafeMath.sol";
 
-import { IController } from "../../../interfaces/IController.sol";
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
-import { ModuleBase } from "../../lib/ModuleBase.sol";
-import { PreciseUnitMath } from "../../../lib/PreciseUnitMath.sol";
-
+import {IController} from "../../../interfaces/IController.sol";
+import {IJasperVault} from "../../../interfaces/IJasperVault.sol";
+import {ModuleBase} from "../../lib/ModuleBase.sol";
+import {PreciseUnitMath} from "../../../lib/PreciseUnitMath.sol";
 
 /**
  * @title StreamingFeeModule
@@ -46,21 +45,31 @@ contract StreamingFeeModule is ModuleBase, ReentrancyGuard {
     using PreciseUnitMath for int256;
     using SafeCast for int256;
 
-
     /* ============ Structs ============ */
 
     struct FeeState {
-        address feeRecipient;                   // Address to accrue fees to
-        uint256 maxStreamingFeePercentage;      // Max streaming fee maanager commits to using (1% = 1e16, 100% = 1e18)
-        uint256 streamingFeePercentage;         // Percent of Set accruing to manager annually (1% = 1e16, 100% = 1e18)
-        uint256 lastStreamingFeeTimestamp;      // Timestamp last streaming fee was accrued
+        address feeRecipient; // Address to accrue fees to
+        uint256 maxStreamingFeePercentage; // Max streaming fee maanager commits to using (1% = 1e16, 100% = 1e18)
+        uint256 streamingFeePercentage; // Percent of Set accruing to manager annually (1% = 1e16, 100% = 1e18)
+        uint256 lastStreamingFeeTimestamp; // Timestamp last streaming fee was accrued
+        uint256 profitSharingPercentage;
     }
 
     /* ============ Events ============ */
 
-    event FeeActualized(address indexed _setToken, uint256 _managerFee, uint256 _protocolFee);
-    event StreamingFeeUpdated(address indexed _setToken, uint256 _newStreamingFee);
-    event FeeRecipientUpdated(address indexed _setToken, address _newFeeRecipient);
+    event FeeActualized(
+        address indexed _jasperVault,
+        uint256 _managerFee,
+        uint256 _protocolFee
+    );
+    event StreamingFeeUpdated(
+        address indexed _jasperVault,
+        uint256 _newStreamingFee
+    );
+    event FeeRecipientUpdated(
+        address indexed _jasperVault,
+        address _newFeeRecipient
+    );
 
     /* ============ Constants ============ */
 
@@ -69,7 +78,7 @@ contract StreamingFeeModule is ModuleBase, ReentrancyGuard {
 
     /* ============ State Variables ============ */
 
-    mapping(ISetToken => FeeState) public feeStates;
+    mapping(IJasperVault => FeeState) public feeStates;
 
     /* ============ Constructor ============ */
 
@@ -81,114 +90,144 @@ contract StreamingFeeModule is ModuleBase, ReentrancyGuard {
      * Calculates total inflation percentage then mints new Sets to the fee recipient. Position units are
      * then adjusted down (in magnitude) in order to ensure full collateralization. Callable by anyone.
      *
-     * @param _setToken       Address of SetToken
+     * @param _jasperVault       Address of JasperVault
      */
-    function accrueFee(ISetToken _setToken) public nonReentrant onlyValidAndInitializedSet(_setToken) {
+    function accrueFee(
+        IJasperVault _jasperVault
+    ) public nonReentrant onlyValidAndInitializedSet(_jasperVault) {
         uint256 managerFee;
         uint256 protocolFee;
 
-        if (_streamingFeePercentage(_setToken) > 0) {
-            uint256 inflationFeePercentage = _calculateStreamingFee(_setToken);
+        if (_streamingFeePercentage(_jasperVault) > 0) {
+            uint256 inflationFeePercentage = _calculateStreamingFee(_jasperVault);
 
             // Calculate incentiveFee inflation
-            uint256 feeQuantity = _calculateStreamingFeeInflation(_setToken, inflationFeePercentage);
+            uint256 feeQuantity = _calculateStreamingFeeInflation(
+                _jasperVault,
+                inflationFeePercentage
+            );
 
             // Mint new Sets to manager and protocol
-            (
-                managerFee,
-                protocolFee
-            ) = _mintManagerAndProtocolFee(_setToken, feeQuantity);
+            (managerFee, protocolFee) = _mintManagerAndProtocolFee(
+                _jasperVault,
+                feeQuantity
+            );
 
-            _editPositionMultiplier(_setToken, inflationFeePercentage);
+            _editPositionMultiplier(_jasperVault, inflationFeePercentage);
         }
 
-        feeStates[_setToken].lastStreamingFeeTimestamp = block.timestamp;
+        feeStates[_jasperVault].lastStreamingFeeTimestamp = block.timestamp;
 
-        emit FeeActualized(address(_setToken), managerFee, protocolFee);
+        emit FeeActualized(address(_jasperVault), managerFee, protocolFee);
     }
 
     /**
-     * SET MANAGER ONLY. Initialize module with SetToken and set the fee state for the SetToken. Passed
+     * SET MANAGER ONLY. Initialize module with JasperVault and set the fee state for the JasperVault. Passed
      * _settings will have lastStreamingFeeTimestamp over-written.
      *
-     * @param _setToken                 Address of SetToken
+     * @param _jasperVault                 Address of JasperVault
      * @param _settings                 FeeState struct defining fee parameters
      */
     function initialize(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         FeeState memory _settings
     )
         external
-        onlySetManager(_setToken, msg.sender)
-        onlyValidAndPendingSet(_setToken)
+        onlySetManager(_jasperVault, msg.sender)
+        onlyValidAndPendingSet(_jasperVault)
     {
-        require(_settings.feeRecipient != address(0), "Fee Recipient must be non-zero address.");
-        require(_settings.maxStreamingFeePercentage < PreciseUnitMath.preciseUnit(), "Max fee must be < 100%.");
-        require(_settings.streamingFeePercentage <= _settings.maxStreamingFeePercentage, "Fee must be <= max.");
+        require(
+            _settings.feeRecipient != address(0),
+            "Fee Recipient must be non-zero address."
+        );
+        require(
+            _settings.maxStreamingFeePercentage < PreciseUnitMath.preciseUnit(),
+            "Max fee must be < 100%."
+        );
+        require(
+            _settings.streamingFeePercentage <=
+                _settings.maxStreamingFeePercentage,
+            "Fee must be <= max."
+        );
 
         _settings.lastStreamingFeeTimestamp = block.timestamp;
 
-        feeStates[_setToken] = _settings;
-        _setToken.initializeModule();
+        feeStates[_jasperVault] = _settings;
+        _jasperVault.initializeModule();
     }
 
     /**
-     * Removes this module from the SetToken, via call by the SetToken. Manager's feeState is deleted. Fees
+     * Removes this module from the JasperVault, via call by the JasperVault. Manager's feeState is deleted. Fees
      * are not accrued in case reason for removing module is related to fee accrual.
      */
     function removeModule() external override {
-        delete feeStates[ISetToken(msg.sender)];
+        delete feeStates[IJasperVault(msg.sender)];
     }
 
     /*
      * Set new streaming fee. Fees accrue at current rate then new rate is set.
      * Fees are accrued to prevent the manager from unfairly accruing a larger percentage.
      *
-     * @param _setToken       Address of SetToken
+     * @param _jasperVault       Address of JasperVault
      * @param _newFee         New streaming fee 18 decimal precision
      */
     function updateStreamingFee(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _newFee
     )
         external
-        onlySetManager(_setToken, msg.sender)
-        onlyValidAndInitializedSet(_setToken)
+        onlySetManager(_jasperVault, msg.sender)
+        onlyValidAndInitializedSet(_jasperVault)
     {
-        require(_newFee < _maxStreamingFeePercentage(_setToken), "Fee must be less than max");
-        accrueFee(_setToken);
+        require(
+            _newFee < _maxStreamingFeePercentage(_jasperVault),
+            "Fee must be less than max"
+        );
+        accrueFee(_jasperVault);
 
-        feeStates[_setToken].streamingFeePercentage = _newFee;
+        feeStates[_jasperVault].streamingFeePercentage = _newFee;
 
-        emit StreamingFeeUpdated(address(_setToken), _newFee);
+        emit StreamingFeeUpdated(address(_jasperVault), _newFee);
     }
 
     /*
      * Set new fee recipient.
      *
-     * @param _setToken             Address of SetToken
+     * @param _jasperVault             Address of JasperVault
      * @param _newFeeRecipient      New fee recipient
      */
-    function updateFeeRecipient(ISetToken _setToken, address _newFeeRecipient)
+    function updateFeeRecipient(
+        IJasperVault _jasperVault,
+        address _newFeeRecipient
+    )
         external
-        onlySetManager(_setToken, msg.sender)
-        onlyValidAndInitializedSet(_setToken)
+        onlySetManager(_jasperVault, msg.sender)
+        onlyValidAndInitializedSet(_jasperVault)
     {
-        require(_newFeeRecipient != address(0), "Fee Recipient must be non-zero address.");
+        require(
+            _newFeeRecipient != address(0),
+            "Fee Recipient must be non-zero address."
+        );
 
-        feeStates[_setToken].feeRecipient = _newFeeRecipient;
+        feeStates[_jasperVault].feeRecipient = _newFeeRecipient;
 
-        emit FeeRecipientUpdated(address(_setToken), _newFeeRecipient);
+        emit FeeRecipientUpdated(address(_jasperVault), _newFeeRecipient);
     }
 
     /*
      * Calculates total inflation percentage in order to accrue fees to manager.
      *
-     * @param _setToken       Address of SetToken
+     * @param _jasperVault       Address of JasperVault
      * @return  uint256       Percent inflation of supply
      */
-    function getFee(ISetToken _setToken) external view returns (uint256) {
-        return _calculateStreamingFee(_setToken);
+    function getFee(IJasperVault _jasperVault) external view returns (uint256) {
+        return _calculateStreamingFee(_jasperVault);
+    }
+
+    function get_profitSharingPercentage(
+        IJasperVault _jasperVault
+    ) external view returns (uint256) {
+        return _profitSharingPercentage(_jasperVault);
     }
 
     /* ============ Internal Functions ============ */
@@ -197,14 +236,21 @@ contract StreamingFeeModule is ModuleBase, ReentrancyGuard {
      * Calculates streaming fee by multiplying streamingFeePercentage by the elapsed amount of time since the last fee
      * was collected divided by one year in seconds, since the fee is a yearly fee.
      *
-     * @param  _setToken          Address of Set to have feeState updated
+     * @param  _jasperVault          Address of Set to have feeState updated
      * @return uint256            Streaming fee denominated in percentage of totalSupply
      */
-    function _calculateStreamingFee(ISetToken _setToken) internal view returns(uint256) {
-        uint256 timeSinceLastFee = block.timestamp.sub(_lastStreamingFeeTimestamp(_setToken));
+    function _calculateStreamingFee(
+        IJasperVault _jasperVault
+    ) internal view returns (uint256) {
+        uint256 timeSinceLastFee = block.timestamp.sub(
+            _lastStreamingFeeTimestamp(_jasperVault)
+        );
 
         // Streaming fee is streaming fee times years since last fee
-        return timeSinceLastFee.mul(_streamingFeePercentage(_setToken)).div(ONE_YEAR_IN_SECONDS);
+        return
+            timeSinceLastFee.mul(_streamingFeePercentage(_jasperVault)).div(
+                ONE_YEAR_IN_SECONDS
+            );
     }
 
     /**
@@ -217,19 +263,15 @@ contract StreamingFeeModule is ModuleBase, ReentrancyGuard {
      * The simplified formula utilized below is:
      * feeQuantity = fee * totalSupply / (scaleFactor - fee)
      *
-     * @param   _setToken               SetToken instance
+     * @param   _jasperVault               JasperVault instance
      * @param   _feePercentage          Fee levied to feeRecipient
      * @return  uint256                 New RebalancingSet issue quantity
      */
     function _calculateStreamingFeeInflation(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _feePercentage
-    )
-        internal
-        view
-        returns (uint256)
-    {
-        uint256 totalSupply = _setToken.totalSupply();
+    ) internal view returns (uint256) {
+        uint256 totalSupply = _jasperVault.totalSupply();
 
         // fee * totalSupply
         uint256 a = _feePercentage.mul(totalSupply);
@@ -244,22 +286,28 @@ contract StreamingFeeModule is ModuleBase, ReentrancyGuard {
      * Mints sets to both the manager and the protocol. Protocol takes a percentage fee of the total amount of Sets
      * minted to manager.
      *
-     * @param   _setToken               SetToken instance
+     * @param   _jasperVault               JasperVault instance
      * @param   _feeQuantity            Amount of Sets to be minted as fees
      * @return  uint256                 Amount of Sets accrued to manager as fee
      * @return  uint256                 Amount of Sets accrued to protocol as fee
      */
-    function _mintManagerAndProtocolFee(ISetToken _setToken, uint256 _feeQuantity) internal returns (uint256, uint256) {
+    function _mintManagerAndProtocolFee(
+        IJasperVault _jasperVault,
+        uint256 _feeQuantity
+    ) internal returns (uint256, uint256) {
         address protocolFeeRecipient = controller.feeRecipient();
-        uint256 protocolFee = controller.getModuleFee(address(this), PROTOCOL_STREAMING_FEE_INDEX);
+        uint256 protocolFee = controller.getModuleFee(
+            address(this),
+            PROTOCOL_STREAMING_FEE_INDEX
+        );
 
         uint256 protocolFeeAmount = _feeQuantity.preciseMul(protocolFee);
         uint256 managerFeeAmount = _feeQuantity.sub(protocolFeeAmount);
 
-        _setToken.mint(_feeRecipient(_setToken), managerFeeAmount);
+        _jasperVault.mint(_feeRecipient(_jasperVault), managerFeeAmount);
 
         if (protocolFeeAmount > 0) {
-            _setToken.mint(protocolFeeRecipient, protocolFeeAmount);
+            _jasperVault.mint(protocolFeeRecipient, protocolFeeAmount);
         }
 
         return (managerFeeAmount, protocolFeeAmount);
@@ -272,29 +320,46 @@ contract StreamingFeeModule is ModuleBase, ReentrancyGuard {
      *
      * This reduces position sizes to offset increase in supply due to fee collection.
      *
-     * @param   _setToken               SetToken instance
+     * @param   _jasperVault               JasperVault instance
      * @param   _inflationFee           Fee inflation rate
      */
-    function _editPositionMultiplier(ISetToken _setToken, uint256 _inflationFee) internal {
-        int256 currentMultipler = _setToken.positionMultiplier();
-        int256 newMultiplier = currentMultipler.preciseMul(PreciseUnitMath.preciseUnit().sub(_inflationFee).toInt256());
+    function _editPositionMultiplier(
+        IJasperVault _jasperVault,
+        uint256 _inflationFee
+    ) internal {
+        int256 currentMultipler = _jasperVault.positionMultiplier();
+        int256 newMultiplier = currentMultipler.preciseMul(
+            PreciseUnitMath.preciseUnit().sub(_inflationFee).toInt256()
+        );
 
-        _setToken.editPositionMultiplier(newMultiplier);
+        _jasperVault.editPositionMultiplier(newMultiplier);
     }
 
-    function _feeRecipient(ISetToken _set) internal view returns (address) {
+    function _feeRecipient(IJasperVault _set) internal view returns (address) {
         return feeStates[_set].feeRecipient;
     }
 
-    function _lastStreamingFeeTimestamp(ISetToken _set) internal view returns (uint256) {
+    function _lastStreamingFeeTimestamp(
+        IJasperVault _set
+    ) internal view returns (uint256) {
         return feeStates[_set].lastStreamingFeeTimestamp;
     }
 
-    function _maxStreamingFeePercentage(ISetToken _set) internal view returns (uint256) {
+    function _maxStreamingFeePercentage(
+        IJasperVault _set
+    ) internal view returns (uint256) {
         return feeStates[_set].maxStreamingFeePercentage;
     }
 
-    function _streamingFeePercentage(ISetToken _set) internal view returns (uint256) {
+    function _streamingFeePercentage(
+        IJasperVault _set
+    ) internal view returns (uint256) {
         return feeStates[_set].streamingFeePercentage;
+    }
+
+    function _profitSharingPercentage(
+        IJasperVault _set
+    ) internal view returns (uint256) {
+        return feeStates[_set].profitSharingPercentage;
     }
 }

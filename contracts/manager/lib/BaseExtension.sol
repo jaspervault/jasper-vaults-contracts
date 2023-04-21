@@ -39,7 +39,7 @@ abstract contract BaseExtension {
     /* ============ Modifiers ============ */
 
     /**
-     * Throws if the sender is not the SetToken operator
+     * Throws if the sender is not the JasperVault operator
      */
     modifier onlyOperator() {
         require(msg.sender == manager.operator(), "Must be operator");
@@ -47,7 +47,7 @@ abstract contract BaseExtension {
     }
 
     /**
-     * Throws if the sender is not the SetToken methodologist
+     * Throws if the sender is not the JasperVault methodologist
      */
     modifier onlyMethodologist() {
         require(msg.sender == manager.methodologist(), "Must be methodologist");

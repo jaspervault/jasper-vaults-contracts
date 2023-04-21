@@ -29,7 +29,7 @@ import { IAccountBalance } from "../interfaces/external/perp-v2/IAccountBalance.
 import { IClearingHouseConfig } from "../interfaces/external/perp-v2/IClearingHouseConfig.sol";
 import { IIndexPrice } from "../interfaces/external/perp-v2/IIndexPrice.sol";
 import { IPerpV2LeverageModuleV2 } from "../interfaces/IPerpV2LeverageModuleV2.sol";
-import { ISetToken } from "../interfaces/ISetToken.sol";
+import { IJasperVault } from "../interfaces/IJasperVault.sol";
 import { PerpV2Positions } from "../protocol/integration/lib/PerpV2Positions.sol";
 import { PreciseUnitMath } from "../lib/PreciseUnitMath.sol";
 
@@ -117,23 +117,23 @@ contract PerpV2LeverageModuleViewer {
      * of slippage divided by the imRatio from the availableDebt. We can then divide the availableDebtWithSlippage by
      * the absolute value of our current position and multiply by our totalSupply to get the max issue amount.
      *
-     * @param _setToken             Instance of SetToken
+     * @param _jasperVault             Instance of SetToken
      * @param _slippage             Expected slippage from entering position in precise units (1% = 10^16)
      *
      * @return                      Maximum amount of Sets that can be issued
      */
-    function getMaximumSetTokenIssueAmount(ISetToken _setToken, int256 _slippage) external view returns (uint256) {
-        uint256 totalAbsPositionValue = perpAccountBalance.getTotalAbsPositionValue(address(_setToken));
+    function getMaximumSetTokenIssueAmount(IJasperVault _jasperVault, int256 _slippage) external view returns (uint256) {
+        uint256 totalAbsPositionValue = perpAccountBalance.getTotalAbsPositionValue(address(_jasperVault));
 
         if (totalAbsPositionValue == 0) { return PreciseUnitMath.maxUint256(); }
 
         // Scale imRatio to 10 ** 18 (preciseUnits)
         int256 imRatio = uint256(perpClearingHouseConfig.getImRatio()).mul(1e12).toInt256();
 
-        (, int256 unrealizedPnl, ) = perpAccountBalance.getPnlAndPendingFee(address(_setToken));
-        int256 totalDebtValue = perpAccountBalance.getTotalDebtValue(address(_setToken)).toInt256();
+        (, int256 unrealizedPnl, ) = perpAccountBalance.getPnlAndPendingFee(address(_jasperVault));
+        int256 totalDebtValue = perpAccountBalance.getTotalDebtValue(address(_jasperVault)).toInt256();
 
-        int256 totalCollateralValue = _calculateTotalCollateralValue(_setToken);
+        int256 totalCollateralValue = _calculateTotalCollateralValue(_jasperVault);
 
         int256 availableDebt = unrealizedPnl >= 0
             ? totalCollateralValue.preciseDiv(imRatio).sub(totalDebtValue)
@@ -143,20 +143,20 @@ contract PerpV2LeverageModuleViewer {
 
         // max issue amount = available debt in USD (with slippage) / increase in totalDebtValue per Set issued
         //                  = (availableDebtWithSlippage / totalAbsPositionValue) * setTotalSupply
-        return availableDebtWithSlippage.toUint256().preciseDiv(totalAbsPositionValue).preciseMul(_setToken.totalSupply());
+        return availableDebtWithSlippage.toUint256().preciseDiv(totalAbsPositionValue).preciseMul(_jasperVault.totalSupply());
     }
 
     /**
      * @dev Returns the position unit for total collateral value as defined by Perpetual Protocol. TCV = collateral + owedRealizedPnl + pendingFunding.
      *
-     * @param _setToken             Instance of SetToken
+     * @param _jasperVault             Instance of SetToken
      *
      * @return                      Collateral token address
      * @return                      Total collateral value position unit
      */
-    function getTotalCollateralUnit(ISetToken _setToken) external view returns (IERC20, int256) {
-        int256 setTotalSupply = _setToken.totalSupply().toInt256();
-        return (collateralToken, _calculateTotalCollateralValue(_setToken).preciseDiv(setTotalSupply));
+    function getTotalCollateralUnit(IJasperVault _jasperVault) external view returns (IERC20, int256) {
+        int256 setTotalSupply = _jasperVault.totalSupply().toInt256();
+        return (collateralToken, _calculateTotalCollateralValue(_jasperVault).preciseDiv(setTotalSupply));
     }
 
     /**
@@ -164,21 +164,21 @@ contract PerpV2LeverageModuleViewer {
      * size, index price, and leverage of each vAsset with an open position is returned. The sum quantity of vUSDC
      * is returned along with identifying info in last index of array.
      *
-     * @param _setToken             Instance of SetToken
+     * @param _jasperVault             Instance of SetToken
      *
      * @return assetInfo            Array of info concerning size and leverage of current vAsset positions
      */
     function getVirtualAssetsDisplayInfo(
-        ISetToken _setToken
+        IJasperVault _jasperVault
     )
         external
         view
         returns (VAssetDisplayInfo[] memory assetInfo)
     {
-        uint256 setTotalSupply = _setToken.totalSupply();
-        PerpV2Positions.PositionNotionalInfo[] memory positionInfo = perpModule.getPositionNotionalInfo(_setToken);
+        uint256 setTotalSupply = _jasperVault.totalSupply();
+        PerpV2Positions.PositionNotionalInfo[] memory positionInfo = perpModule.getPositionNotionalInfo(_jasperVault);
 
-        int256 totalCollateralValue = _calculateTotalCollateralValue(_setToken);
+        int256 totalCollateralValue = _calculateTotalCollateralValue(_jasperVault);
 
         uint256 positionsLength = positionInfo.length;
         assetInfo = new VAssetDisplayInfo[](positionsLength.add(1));
@@ -212,12 +212,12 @@ contract PerpV2LeverageModuleViewer {
     /**
      * @dev Returns total collateral value attributed to SetToken. TCV = collateral + owedRealizedPnl + funding.
      *
-     * @param _setToken         Instance of SetToken
+     * @param _jasperVault         Instance of SetToken
      *
      * @return                  Total collateral value attributed to SetToken
      */
-    function _calculateTotalCollateralValue(ISetToken _setToken) internal view returns (int256) {
-        IPerpV2LeverageModuleV2.AccountInfo memory accountInfo = perpModule.getAccountInfo(_setToken);
+    function _calculateTotalCollateralValue(IJasperVault _jasperVault) internal view returns (int256) {
+        IPerpV2LeverageModuleV2.AccountInfo memory accountInfo = perpModule.getAccountInfo(_jasperVault);
 
         return accountInfo.collateralBalance
             .add(accountInfo.owedRealizedPnl)

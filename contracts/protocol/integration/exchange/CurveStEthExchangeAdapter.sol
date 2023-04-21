@@ -42,15 +42,15 @@ contract CurveStEthExchangeAdapter {
     /* ========= State Variables ========= */
 
     // Address of WETH token.
-    IWETH immutable public weth;                        
+    IWETH immutable public weth;
     // Address of stETH token.
-    IERC20 immutable public stETH;                      
+    IERC20 immutable public stETH;
     // Address of Curve Eth/StEth stableswap pool.
     IStableSwapPool immutable public stableswap;
     // Index for ETH for Curve stableswap pool.
-    int128 internal constant ETH_INDEX = 0;            
+    int128 internal constant ETH_INDEX = 0;
     // Index for stETH for Curve stableswap pool.
-    int128 internal constant STETH_INDEX = 1;          
+    int128 internal constant STETH_INDEX = 1;
 
     /* ========= Constructor ========== */
 
@@ -114,7 +114,7 @@ contract CurveStEthExchangeAdapter {
 
     /**
      * Sells stETH for WETH
-     * 
+     *
      * @param _sourceQuantity               The amount of stETH as input.
      * @param _minDestinationQuantity       The minimum amount of WETH to receive.
      * @param _destinationAddress           The address to send the trade proceeds to.
@@ -139,10 +139,10 @@ contract CurveStEthExchangeAdapter {
         weth.transfer(_destinationAddress, amountOut);
     }
 
-    /* ============ External Getter Functions ============ */ 
+    /* ============ External Getter Functions ============ */
 
     /**
-     * Calculate Curve trade encoded calldata. To be invoked on the SetToken.
+     * Calculate Curve trade encoded calldata. To be invoked on the JasperVault.
      *
      * @param _sourceToken                  Either WETH or stETH. The input token.
      * @param _destinationToken             Either WETH or stETH. The output token.

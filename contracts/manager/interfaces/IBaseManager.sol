@@ -19,10 +19,10 @@
 pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
 
-import { ISetToken } from "@setprotocol/set-protocol-v2/contracts/interfaces/ISetToken.sol";
+import { IJasperVault } from "../../interfaces/IJasperVault.sol";
 
 interface IBaseManager {
-    function setToken() external returns(ISetToken);
+    function jasperVault() external returns(IJasperVault);
 
     function methodologist() external returns(address);
 

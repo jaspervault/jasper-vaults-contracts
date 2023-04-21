@@ -19,16 +19,16 @@
 pragma solidity 0.6.10;
 pragma experimental ABIEncoderV2;
 
-import { Address } from "@openzeppelin/contracts/utils/Address.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
-import { AddressArrayUtils } from "@setprotocol/set-protocol-v2/contracts/lib/AddressArrayUtils.sol";
-import { IController } from "@setprotocol/set-protocol-v2/contracts/interfaces/IController.sol";
-import { ISetToken } from "@setprotocol/set-protocol-v2/contracts/interfaces/ISetToken.sol";
-import { ISetTokenCreator } from "@setprotocol/set-protocol-v2/contracts/interfaces/ISetTokenCreator.sol";
+import {AddressArrayUtils} from "@setprotocol/set-protocol-v2/contracts/lib/AddressArrayUtils.sol";
+import {IController} from "@setprotocol/set-protocol-v2/contracts/interfaces/IController.sol";
+import {IJasperVault} from "../../interfaces/IJasperVault.sol";
+import {ISetTokenCreator} from "@setprotocol/set-protocol-v2/contracts/interfaces/ISetTokenCreator.sol";
 
-import { DelegatedManager } from "../manager/DelegatedManager.sol";
-import { IDelegatedManager } from "../interfaces/IDelegatedManager.sol";
-import { IManagerCore } from "../interfaces/IManagerCore.sol";
+import {DelegatedManager} from "../manager/DelegatedManager.sol";
+import {IDelegatedManager} from "../interfaces/IDelegatedManager.sol";
+import {IManagerCore} from "../interfaces/IManagerCore.sol";
 
 /**
  * @title DelegatedManagerFactory
@@ -43,9 +43,13 @@ contract DelegatedManagerFactory {
     using AddressArrayUtils for address[];
     using Address for address;
 
+    mapping(address => address) public acccount2setToken;
+    mapping(address => address) public setToken2account;
+    mapping(address => uint256) public jasperVaultType;
+
     /* ============ Structs ============ */
 
-    struct InitializeParams{
+    struct InitializeParams {
         address deployer;
         address owner;
         address methodologist;
@@ -57,23 +61,23 @@ contract DelegatedManagerFactory {
 
     /**
      * @dev Emitted on DelegatedManager creation
-     * @param _setToken             Instance of the SetToken being created
+     * @param _jasperVault             Instance of the JasperVault being created
      * @param _manager              Address of the DelegatedManager
      * @param _deployer             Address of the deployer
-    */
+     */
     event DelegatedManagerCreated(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         DelegatedManager indexed _manager,
         address _deployer
     );
 
     /**
      * @dev Emitted on DelegatedManager initialization
-     * @param _setToken             Instance of the SetToken being initialized
+     * @param _jasperVault             Instance of the JasperVault being initialized
      * @param _manager              Address of the DelegatedManager owner
-    */
+     */
     event DelegatedManagerInitialized(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         IDelegatedManager indexed _manager
     );
 
@@ -89,7 +93,7 @@ contract DelegatedManagerFactory {
     ISetTokenCreator public immutable setTokenFactory;
 
     // Mapping which stores manager creation metadata between creation and initialization steps
-    mapping(ISetToken=>InitializeParams) public initializeState;
+    mapping(IJasperVault => InitializeParams) public initializeState;
 
     /* ============ Constructor ============ */
 
@@ -103,9 +107,7 @@ contract DelegatedManagerFactory {
         IManagerCore _managerCore,
         IController _controller,
         ISetTokenCreator _setTokenFactory
-    )
-        public
-    {
+    ) public {
         managerCore = _managerCore;
         controller = _controller;
         setTokenFactory = _setTokenFactory;
@@ -114,14 +116,14 @@ contract DelegatedManagerFactory {
     /* ============ External Functions ============ */
 
     /**
-     * ANYONE CAN CALL: Deploys a new SetToken and DelegatedManager. Sets some temporary metadata about
+     * ANYONE CAN CALL: Deploys a new JasperVault and DelegatedManager. Sets some temporary metadata about
      * the deployment which will be read during a subsequent intialization step which wires everything
      * together.
      *
      * @param _components       List of addresses of components for initial Positions
-     * @param _units            List of units. Each unit is the # of components per 10^18 of a SetToken
-     * @param _name             Name of the SetToken
-     * @param _symbol           Symbol of the SetToken
+     * @param _units            List of units. Each unit is the # of components per 10^18 of a JasperVault
+     * @param _name             Name of the JasperVault
+     * @param _symbol           Symbol of the JasperVault
      * @param _owner            Address to set as the DelegateManager's `owner` role
      * @param _methodologist    Address to set as the DelegateManager's methodologist role
      * @param _modules          List of modules to enable. All modules must be approved by the Controller
@@ -129,9 +131,10 @@ contract DelegatedManagerFactory {
      * @param _assets           List of assets DelegateManager can trade. When empty, asset allow list is not enforced
      * @param _extensions       List of extensions authorized for the DelegateManager
      *
-     * @return (ISetToken, address) The created SetToken and DelegatedManager addresses, respectively
+     * @return (IJasperVault, address) The created JasperVault and DelegatedManager addresses, respectively
      */
     function createSetAndManager(
+        uint256 _vaultType,
         address[] memory _components,
         int256[] memory _units,
         string memory _name,
@@ -139,16 +142,14 @@ contract DelegatedManagerFactory {
         address _owner,
         address _methodologist,
         address[] memory _modules,
+        address[] memory _adapters,
         address[] memory _operators,
         address[] memory _assets,
         address[] memory _extensions
-    )
-        external
-        returns (ISetToken, address)
-    {
+    ) external returns (IJasperVault, address) {
+        // require(acccount2setToken[msg.sender] == address(0x0000000000000000000000000000000000000000), "sender has a jasperVault");
         _validateManagerParameters(_components, _extensions, _assets);
-
-        ISetToken setToken = _deploySet(
+        IJasperVault jasperVault = _deploySet(
             _components,
             _units,
             _modules,
@@ -157,27 +158,36 @@ contract DelegatedManagerFactory {
         );
 
         DelegatedManager manager = _deployManager(
-            setToken,
+            jasperVault,
             _extensions,
             _operators,
-            _assets
+            _assets,
+            _adapters
         );
 
-        _setInitializationState(setToken, address(manager), _owner, _methodologist);
+        _setInitializationState(
+            jasperVault,
+            address(manager),
+            _owner,
+            _methodologist
+        );
 
-        return (setToken, address(manager));
+        acccount2setToken[msg.sender] = address(jasperVault);
+        setToken2account[address(jasperVault)] = msg.sender;
+        jasperVaultType[address(jasperVault)] = _vaultType;
+        return (jasperVault, address(manager));
     }
 
     /**
      * ONLY SETTOKEN MANAGER: Deploys a DelegatedManager and sets some temporary metadata about the
      * deployment which will be read during a subsequent intialization step which wires everything together.
-     * This method is used when migrating an existing SetToken to the DelegatedManager system.
+     * This method is used when migrating an existing JasperVault to the DelegatedManager system.
      *
      * (Note: This flow should work well for SetTokens managed by an EOA. However, existing
      * contract-managed Sets may need to have their ownership temporarily transferred to an EOA when
      * migrating. We don't anticipate high demand for this migration case though.)
      *
-     * @param  _setToken         Instance of SetToken to migrate to the DelegatedManager system
+     * @param  _jasperVault         Instance of JasperVault to migrate to the DelegatedManager system
      * @param  _owner            Address to set as the DelegateManager's `owner` role
      * @param  _methodologist    Address to set as the DelegateManager's methodologist role
      * @param  _operators        List of operators authorized for the DelegateManager
@@ -187,95 +197,114 @@ contract DelegatedManagerFactory {
      * @return (address) Address of the created DelegatedManager
      */
     function createManager(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _owner,
         address _methodologist,
+        address[] memory _adapters,
         address[] memory _operators,
         address[] memory _assets,
         address[] memory _extensions
-    )
-        external
-        returns (address)
-    {
-        require(controller.isSet(address(_setToken)), "Must be controller-enabled SetToken");
-        require(msg.sender == _setToken.manager(), "Must be manager");
+    ) external returns (address) {
+        require(
+            controller.isSet(address(_jasperVault)),
+            "Must be controller-enabled JasperVault"
+        );
+        require(msg.sender == _jasperVault.manager(), "Must be manager");
 
-        _validateManagerParameters(_setToken.getComponents(), _extensions, _assets);
-
-        DelegatedManager manager = _deployManager(
-            _setToken,
+        _validateManagerParameters(
+            _jasperVault.getComponents(),
             _extensions,
-            _operators,
             _assets
         );
 
-        _setInitializationState(_setToken, address(manager), _owner, _methodologist);
-
+        DelegatedManager manager = _deployManager(
+            _jasperVault,
+            _extensions,
+            _operators,
+            _assets,
+            _adapters
+        );
+        _setInitializationState(
+            _jasperVault,
+            address(manager),
+            _owner,
+            _methodologist
+        );
         return address(manager);
     }
 
     /**
-     * ONLY DEPLOYER: Wires SetToken, DelegatedManager, global manager extensions, and modules together
+     * ONLY DEPLOYER: Wires JasperVault, DelegatedManager, global manager extensions, and modules together
      * into a functioning package.
      *
-     * NOTE: When migrating to this manager system from an existing SetToken, the SetToken's current manager address
+     * NOTE: When migrating to this manager system from an existing JasperVault, the JasperVault's current manager address
      * must be reset to point at the newly deployed DelegatedManager contract in a separate, final transaction.
      *
-     * @param  _setToken                Instance of the SetToken
+     * @param  _jasperVault                Instance of the JasperVault
      * @param  _ownerFeeSplit           Percent of fees in precise units (10^16 = 1%) sent to owner, rest to methodologist
      * @param  _ownerFeeRecipient       Address which receives owner's share of fees when they're distributed
      * @param  _extensions              List of addresses of extensions which need to be initialized
      * @param  _initializeBytecode      List of bytecode encoded calls to relevant target's initialize function
      */
     function initialize(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _ownerFeeSplit,
         address _ownerFeeRecipient,
+        uint256 _managerFee,
+        address _masterToken,
+        uint256 _delay,
         address[] memory _extensions,
         bytes[] memory _initializeBytecode
-    )
-        external
-    {
-        require(initializeState[_setToken].isPending, "Manager must be awaiting initialization");
-        require(msg.sender == initializeState[_setToken].deployer, "Only deployer can initialize manager");
+    ) external {
+        require(
+            initializeState[_jasperVault].isPending,
+            "Manager must be awaiting initialization"
+        );
+        require(
+            msg.sender == initializeState[_jasperVault].deployer,
+            "Only deployer can initialize manager"
+        );
         _extensions.validatePairsWithArray(_initializeBytecode);
 
-        IDelegatedManager manager = initializeState[_setToken].manager;
+        IDelegatedManager manager = initializeState[_jasperVault].manager;
 
-        // If the SetToken was factory-deployed & factory is its current `manager`, transfer
+        // If the JasperVault was factory-deployed & factory is its current `manager`, transfer
         // managership to the new DelegatedManager
-        if (_setToken.manager() == address(this)) {
-            _setToken.setManager(address(manager));
+        if (_jasperVault.manager() == address(this)) {
+            _jasperVault.setManager(address(manager));
         }
 
         _initializeExtensions(manager, _extensions, _initializeBytecode);
 
         _setManagerState(
             manager,
-            initializeState[_setToken].owner,
-            initializeState[_setToken].methodologist,
+            initializeState[_jasperVault].owner,
+            initializeState[_jasperVault].methodologist,
             _ownerFeeSplit,
-            _ownerFeeRecipient
+            _ownerFeeRecipient,
+            _managerFee,
+            _masterToken,
+            _delay
         );
 
-        delete initializeState[_setToken];
+        delete initializeState[_jasperVault];
 
-        emit DelegatedManagerInitialized(_setToken, manager);
+        emit DelegatedManagerInitialized(_jasperVault, manager);
     }
 
     /* ============ Internal Functions ============ */
 
     /**
-     * Deploys a SetToken, setting this factory as its manager temporarily, pending initialization.
+     * Deploys a JasperVault, setting this factory as its manager temporarily, pending initialization.
      * Managership is transferred to a newly created DelegatedManager during `initialize`
      *
      * @param _components       List of addresses of components for initial Positions
-     * @param _units            List of units. Each unit is the # of components per 10^18 of a SetToken
+     * @param _units            List of units. Each unit is the # of components per 10^18 of a JasperVault
      * @param _modules          List of modules to enable. All modules must be approved by the Controller
-     * @param _name             Name of the SetToken
-     * @param _symbol           Symbol of the SetToken
+     * @param _name             Name of the JasperVault
+     * @param _symbol           Symbol of the JasperVault
      *
-     * @return Address of created SetToken;
+     * @return Address of created JasperVault;
      */
     function _deploySet(
         address[] memory _components,
@@ -283,11 +312,8 @@ contract DelegatedManagerFactory {
         address[] memory _modules,
         string memory _name,
         string memory _symbol
-    )
-        internal
-        returns (ISetToken)
-    {
-        address setToken = setTokenFactory.create(
+    ) internal returns (IJasperVault) {
+        address jasperVault = setTokenFactory.create(
             _components,
             _units,
             _modules,
@@ -296,14 +322,14 @@ contract DelegatedManagerFactory {
             _symbol
         );
 
-        return ISetToken(setToken);
+        return IJasperVault(jasperVault);
     }
 
     /**
      * Deploys a DelegatedManager. Sets owner and methodologist roles to address(this) and the resulting manager address is
      * saved to the ManagerCore.
      *
-     * @param  _setToken         Instance of SetToken to migrate to the DelegatedManager system
+     * @param  _jasperVault         Instance of JasperVault to migrate to the DelegatedManager system
      * @param  _extensions       List of extensions authorized for the DelegateManager
      * @param  _operators        List of operators authorized for the DelegateManager
      * @param  _assets           List of assets DelegateManager can trade. When empty, asset allow list is not enforced
@@ -311,36 +337,31 @@ contract DelegatedManagerFactory {
      * @return Address of created DelegatedManager
      */
     function _deployManager(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address[] memory _extensions,
         address[] memory _operators,
-        address[] memory _assets
-    )
-        internal
-        returns (DelegatedManager)
-    {
+        address[] memory _assets,
+        address[] memory _adapters
+    ) internal returns (DelegatedManager) {
         // If asset array is empty, manager's useAssetAllowList will be set to false
         // and the asset allow list is not enforced
         bool useAssetAllowlist = _assets.length > 0;
 
         DelegatedManager newManager = new DelegatedManager(
-            _setToken,
+            _jasperVault,
             address(this),
             address(this),
             _extensions,
             _operators,
             _assets,
+            _adapters,
             useAssetAllowlist
         );
 
         // Registers manager with ManagerCore
         managerCore.addManager(address(newManager));
 
-        emit DelegatedManagerCreated(
-            _setToken,
-            newManager,
-            msg.sender
-        );
+        emit DelegatedManagerCreated(_jasperVault, newManager, msg.sender);
 
         return newManager;
     }
@@ -360,7 +381,10 @@ contract DelegatedManagerFactory {
     ) internal {
         for (uint256 i = 0; i < _extensions.length; i++) {
             address extension = _extensions[i];
-            require(managerCore.isExtension(extension), "Target must be ManagerCore-enabled Extension");
+            require(
+                managerCore.isExtension(extension),
+                "Target must be ManagerCore-enabled Extension"
+            );
 
             bytes memory initializeBytecode = _initializeBytecode[i];
 
@@ -373,10 +397,13 @@ contract DelegatedManagerFactory {
             assembly {
                 inputManager := mload(add(initializeBytecode, 36))
             }
-            require(inputManager == address(_manager), "Must target correct DelegatedManager");
+            require(
+                inputManager == address(_manager),
+                "Must target correct DelegatedManager"
+            );
 
             // Because we validate uniqueness of _extensions only one transaction can be sent to each extension during this
-            // transaction. Due to this no extension can be used for any SetToken transactions other than initializing these contracts
+            // transaction. Due to this no extension can be used for any JasperVault transactions other than initializing these contracts
             extension.functionCallWithValue(initializeBytecode, 0);
         }
     }
@@ -385,18 +412,18 @@ contract DelegatedManagerFactory {
      * Stores temporary creation metadata during the contract creation step. Data is retrieved, read and
      * finally deleted during `initialize`.
      *
-     * @param  _setToken         Instance of SetToken
-     * @param  _manager          Address of DelegatedManager created for SetToken
+     * @param  _jasperVault         Instance of JasperVault
+     * @param  _manager          Address of DelegatedManager created for JasperVault
      * @param  _owner            Address that will be given the `owner` DelegatedManager's role on initialization
      * @param  _methodologist    Address that will be given the `methodologist` DelegatedManager's role on initialization
      */
     function _setInitializationState(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _manager,
         address _owner,
         address _methodologist
     ) internal {
-        initializeState[_setToken] = InitializeParams({
+        initializeState[_jasperVault] = InitializeParams({
             deployer: msg.sender,
             owner: _owner,
             methodologist: _methodologist,
@@ -419,9 +446,17 @@ contract DelegatedManagerFactory {
         address _owner,
         address _methodologist,
         uint256 _ownerFeeSplit,
-        address _ownerFeeRecipient
+        address _ownerFeeRecipient,
+        uint256 _managerFees,
+        address _masterToken,
+        uint256 _delay
     ) internal {
-        _manager.updateOwnerFeeSplit(_ownerFeeSplit);
+        _manager.factoryReset(
+            _ownerFeeSplit,
+            _managerFees,
+            _delay,
+            _masterToken
+        );
         _manager.updateOwnerFeeRecipient(_ownerFeeRecipient);
 
         _manager.transferOwnership(_owner);
@@ -440,10 +475,7 @@ contract DelegatedManagerFactory {
         address[] memory _components,
         address[] memory _extensions,
         address[] memory _assets
-    )
-        internal
-        pure
-    {
+    ) internal pure {
         require(_extensions.length > 0, "Must have at least 1 extension");
 
         if (_assets.length != 0) {
@@ -452,7 +484,7 @@ contract DelegatedManagerFactory {
     }
 
     /**
-     * Validates that all SetToken components are included in the assets whitelist. This prevents the
+     * Validates that all JasperVault components are included in the assets whitelist. This prevents the
      * DelegatedManager from being initialized with some components in an untrade-able state.
      *
      * @param _components       List of addresses of components for initial Positions
@@ -463,7 +495,10 @@ contract DelegatedManagerFactory {
         address[] memory _assets
     ) internal pure {
         for (uint256 i = 0; i < _components.length; i++) {
-            require(_assets.contains(_components[i]), "Asset list must include all components");
+            require(
+                _assets.contains(_components[i]),
+                "Asset list must include all components"
+            );
         }
     }
 }

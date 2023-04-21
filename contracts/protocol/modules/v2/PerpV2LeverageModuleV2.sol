@@ -40,7 +40,7 @@ import { IMarketRegistry } from "../../../interfaces/external/perp-v2/IMarketReg
 import { IController } from "../../../interfaces/IController.sol";
 import { IDebtIssuanceModule } from "../../../interfaces/IDebtIssuanceModule.sol";
 import { IModuleIssuanceHookV2 } from "../../../interfaces/IModuleIssuanceHookV2.sol";
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
 import { ModuleBaseV2 } from "../../lib/ModuleBaseV2.sol";
 import { SetTokenAccessible } from "../../lib/SetTokenAccessible.sol";
 import { PreciseUnitMath } from "../../../lib/PreciseUnitMath.sol";
@@ -51,7 +51,7 @@ import { UnitConversionUtils } from "../../../lib/UnitConversionUtils.sol";
 /**
  * @title PerpV2LeverageModuleV2
  * @author Set Protocol
- * @notice Smart contract that enables leveraged trading using the PerpV2 protocol. Each SetToken can only manage a single Perp account
+ * @notice Smart contract that enables leveraged trading using the PerpV2 protocol. Each JasperVault can only manage a single Perp account
  * represented as a positive equity external position whose value is the net Perp account value denominated in the collateral token
  * deposited into the Perp Protocol. This module only allows Perp positions to be collateralized by one asset, USDC, set on deployment of
  * this contract (see collateralToken) however it can take positions simultaneously in multiple base assets.
@@ -70,7 +70,7 @@ import { UnitConversionUtils } from "../../../lib/UnitConversionUtils.sol";
  * contracts helps us to significantly decrease the bytecode size of this contract.
  */
 contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTokenAccessible, IModuleIssuanceHookV2 {
-    using PerpV2LibraryV2 for ISetToken;
+    using PerpV2LibraryV2 for IJasperVault;
     using PreciseUnitMath for int256;
     using SignedSafeMath for int256;
     using UnitConversionUtils for int256;
@@ -95,7 +95,7 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
 
     /**
      * @dev Emitted on trade
-     * @param _setToken         Instance of SetToken
+     * @param _jasperVault         Instance of JasperVault
      * @param _baseToken        Virtual token minted by the Perp protocol
      * @param _deltaBase        Change in baseToken position size resulting from trade
      * @param _deltaQuote       Change in vUSDC position size resulting from trade
@@ -103,7 +103,7 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
      * @param _isBuy            True when baseToken is being bought, false when being sold
      */
     event PerpTraded(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         address indexed _baseToken,
         uint256 indexed _deltaBase,
         uint256 _deltaQuote,
@@ -113,24 +113,24 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
 
     /**
      * @dev Emitted on deposit (not issue or redeem)
-     * @param _setToken             Instance of SetToken
+     * @param _jasperVault             Instance of JasperVault
      * @param _collateralToken      Token being deposited as collateral (USDC)
      * @param _amountDeposited      Amount of collateral being deposited into Perp
      */
     event CollateralDeposited(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         IERC20 indexed _collateralToken,
         uint256 indexed _amountDeposited
     );
 
     /**
      * @dev Emitted on withdraw (not issue or redeem)
-     * @param _setToken             Instance of SetToken
+     * @param _jasperVault             Instance of JasperVault
      * @param _collateralToken      Token being withdrawn as collateral (USDC)
      * @param _amountWithdrawn      Amount of collateral being withdrawn from Perp
      */
     event CollateralWithdrawn(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         IERC20 indexed _collateralToken,
         uint256 indexed _amountWithdrawn
     );
@@ -176,7 +176,7 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
 
     // Mapping of SetTokens to an array of virtual token addresses the Set has open positions for.
     // Array is updated when new positions are opened or old positions are zeroed out.
-    mapping(ISetToken => address[]) internal positions;
+    mapping(IJasperVault => address[]) internal positions;
 
     /* ============ Constructor ============ */
 
@@ -217,33 +217,33 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
     /* ============ External Functions ============ */
 
     /**
-     * @dev MANAGER ONLY: Initializes this module to the SetToken. Either the SetToken needs to be on the
+     * @dev MANAGER ONLY: Initializes this module to the JasperVault. Either the JasperVault needs to be on the
      * allowed list or anySetAllowed needs to be true.
      *
-     * @param _setToken             Instance of the SetToken to initialize
+     * @param _jasperVault             Instance of the JasperVault to initialize
      */
     function initialize(
-        ISetToken _setToken
+        IJasperVault _jasperVault
     )
         public
         virtual
-        onlySetManager(_setToken, msg.sender)
-        onlyValidAndPendingSet(_setToken)
-        onlyAllowedSet(_setToken)
+        onlySetManager(_jasperVault, msg.sender)
+        onlyValidAndPendingSet(_jasperVault)
+        onlyAllowedSet(_jasperVault)
     {
         // Initialize module before trying register
-        _setToken.initializeModule();
+        _jasperVault.initializeModule();
 
         // Get debt issuance module registered to this module and require that it is initialized
-        require(_setToken.isInitializedModule(
+        require(_jasperVault.isInitializedModule(
             getAndValidateAdapter(DEFAULT_ISSUANCE_MODULE_NAME)),
             "Issuance not initialized"
         );
 
         // Try if register exists on any of the modules including the debt issuance module
-        address[] memory modules = _setToken.getModules();
+        address[] memory modules = _jasperVault.getModules();
         for(uint256 i = 0; i < modules.length; i++) {
-            try IDebtIssuanceModule(modules[i]).registerToIssuanceModule(_setToken) {
+            try IDebtIssuanceModule(modules[i]).registerToIssuanceModule(_jasperVault) {
                 // This module registered itself on `modules[i]` issuance module.
             } catch {
                 // Try will fail if `modules[i]` is not an instance of IDebtIssuanceModule and does not
@@ -296,23 +296,23 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
      * | Short | Buy to reverse  | pay least amt. of vQuote  | lower bound of output quote | positive, |baseQuantityUnits| > |basePositionUnit|  |
      * -------------------------------------------------------------------------------------------------------------------------------------------
      *
-     * @param _setToken                     Instance of the SetToken
+     * @param _jasperVault                     Instance of the JasperVault
      * @param _baseToken                    Address virtual token being traded
      * @param _baseQuantityUnits            Quantity of virtual token to trade in position units
      * @param _quoteBoundQuantityUnits      Max/min of vQuote asset to pay/receive when buying or selling
      */
     function trade(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _baseToken,
         int256 _baseQuantityUnits,
         uint256 _quoteBoundQuantityUnits
     )
         public
         nonReentrant
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
         PerpV2LibraryV2.ActionInfo memory actionInfo = _createAndValidateActionInfo(
-            _setToken,
+            _jasperVault,
             _baseToken,
             _baseQuantityUnits,
             _quoteBoundQuantityUnits
@@ -320,12 +320,12 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
 
         (uint256 deltaBase, uint256 deltaQuote) = PerpV2LibraryV2.executeTrade(actionInfo, perpClearingHouse);
 
-        uint256 protocolFee = _accrueProtocolFee(_setToken, deltaQuote);
+        uint256 protocolFee = _accrueProtocolFee(_jasperVault, deltaQuote);
 
-        _updatePositionList(_setToken, _baseToken);
+        _updatePositionList(_jasperVault, _baseToken);
 
         emit PerpTraded(
-            _setToken,
+            _jasperVault,
             _baseToken,
             deltaBase,
             deltaQuote,
@@ -341,98 +341,98 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
      * 100 units of USDC and execute a lever trade for ~200 vUSDC worth of vToken with the difference
      * between these made up as automatically "issued" margin debt in the PerpV2 system.
      *
-     * @param  _setToken                    Instance of the SetToken
+     * @param  _jasperVault                    Instance of the JasperVault
      * @param  _collateralQuantityUnits     Quantity of collateral to deposit in position units
      */
     function deposit(
-      ISetToken _setToken,
+      IJasperVault _jasperVault,
       uint256 _collateralQuantityUnits
     )
       public
       nonReentrant
-      onlyManagerAndValidSet(_setToken)
+      onlyManagerAndValidSet(_jasperVault)
     {
         require(_collateralQuantityUnits > 0, "Deposit amount is 0");
         require(
-            _collateralQuantityUnits <= _setToken.getDefaultPositionRealUnit(address(collateralToken)).toUint256(),
+            _collateralQuantityUnits <= _jasperVault.getDefaultPositionRealUnit(address(collateralToken)).toUint256(),
             "Amount too high"
         );
 
-        uint256 notionalDepositedQuantity = _depositAndUpdatePositions(_setToken, _collateralQuantityUnits);
+        uint256 notionalDepositedQuantity = _depositAndUpdatePositions(_jasperVault, _collateralQuantityUnits);
 
-        emit CollateralDeposited(_setToken, collateralToken, notionalDepositedQuantity);
+        emit CollateralDeposited(_jasperVault, collateralToken, notionalDepositedQuantity);
     }
 
     /**
      * @dev MANAGER ONLY: Withdraws collateral token from the PerpV2 Vault to a default position on
-     * the SetToken. This method is useful when adjusting the overall composition of a Set which has
+     * the JasperVault. This method is useful when adjusting the overall composition of a Set which has
      * a Perp account external position as one of several components.
      *
      * NOTE: Within PerpV2, `withdraw` settles `owedRealizedPnl` and any pending funding payments
      * to the Perp vault prior to transfer.
      *
-     * @param  _setToken                    Instance of the SetToken
+     * @param  _jasperVault                    Instance of the JasperVault
      * @param  _collateralQuantityUnits     Quantity of collateral to withdraw in position units
      */
     function withdraw(
-      ISetToken _setToken,
+      IJasperVault _jasperVault,
       uint256 _collateralQuantityUnits
     )
       public
       virtual
       nonReentrant
-      onlyManagerAndValidSet(_setToken)
+      onlyManagerAndValidSet(_jasperVault)
     {
         require(_collateralQuantityUnits > 0, "Withdraw amount is 0");
 
-        uint256 notionalWithdrawnQuantity = _withdrawAndUpdatePositions(_setToken, _collateralQuantityUnits);
+        uint256 notionalWithdrawnQuantity = _withdrawAndUpdatePositions(_jasperVault, _collateralQuantityUnits);
 
-        emit CollateralWithdrawn(_setToken, collateralToken, notionalWithdrawnQuantity);
+        emit CollateralWithdrawn(_jasperVault, collateralToken, notionalWithdrawnQuantity);
     }
 
     /**
-     * @dev SETTOKEN ONLY: Removes this module from the SetToken, via call by the SetToken. Deletes
-     * position mappings associated with SetToken.
+     * @dev SETTOKEN ONLY: Removes this module from the JasperVault, via call by the JasperVault. Deletes
+     * position mappings associated with JasperVault.
      *
      * NOTE: Function will revert if there is greater than a position unit amount of USDC of account value.
      */
-    function removeModule() public virtual override onlyValidAndInitializedSet(ISetToken(msg.sender)) {
-        ISetToken setToken = ISetToken(msg.sender);
+    function removeModule() public virtual override onlyValidAndInitializedSet(IJasperVault(msg.sender)) {
+        IJasperVault jasperVault = IJasperVault(msg.sender);
 
         // Check that there is less than 1 position unit of USDC of account value (to tolerate PRECISE_UNIT math rounding errors).
         // Account value is checked here because liquidation may result in a positive vault balance while net value is below zero.
-        int256 accountValueUnit = perpClearingHouse.getAccountValue(address(setToken)).preciseDiv(setToken.totalSupply().toInt256());
+        int256 accountValueUnit = perpClearingHouse.getAccountValue(address(jasperVault)).preciseDiv(jasperVault.totalSupply().toInt256());
         require(
             accountValueUnit.fromPreciseUnitToDecimals(collateralDecimals) <= 1,
             "Account balance exists"
         );
 
-        // `positions[setToken]` mapping stores an array of addresses. The base token addresses are removed from the array when the
+        // `positions[jasperVault]` mapping stores an array of addresses. The base token addresses are removed from the array when the
         // corresponding base token positions are zeroed out. Since no positions exist when removing the module, the stored array should
         // already be empty, and the mapping can be deleted directly.
-        delete positions[setToken];
+        delete positions[jasperVault];
 
         // Try if unregister exists on any of the modules
-        address[] memory modules = setToken.getModules();
+        address[] memory modules = jasperVault.getModules();
         for(uint256 i = 0; i < modules.length; i++) {
-            try IDebtIssuanceModule(modules[i]).unregisterFromIssuanceModule(setToken) {} catch {}
+            try IDebtIssuanceModule(modules[i]).unregisterFromIssuanceModule(jasperVault) {} catch {}
         }
     }
 
     /**
-     * @dev MANAGER ONLY: Add registration of this module on the debt issuance module for the SetToken.
+     * @dev MANAGER ONLY: Add registration of this module on the debt issuance module for the JasperVault.
      *
      * Note: if the debt issuance module is not added to SetToken before this module is initialized, then
      * this function needs to be called if the debt issuance module is later added and initialized to prevent state
      * inconsistencies
      *
-     * @param _setToken             Instance of the SetToken
+     * @param _jasperVault             Instance of the SetToken
      * @param _debtIssuanceModule   Debt issuance module address to register
      */
-    function registerToModule(ISetToken _setToken, IDebtIssuanceModule _debtIssuanceModule) external onlyManagerAndValidSet(_setToken) {
-        require(_setToken.isInitializedModule(address(_debtIssuanceModule)), "Issuance not initialized");
+    function registerToModule(IJasperVault _jasperVault, IDebtIssuanceModule _debtIssuanceModule) external onlyManagerAndValidSet(_jasperVault) {
+        require(_jasperVault.isInitializedModule(address(_debtIssuanceModule)), "Issuance not initialized");
 
-        _debtIssuanceModule.registerToIssuanceModule(_setToken);
+        _debtIssuanceModule.registerToIssuanceModule(_jasperVault);
     }
 
     /**
@@ -442,25 +442,25 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
      * incurred during issuance. Any pending funding payments and accrued owedRealizedPnl are attributed to current
      * Set holders.
      *
-     * @param _setToken             Instance of the SetToken
+     * @param _jasperVault             Instance of the SetToken
      * @param _setTokenQuantity     Quantity of Set to issue
      */
     function moduleIssueHook(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _setTokenQuantity
     )
         public
         virtual
         override
-        onlyModule(_setToken)
+        onlyModule(_jasperVault)
     {
-        if (_setToken.totalSupply() == 0) return;
-        if (!_setToken.hasExternalPosition(address(collateralToken))) return;
+        if (_jasperVault.totalSupply() == 0) return;
+        if (!_jasperVault.hasExternalPosition(address(collateralToken))) return;
 
-        int256 newExternalPositionUnit = _executePositionTrades(_setToken, _setTokenQuantity, true, false);
+        int256 newExternalPositionUnit = _executePositionTrades(_jasperVault, _setTokenQuantity, true, false);
 
         // Set collateralToken externalPositionUnit such that DIM can use it for transfer calculation
-        _setToken.editExternalPositionUnit(
+        _jasperVault.editExternalPositionUnit(
             address(collateralToken),
             address(this),
             newExternalPositionUnit
@@ -474,25 +474,25 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
      * this redemption). Any `owedRealizedPnl` and pending funding payments are socialized in this step so
      * that redeemer pays/receives their share of them. Should only be called ONCE during redeem.
      *
-     * @param _setToken             Instance of the SetToken
+     * @param _jasperVault             Instance of the SetToken
      * @param _setTokenQuantity     Quantity of SetToken to redeem
      */
     function moduleRedeemHook(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _setTokenQuantity
     )
         external
         virtual
         override
-        onlyModule(_setToken)
+        onlyModule(_jasperVault)
     {
-        if (_setToken.totalSupply() == 0) return;
-        if (!_setToken.hasExternalPosition(address(collateralToken))) return;
+        if (_jasperVault.totalSupply() == 0) return;
+        if (!_jasperVault.hasExternalPosition(address(collateralToken))) return;
 
-        int256 newExternalPositionUnit = _executePositionTrades(_setToken, _setTokenQuantity, false, false);
+        int256 newExternalPositionUnit = _executePositionTrades(_jasperVault, _setTokenQuantity, false, false);
 
         // Set USDC externalPositionUnit such that DIM can use it for transfer calculation
-        _setToken.editExternalPositionUnit(
+        _jasperVault.editExternalPositionUnit(
             address(collateralToken),
             address(this),
             newExternalPositionUnit
@@ -502,28 +502,28 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
     /**
      * @dev MODULE ONLY: Hook called prior to looping through each component on issuance. Deposits
      * collateral into Perp protocol from SetToken default position.
-     * @param _setToken             Instance of the SetToken
+     * @param _jasperVault             Instance of the SetToken
      * @param _setTokenQuantity     Quantity of SetToken to issue
      * @param _component            Address of deposit collateral component
      * @param _isEquity             True if componentHook called from issuance module for equity flow, false otherwise
      */
     function componentIssueHook(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _setTokenQuantity,
         IERC20 _component,
         bool _isEquity
     )
         external
         override
-        onlyModule(_setToken)
+        onlyModule(_jasperVault)
     {
         if (_isEquity) {
-            int256 externalPositionUnit = _setToken.getExternalPositionRealUnit(address(_component), address(this));
+            int256 externalPositionUnit = _jasperVault.getExternalPositionRealUnit(address(_component), address(this));
 
             // Use preciseMulCeil here to ensure correct collateralization if there are rounding errors.
             uint256 usdcTransferInNotionalQuantity = _setTokenQuantity.preciseMulCeil(externalPositionUnit.toUint256());
 
-            _deposit(_setToken, usdcTransferInNotionalQuantity);
+            _deposit(_jasperVault, usdcTransferInNotionalQuantity);
         }
     }
 
@@ -533,26 +533,26 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
      * Called by issuance module's `resolveEquityPositions` method which immediately transfers the collateral
      * component from SetToken to redeemer after this hook executes.
      *
-     * @param _setToken             Instance of the SetToken
+     * @param _jasperVault             Instance of the SetToken
      * @param _setTokenQuantity     Quantity of SetToken to redeem
      * @param _component            Address of deposit collateral component
      * @param _isEquity             True if componentHook called from issuance module for equity flow, false otherwise
      */
     function componentRedeemHook(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _setTokenQuantity,
         IERC20 _component,
         bool _isEquity
     )
         external
         override
-        onlyModule(_setToken)
+        onlyModule(_jasperVault)
     {
         if (_isEquity) {
-            int256 externalPositionUnit = _setToken.getExternalPositionRealUnit(address(_component), address(this));
+            int256 externalPositionUnit = _jasperVault.getExternalPositionRealUnit(address(_component), address(this));
             uint256 usdcTransferOutNotionalQuantity = _setTokenQuantity.preciseMul(externalPositionUnit.toUint256());
 
-            _withdraw(_setToken, usdcTransferOutNotionalQuantity);
+            _withdraw(_jasperVault, usdcTransferOutNotionalQuantity);
         }
     }
 
@@ -575,24 +575,24 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
      * be transferred in per SetToken. Values in the returned arrays map to the same index in the
      * SetToken's components array
      *
-     * @param _setToken             Instance of SetToken
+     * @param _jasperVault             Instance of SetToken
      * @param _setTokenQuantity     Number of sets to issue
      *
      * @return equityAdjustments array containing a single element and an empty debtAdjustments array
      */
     function getIssuanceAdjustments(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _setTokenQuantity
     )
         external
         override
         returns (int256[] memory, int256[] memory)
     {
-        int256 newExternalPositionUnit = positions[_setToken].length > 0
-            ? _executePositionTrades(_setToken, _setTokenQuantity, true, true)
+        int256 newExternalPositionUnit = positions[_jasperVault].length > 0
+            ? _executePositionTrades(_jasperVault, _setTokenQuantity, true, true)
             : 0;
 
-        return _formatAdjustments(_setToken, newExternalPositionUnit);
+        return _formatAdjustments(_jasperVault, newExternalPositionUnit);
     }
 
     /**
@@ -600,13 +600,13 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
      * redeeming a quantity of SetToken representing the amount of collateral returned per SetToken.
      * Values in the returned arrays map to the same index in the SetToken's components array.
      *
-     * @param _setToken             Instance of SetToken
+     * @param _jasperVault             Instance of SetToken
      * @param _setTokenQuantity     Number of sets to issue
      *
      * @return equityAdjustments array containing a single element and an empty debtAdjustments array
      */
     function getRedemptionAdjustments(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _setTokenQuantity
     )
         external
@@ -614,17 +614,17 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
         override
         returns (int256[] memory, int256[] memory _)
     {
-        int256 newExternalPositionUnit = positions[_setToken].length > 0
-            ? _executePositionTrades(_setToken, _setTokenQuantity, false, true)
+        int256 newExternalPositionUnit = positions[_jasperVault].length > 0
+            ? _executePositionTrades(_jasperVault, _setTokenQuantity, false, true)
             : 0;
 
-        return _formatAdjustments(_setToken, newExternalPositionUnit);
+        return _formatAdjustments(_jasperVault, newExternalPositionUnit);
     }
 
     /**
      * @dev Returns a PositionUnitNotionalInfo array representing all positions open for the SetToken.
      *
-     * @param _setToken         Instance of SetToken
+     * @param _jasperVault         Instance of SetToken
      *
      * @return PositionUnitInfo array, in which each element has properties:
      *
@@ -632,14 +632,14 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
      *         + baseBalance:  baseToken balance as notional quantity (10**18)
      *         + quoteBalance: USDC quote asset balance as notional quantity (10**18)
      */
-    function getPositionNotionalInfo(ISetToken _setToken) public view returns (PerpV2Positions.PositionNotionalInfo[] memory) {
-        return PerpV2Positions.getPositionNotionalInfo(_setToken, positions[_setToken], perpAccountBalance);
+    function getPositionNotionalInfo(IJasperVault _jasperVault) public view returns (PerpV2Positions.PositionNotionalInfo[] memory) {
+        return PerpV2Positions.getPositionNotionalInfo(_jasperVault, positions[_jasperVault], perpAccountBalance);
     }
 
     /**
      * @dev Returns a PositionUnitInfo array representing all positions open for the SetToken.
      *
-     * @param _setToken         Instance of SetToken
+     * @param _jasperVault         Instance of SetToken
      *
      * @return PositionUnitInfo array, in which each element has properties:
      *
@@ -647,15 +647,15 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
      *         + baseUnit:  baseToken balance as position unit (10**18)
      *         + quoteUnit: USDC quote asset balance as position unit (10**18)
      */
-    function getPositionUnitInfo(ISetToken _setToken) external view returns (PerpV2Positions.PositionUnitInfo[] memory) {
-        return PerpV2Positions.getPositionUnitInfo(_setToken, positions[_setToken], perpAccountBalance);
+    function getPositionUnitInfo(IJasperVault _jasperVault) external view returns (PerpV2Positions.PositionUnitInfo[] memory) {
+        return PerpV2Positions.getPositionUnitInfo(_jasperVault, positions[_jasperVault], perpAccountBalance);
     }
 
     /**
      * @dev Gets Perp account info for SetToken. Returns an AccountInfo struct containing account wide
      * (rather than position specific) balance info
      *
-     * @param  _setToken            Instance of the SetToken
+     * @param  _jasperVault            Instance of the SetToken
      *
      * @return accountInfo          struct with properties for:
      *
@@ -664,17 +664,17 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
      *         + pending funding payments (10**18)
      *         + net quote balance (10**18)
      */
-    function getAccountInfo(ISetToken _setToken) public view returns (AccountInfo memory accountInfo) {
-        (int256 owedRealizedPnl,, ) =  perpAccountBalance.getPnlAndPendingFee(address(_setToken));
+    function getAccountInfo(IJasperVault _jasperVault) public view returns (AccountInfo memory accountInfo) {
+        (int256 owedRealizedPnl,, ) =  perpAccountBalance.getPnlAndPendingFee(address(_jasperVault));
 
         // NOTE: pendingFundingPayments are represented as in the Perp system as "funding owed"
         // e.g a positive number is a debt which gets subtracted from owedRealizedPnl on settlement.
         // We are flipping its sign here to reflect its settlement value.
         accountInfo = AccountInfo({
-            collateralBalance: perpVault.getBalance(address(_setToken)).toPreciseUnitsFromDecimals(collateralDecimals),
+            collateralBalance: perpVault.getBalance(address(_jasperVault)).toPreciseUnitsFromDecimals(collateralDecimals),
             owedRealizedPnl: owedRealizedPnl,
-            pendingFundingPayments: perpExchange.getAllPendingFundingPayment(address(_setToken)).neg(),
-            netQuoteBalance: PerpV2Positions.getNetQuoteBalance(_setToken, positions[_setToken], perpAccountBalance)
+            pendingFundingPayments: perpExchange.getAllPendingFundingPayment(address(_jasperVault)).neg(),
+            netQuoteBalance: PerpV2Positions.getNetQuoteBalance(_jasperVault, positions[_jasperVault], perpAccountBalance)
         });
     }
 
@@ -707,14 +707,14 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
      * margin ratio (capped at ~9X) and limits the amount of Set that can issued at once to
      * a multiple of the current Perp account value (will vary depending on Set's leverage ratio).
      *
-     * @param _setToken             Instance of the SetToken
+     * @param _jasperVault             Instance of the SetToken
      * @param _setTokenQuantity     Quantity of Set to issue
      * @param _isIssue              If true, invocation is for issuance, redemption otherwise
      * @param _isSimulation         If true, trading is only simulated (to return issuance adjustments)
      * @return int256               Amount of collateral to transfer in/out in position units
      */
     function _executePositionTrades(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _setTokenQuantity,
         bool _isIssue,
         bool _isSimulation
@@ -722,16 +722,16 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
         internal
         returns (int256)
     {
-        _syncPositionList(_setToken);
+        _syncPositionList(_jasperVault);
         int256 setTokenQuantityInt = _setTokenQuantity.toInt256();
 
         // Note: `issued` naming convention used here for brevity. This logic is also run on redemption
         // and variable may refer to the value which will be redeemed.
-        int256 accountValueIssued = _calculatePartialAccountValuePositionUnit(_setToken).preciseMul(setTokenQuantityInt);
+        int256 accountValueIssued = _calculatePartialAccountValuePositionUnit(_jasperVault).preciseMul(setTokenQuantityInt);
 
-        PerpV2Positions.PositionNotionalInfo[] memory positionInfo = getPositionNotionalInfo(_setToken);
+        PerpV2Positions.PositionNotionalInfo[] memory positionInfo = getPositionNotionalInfo(_jasperVault);
         uint256 positionLength = positionInfo.length;
-        int256 totalSupply = _setToken.totalSupply().toInt256();
+        int256 totalSupply = _jasperVault.totalSupply().toInt256();
 
         for(uint i = 0; i < positionLength; i++) {
             int256 baseTradeNotionalQuantity = positionInfo[i].baseBalance.preciseDiv(totalSupply).preciseMul(setTokenQuantityInt);
@@ -739,7 +739,7 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
             // When redeeming, we flip the sign of baseTradeNotionalQuantity because we are reducing the size of the position,
             // e.g selling base when long, buying base when short
             PerpV2LibraryV2.ActionInfo memory actionInfo = _createActionInfoNotional(
-                _setToken,
+                _jasperVault,
                 positionInfo[i].baseToken,
                 _isIssue ? baseTradeNotionalQuantity : baseTradeNotionalQuantity.neg(),
                 0
@@ -775,17 +775,17 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
      * as a position unit. It forms the base to which traded position values are added during issuance or redemption,
      * and to which existing position values are added when calculating the externalPositionUnit.
      *
-     * @param _setToken             Instance of the SetToken
+     * @param _jasperVault             Instance of the SetToken
      * @return accountValue         Partial account value in position units
      */
-    function _calculatePartialAccountValuePositionUnit(ISetToken _setToken) internal view returns (int256 accountValue) {
-        AccountInfo memory accountInfo = getAccountInfo(_setToken);
+    function _calculatePartialAccountValuePositionUnit(IJasperVault _jasperVault) internal view returns (int256 accountValue) {
+        AccountInfo memory accountInfo = getAccountInfo(_jasperVault);
 
         accountValue = accountInfo.collateralBalance
             .add(accountInfo.owedRealizedPnl)
             .add(accountInfo.pendingFundingPayments)
             .add(accountInfo.netQuoteBalance)
-            .preciseDiv(_setToken.totalSupply().toInt256());
+            .preciseDiv(_jasperVault.totalSupply().toInt256());
     }
 
     /**
@@ -794,17 +794,17 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
      * the componentIssue hook, skipping external position unit setting because that method is assumed
      * to be the end of a call sequence (e.g manager will not need to read the updated value)
      *
-     * @param _setToken                     Instance of SetToken
+     * @param _jasperVault                     Instance of SetToken
      * @param _collateralNotionalQuantity   Notional collateral quantity to deposit
      */
-    function _deposit(ISetToken _setToken, uint256 _collateralNotionalQuantity) internal {
-        _setToken.invokeApprove(
+    function _deposit(IJasperVault _jasperVault, uint256 _collateralNotionalQuantity) internal {
+        _jasperVault.invokeApprove(
             address(collateralToken),
             address(perpVault),
             _collateralNotionalQuantity
         );
 
-        _setToken.invokeDeposit(perpVault, collateralToken, _collateralNotionalQuantity);
+        _jasperVault.invokeDeposit(perpVault, collateralToken, _collateralNotionalQuantity);
     }
 
     /**
@@ -814,29 +814,29 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
      * NOTE: This flow is only used when invoking the external `deposit` function - it converts collateral
      * quantity units into a notional quantity.
      *
-     * @param _setToken                     Instance of SetToken
+     * @param _jasperVault                     Instance of SetToken
      * @param _collateralQuantityUnits      Collateral quantity in position units to deposit
      * @return uint256                      Notional quantity deposited
      */
     function _depositAndUpdatePositions(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _collateralQuantityUnits
     )
         internal
         returns (uint256)
     {
-        uint256 initialCollateralPositionBalance = collateralToken.balanceOf(address(_setToken));
-        uint256 collateralNotionalQuantity = _collateralQuantityUnits.preciseMul(_setToken.totalSupply());
+        uint256 initialCollateralPositionBalance = collateralToken.balanceOf(address(_jasperVault));
+        uint256 collateralNotionalQuantity = _collateralQuantityUnits.preciseMul(_jasperVault.totalSupply());
 
-        _deposit(_setToken, collateralNotionalQuantity);
+        _deposit(_jasperVault, collateralNotionalQuantity);
 
-        _setToken.calculateAndEditDefaultPosition(
+        _jasperVault.calculateAndEditDefaultPosition(
             address(collateralToken),
-            _setToken.totalSupply(),
+            _jasperVault.totalSupply(),
             initialCollateralPositionBalance
         );
 
-        _updateExternalPositionUnit(_setToken);
+        _updateExternalPositionUnit(_jasperVault);
 
         return collateralNotionalQuantity;
     }
@@ -847,13 +847,13 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
      * skipping position unit state updates because the funds withdrawn to SetToken are immediately
      * forwarded to `feeRecipient` and SetToken owner respectively.
      *
-     * @param _setToken                     Instance of SetToken
+     * @param _jasperVault                     Instance of SetToken
      * @param _collateralNotionalQuantity   Notional collateral quantity to withdraw
      */
-    function _withdraw(ISetToken _setToken, uint256 _collateralNotionalQuantity) internal {
+    function _withdraw(IJasperVault _jasperVault, uint256 _collateralNotionalQuantity) internal {
         if (_collateralNotionalQuantity == 0) return;
 
-        _setToken.invokeWithdraw(perpVault, collateralToken, _collateralNotionalQuantity);
+        _jasperVault.invokeWithdraw(perpVault, collateralToken, _collateralNotionalQuantity);
     }
 
     /**
@@ -864,34 +864,34 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
      * NOTE: This flow is only used when invoking the external `withdraw` function - it converts
      * a collateral units quantity into a notional quantity before invoking withdraw.
      *
-     * @param _setToken                     Instance of SetToken
+     * @param _jasperVault                     Instance of SetToken
      * @param _collateralQuantityUnits      Collateral quantity in position units to withdraw
      * @return uint256                      Notional quantity withdrawn
      */
     function _withdrawAndUpdatePositions(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _collateralQuantityUnits
     )
         internal
         returns (uint256)
     {
-        uint256 initialCollateralPositionBalance = collateralToken.balanceOf(address(_setToken));
+        uint256 initialCollateralPositionBalance = collateralToken.balanceOf(address(_jasperVault));
         // Round up to calculate notional, so that we make atleast `_collateralQuantityUnits` position unit after withdraw.
         // Example, let totalSupply = 1.005e18, _collateralQuantityUnits = 13159, then
         // collateralNotionalQuantity = 13159 * 1.005e18 / 1e18 = 13225 (13224.795 rounded up)
         // We withdraw 13225 from Perp and make a position unit from it. So newPositionUnit = (13225 / 1.005e18) * 1e18
         // = 13159 (13159.2039801 rounded down)
-        uint256 collateralNotionalQuantity = _collateralQuantityUnits.preciseMulCeil(_setToken.totalSupply());
+        uint256 collateralNotionalQuantity = _collateralQuantityUnits.preciseMulCeil(_jasperVault.totalSupply());
 
-        _withdraw(_setToken, collateralNotionalQuantity);
+        _withdraw(_jasperVault, collateralNotionalQuantity);
 
-        _setToken.calculateAndEditDefaultPosition(
+        _jasperVault.calculateAndEditDefaultPosition(
             address(collateralToken),
-            _setToken.totalSupply(),
+            _jasperVault.totalSupply(),
             initialCollateralPositionBalance
         );
 
-        _updateExternalPositionUnit(_setToken);
+        _updateExternalPositionUnit(_jasperVault);
 
         return collateralNotionalQuantity;
     }
@@ -900,12 +900,12 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
     /**
      * @dev Calculates protocol fee on module and pays protocol fee from SetToken
      *
-     * @param  _setToken            Instance of SetToken
+     * @param  _jasperVault            Instance of SetToken
      * @param  _exchangedQuantity   Notional quantity of USDC exchanged in trade (e.g deltaQuote)
      * @return uint256              Total protocol fee paid in underlying collateral decimals e.g (USDC = 6)
      */
     function _accrueProtocolFee(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _exchangedQuantity
     )
         internal
@@ -914,9 +914,9 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
         uint256 protocolFee = getModuleFee(PROTOCOL_TRADE_FEE_INDEX, _exchangedQuantity);
         uint256 protocolFeeInPreciseUnits = protocolFee.fromPreciseUnitToDecimals(collateralDecimals);
 
-        _withdraw(_setToken, protocolFeeInPreciseUnits);
+        _withdraw(_jasperVault, protocolFeeInPreciseUnits);
 
-        payProtocolFeeFromSetToken(_setToken, address(collateralToken), protocolFeeInPreciseUnits);
+        payProtocolFeeFromSetToken(_jasperVault, address(collateralToken), protocolFeeInPreciseUnits);
 
         return protocolFeeInPreciseUnits;
     }
@@ -927,7 +927,7 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
      * the _baseTokenQuantity = -(baseBalance/setSupply) then close the position entirely. This method is
      * only called from `trade` - the issue/redeem flow uses createActionInfoNotional directly.
      *
-     * @param _setToken             Instance of the SetToken
+     * @param _jasperVault             Instance of the SetToken
      * @param _baseToken            Address of base token being traded into/out of
      * @param _baseQuantityUnits    Quantity of baseToken to trade in PositionUnits
      * @param _quoteReceiveUnits    Quantity of quote to receive if selling base and pay if buying, in PositionUnits
@@ -935,7 +935,7 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
      * @return PerpV2LibraryV2.ActionInfo           Instance of constructed PerpV2LibraryV2.ActionInfo struct
      */
     function _createAndValidateActionInfo(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _baseToken,
         int256 _baseQuantityUnits,
         uint256 _quoteReceiveUnits
@@ -947,9 +947,9 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
         require(_baseQuantityUnits != 0, "Amount is 0");
         require(perpMarketRegistry.hasPool(_baseToken), "Base token does not exist");
 
-        uint256 totalSupply = _setToken.totalSupply();
+        uint256 totalSupply = _jasperVault.totalSupply();
 
-        int256 baseBalance = perpAccountBalance.getBase(address(_setToken), _baseToken);
+        int256 baseBalance = perpAccountBalance.getBase(address(_jasperVault), _baseToken);
         int256 basePositionUnit = baseBalance.preciseDiv(totalSupply.toInt256());
 
         int256 baseNotional = _baseQuantityUnits == basePositionUnit.neg()
@@ -957,7 +957,7 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
             : _baseQuantityUnits.preciseMul(totalSupply.toInt256());
 
         return _createActionInfoNotional(
-            _setToken,
+            _jasperVault,
             _baseToken,
             baseNotional,
             _quoteReceiveUnits.preciseMul(totalSupply)
@@ -971,7 +971,7 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
      *
      * (See _executeTrade method comments for details about `oppositeAmountBound` configuration)
      *
-     * @param _setToken                 Instance of the SetToken
+     * @param _jasperVault                 Instance of the SetToken
      * @param _baseToken                Address of base token being traded into/out of
      * @param _baseTokenQuantity        Notional quantity of baseToken to trade
      * @param _quoteReceiveQuantity     Notional quantity of quote to receive if selling base and pay if buying
@@ -979,7 +979,7 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
      * @return PerpV2LibraryV2.ActionInfo               Instance of constructed PerpV2LibraryV2.ActionInfo struct
      */
     function _createActionInfoNotional(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _baseToken,
         int256 _baseTokenQuantity,
         uint256 _quoteReceiveQuantity
@@ -994,7 +994,7 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
         bool isBuy = _baseTokenQuantity > 0;
 
         return PerpV2LibraryV2.ActionInfo({
-            setToken: _setToken,
+            jasperVault: _jasperVault,
             baseToken: _baseToken,
             isBuy: isBuy,
             baseTokenAmount: _baseTokenQuantity.abs(),
@@ -1006,20 +1006,20 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
      * @dev Update position address array if a token has been newly added or completely sold off
      * during lever/delever
      *
-     * @param _setToken     Instance of SetToken
+     * @param _jasperVault     Instance of SetToken
      * @param _baseToken    Address of virtual base token
      */
-    function _updatePositionList(ISetToken _setToken, address _baseToken) internal {
-        address[] memory positionList = positions[_setToken];
+    function _updatePositionList(IJasperVault _jasperVault, address _baseToken) internal {
+        address[] memory positionList = positions[_jasperVault];
         bool hasBaseToken = positionList.contains(_baseToken);
 
         if (hasBaseToken) {
-            if(!_hasBaseBalance(_setToken, _baseToken)) {
-                positions[_setToken].removeStorage(_baseToken);
+            if(!_hasBaseBalance(_jasperVault, _baseToken)) {
+                positions[_jasperVault].removeStorage(_baseToken);
             }
         } else {
-            require(positions[_setToken].length < maxPerpPositionsPerSet, "Exceeds max perpetual positions per set");
-            positions[_setToken].push(_baseToken);
+            require(positions[_jasperVault].length < maxPerpPositionsPerSet, "Exceeds max perpetual positions per set");
+            positions[_jasperVault].push(_baseToken);
         }
     }
 
@@ -1028,16 +1028,16 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
      * sync is done before issuance and redemption to account for positions that may have
      * been liquidated.
      *
-     * @param _setToken         Instance of the SetToken
+     * @param _jasperVault         Instance of the SetToken
      */
-    function _syncPositionList(ISetToken _setToken) internal {
-        address[] memory positionList = positions[_setToken];
+    function _syncPositionList(IJasperVault _jasperVault) internal {
+        address[] memory positionList = positions[_jasperVault];
         uint256 positionLength = positionList.length;
 
         for (uint256 i = 0; i < positionLength; i++) {
             address currPosition = positionList[i];
-            if (!_hasBaseBalance(_setToken, currPosition)) {
-                positions[_setToken].removeStorage(currPosition);
+            if (!_hasBaseBalance(_jasperVault, currPosition)) {
+                positions[_jasperVault].removeStorage(currPosition);
             }
         }
     }
@@ -1046,14 +1046,14 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
      * @dev Checks to see if we can make 1 positionUnit worth of a baseToken position, if not we consider the Set to have
      * no balance and return false
      *
-     * @param _setToken     Instance of SetToken
+     * @param _jasperVault     Instance of SetToken
      * @param _baseToken    Address of virtual base token
      * @return bool         True if a non-dust base token balance exists, false otherwise
      */
-    function _hasBaseBalance(ISetToken _setToken, address _baseToken) internal view returns(bool) {
+    function _hasBaseBalance(IJasperVault _jasperVault, address _baseToken) internal view returns(bool) {
         int256 baseBalanceUnit = perpAccountBalance
-            .getBase(address(_setToken), _baseToken)
-            .preciseDiv(_setToken.totalSupply().toInt256());
+            .getBase(address(_jasperVault), _baseToken)
+            .preciseDiv(_jasperVault.totalSupply().toInt256());
 
         return (baseBalanceUnit > 1) || (baseBalanceUnit < -1);
     }
@@ -1069,15 +1069,15 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
      * withdraw. It does not reflect the current value of the Set's perpetual position. The true current value can
      * be calculated from getPositionNotionalInfo.
      *
-     * @param _setToken     Instance of SetToken
+     * @param _jasperVault     Instance of SetToken
      */
-    function _updateExternalPositionUnit(ISetToken _setToken) internal {
-        int256 collateralValueUnit = perpVault.getBalance(address(_setToken))
+    function _updateExternalPositionUnit(IJasperVault _jasperVault) internal {
+        int256 collateralValueUnit = perpVault.getBalance(address(_jasperVault))
             .toPreciseUnitsFromDecimals(collateralDecimals)
-            .preciseDiv(_setToken.totalSupply().toInt256())
+            .preciseDiv(_jasperVault.totalSupply().toInt256())
             .fromPreciseUnitToDecimals(collateralDecimals);
 
-        _setToken.editExternalPosition(
+        _jasperVault.editExternalPosition(
             address(collateralToken),
             address(this),
             collateralValueUnit,
@@ -1093,26 +1093,26 @@ contract PerpV2LeverageModuleV2 is ModuleBaseV2, ReentrancyGuard, Ownable, SetTo
      * array. All other values are left unset (0). An empty-value components length debtAdjustments
      * array is also returned.
      *
-     * @param _setToken                         Instance of the SetToken
+     * @param _jasperVault                         Instance of the SetToken
      * @param _newExternalPositionUnit          Dynamically calculated externalPositionUnit
      * @return int256[]                         Components-length array with equity adjustment value at appropriate index
      * @return int256[]                         Components-length array of zeroes (debt adjustments)
      */
     function _formatAdjustments(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         int256 _newExternalPositionUnit
     )
         internal
         view
         returns (int256[] memory, int256[] memory)
     {
-        int256 currentExternalPositionUnit = _setToken.getExternalPositionRealUnit(
+        int256 currentExternalPositionUnit = _jasperVault.getExternalPositionRealUnit(
             address(collateralToken),
             address(this)
         );
 
         return PerpV2Positions.formatAdjustments(
-            _setToken,
+            _jasperVault,
             address(collateralToken),
             currentExternalPositionUnit,
             _newExternalPositionUnit

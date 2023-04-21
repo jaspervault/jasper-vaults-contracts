@@ -43,8 +43,8 @@ contract Controller is Ownable {
     event ModuleRemoved(address indexed _module);
     event ResourceAdded(address indexed _resource, uint256 _id);
     event ResourceRemoved(address indexed _resource, uint256 _id);
-    event SetAdded(address indexed _setToken, address indexed _factory);
-    event SetRemoved(address indexed _setToken);
+    event SetAdded(address indexed _jasperVault, address indexed _factory);
+    event SetRemoved(address indexed _jasperVault);
 
     /* ============ Modifiers ============ */
 
@@ -153,33 +153,33 @@ contract Controller is Ownable {
     }
 
     /**
-     * PRIVILEGED FACTORY FUNCTION. Adds a newly deployed SetToken as an enabled SetToken.
+     * PRIVILEGED FACTORY FUNCTION. Adds a newly deployed JasperVault as an enabled JasperVault.
      *
-     * @param _setToken               Address of the SetToken contract to add
+     * @param _jasperVault               Address of the JasperVault contract to add
      */
-    function addSet(address _setToken) external onlyInitialized onlyFactory {
-        require(!isSet[_setToken], "Set already exists");
+    function addSet(address _jasperVault) external onlyInitialized onlyFactory {
+        require(!isSet[_jasperVault], "Set already exists");
 
-        isSet[_setToken] = true;
+        isSet[_jasperVault] = true;
 
-        sets.push(_setToken);
+        sets.push(_jasperVault);
 
-        emit SetAdded(_setToken, msg.sender);
+        emit SetAdded(_jasperVault, msg.sender);
     }
 
     /**
      * PRIVILEGED GOVERNANCE FUNCTION. Allows governance to remove a Set
      *
-     * @param _setToken               Address of the SetToken contract to remove
+     * @param _jasperVault               Address of the JasperVault contract to remove
      */
-    function removeSet(address _setToken) external onlyInitialized onlyOwner {
-        require(isSet[_setToken], "Set does not exist");
+    function removeSet(address _jasperVault) external onlyInitialized onlyOwner {
+        require(isSet[_jasperVault], "Set does not exist");
 
-        sets = sets.remove(_setToken);
+        sets = sets.remove(_jasperVault);
 
-        isSet[_setToken] = false;
+        isSet[_jasperVault] = false;
 
-        emit SetRemoved(_setToken);
+        emit SetRemoved(_jasperVault);
     }
 
     /**

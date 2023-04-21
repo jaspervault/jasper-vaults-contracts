@@ -21,7 +21,7 @@ pragma experimental "ABIEncoderV2";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import { IPerpV2LeverageModuleV2 } from "./IPerpV2LeverageModuleV2.sol";
-import { ISetToken } from "./ISetToken.sol";
+import { IJasperVault } from "./IJasperVault.sol";
 
 /**
  * @title IPerpV2BasisTradingModule
@@ -45,28 +45,28 @@ interface IPerpV2BasisTradingModule is IPerpV2LeverageModuleV2 {
 
     /**
      * @dev Emitted on performance fee update
-     * @param _setToken             Instance of SetToken
+     * @param _jasperVault             Instance of SetToken
      * @param _newPerformanceFee    New performance fee percentage (1% = 1e16)
      */
-    event PerformanceFeeUpdated(ISetToken indexed _setToken, uint256 _newPerformanceFee);
+    event PerformanceFeeUpdated(IJasperVault indexed _jasperVault, uint256 _newPerformanceFee);
 
     /**
      * @dev Emitted on fee recipient update
-     * @param _setToken             Instance of SetToken
+     * @param _jasperVault             Instance of SetToken
      * @param _newFeeRecipient      New performance fee recipient
      */
-    event FeeRecipientUpdated(ISetToken indexed _setToken, address _newFeeRecipient);
+    event FeeRecipientUpdated(IJasperVault indexed _jasperVault, address _newFeeRecipient);
 
     /**
      * @dev Emitted on funding withdraw
-     * @param _setToken             Instance of SetToken
+     * @param _jasperVault             Instance of SetToken
      * @param _collateralToken      Token being withdrawn as funding (USDC)
      * @param _amountWithdrawn      Amount of funding being withdrawn from Perp (USDC)
      * @param _managerFee           Amount of performance fee accrued to manager (USDC)
      * @param _protocolFee          Amount of performance fee accrued to protocol (USDC)
      */
     event FundingWithdrawn(
-        ISetToken indexed  _setToken,
+        IJasperVault indexed  _jasperVault,
         IERC20 _collateralToken,
         uint256 _amountWithdrawn,
         uint256 _managerFee,
@@ -76,11 +76,11 @@ interface IPerpV2BasisTradingModule is IPerpV2LeverageModuleV2 {
     /* ============ State Variable Getters ============ */
 
     // Mapping to store fee settings for each SetToken
-    function feeSettings(ISetToken _setToken) external view returns(FeeState memory);
+    function feeSettings(IJasperVault _jasperVault) external view returns(FeeState memory);
 
     // Mapping to store funding that has been settled on Perpetual Protocol due to actions via this module
     // and hasn't been withdrawn for reinvesting yet. Values are stored in precise units (10e18).
-    function settledFunding(ISetToken _settledFunding) external view returns (uint256);
+    function settledFunding(IJasperVault _settledFunding) external view returns (uint256);
 
     /* ============ External Functions ============ */
 
@@ -88,10 +88,10 @@ interface IPerpV2BasisTradingModule is IPerpV2LeverageModuleV2 {
      * @dev MANAGER ONLY: Initializes this module to the SetToken and sets fee settings. Either the SetToken needs to
      * be on the allowed list or anySetAllowed needs to be true.
      *
-     * @param _setToken             Instance of the SetToken to initialize
+     * @param _jasperVault             Instance of the SetToken to initialize
      */
     function initialize(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         FeeState memory _settings
     )
         external;
@@ -99,20 +99,20 @@ interface IPerpV2BasisTradingModule is IPerpV2LeverageModuleV2 {
     /**
      * @dev MANAGER ONLY: Similar to PerpV2LeverageModuleV2#trade. Allows manager to buy or sell perps to change exposure
      * to the underlying baseToken. Any pending funding that would be settled during opening a position on Perpetual
-     * protocol is added to (or subtracted from) `settledFunding[_setToken]` and can be withdrawn later using
+     * protocol is added to (or subtracted from) `settledFunding[_jasperVault]` and can be withdrawn later using
      * `withdrawFundingAndAccrueFees` by the SetToken manager.
      * NOTE: Calling a `nonReentrant` function from another `nonReentrant` function is not supported. Hence, we can't
      * add the `nonReentrant` modifier here because `PerpV2LeverageModuleV2#trade` function has a reentrancy check.
      * NOTE: This method doesn't update the externalPositionUnit because it is a function of UniswapV3 virtual
      * token market prices and needs to be generated on the fly to be meaningful.
      *
-     * @param _setToken                     Instance of the SetToken
+     * @param _jasperVault                     Instance of the SetToken
      * @param _baseToken                    Address virtual token being traded
      * @param _baseQuantityUnits            Quantity of virtual token to trade in position units
      * @param _quoteBoundQuantityUnits      Max/min of vQuote asset to pay/receive when buying or selling
      */
     function tradeAndTrackFunding(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _baseToken,
         int256 _baseQuantityUnits,
         uint256 _quoteBoundQuantityUnits
@@ -127,11 +127,11 @@ interface IPerpV2BasisTradingModule is IPerpV2LeverageModuleV2 {
      * NOTE: Within PerpV2, `withdraw` settles `owedRealizedPnl` and any pending funding payments
      * to the Perp vault prior to transfer.
      *
-     * @param _setToken                 Instance of the SetToken
+     * @param _jasperVault                 Instance of the SetToken
      * @param _notionalFunding          Notional amount of funding to withdraw (in USDC decimals)
      */
     function withdrawFundingAndAccrueFees(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _notionalFunding
     )
         external;
@@ -141,11 +141,11 @@ interface IPerpV2BasisTradingModule is IPerpV2LeverageModuleV2 {
     /**
      * @dev MANAGER ONLY. Update performance fee percentage.
      *
-     * @param _setToken         Instance of SetToken
+     * @param _jasperVault         Instance of SetToken
      * @param _newFee           New performance fee percentage in precise units (1e16 = 1%)
      */
     function updatePerformanceFee(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _newFee
     )
         external;
@@ -153,10 +153,10 @@ interface IPerpV2BasisTradingModule is IPerpV2LeverageModuleV2 {
     /**
      * @dev MANAGER ONLY. Update performance fee recipient (address to which performance fees are sent).
      *
-     * @param _setToken             Instance of SetToken
+     * @param _jasperVault             Instance of SetToken
      * @param _newFeeRecipient      Address of new fee recipient
      */
-    function updateFeeRecipient(ISetToken _setToken, address _newFeeRecipient)
+    function updateFeeRecipient(IJasperVault _jasperVault, address _newFeeRecipient)
         external;
 
     /* ============ External Getter Functions ============ */
@@ -165,12 +165,12 @@ interface IPerpV2BasisTradingModule is IPerpV2LeverageModuleV2 {
      * @dev Adds pending funding payment to tracked settled funding. Returns updated settled funding value in precise units (10e18).
      *
      * NOTE: Tracked settled funding value can not be less than zero, hence it is reset to zero if pending funding
-     * payment is negative and |pending funding payment| >= |settledFunding[_setToken]|.
+     * payment is negative and |pending funding payment| >= |settledFunding[_jasperVault]|.
      *
      * NOTE: Returned updated settled funding value is correct only for the current block since pending funding payment
      * updates every block.
      *
-     * @param _setToken             Instance of SetToken
+     * @param _jasperVault             Instance of SetToken
      */
-    function getUpdatedSettledFunding(ISetToken _setToken) external view returns (uint256);
+    function getUpdatedSettledFunding(IJasperVault _jasperVault) external view returns (uint256);
 }

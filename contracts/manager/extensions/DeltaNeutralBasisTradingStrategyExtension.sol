@@ -30,9 +30,9 @@ import { SignedSafeMath } from "@openzeppelin/contracts/math/SignedSafeMath.sol"
 import { BytesLib } from "@setprotocol/set-protocol-v2/external/contracts/uniswap/v3/lib/BytesLib.sol";
 import { BytesArrayUtils } from "@setprotocol/set-protocol-v2/contracts/lib/BytesArrayUtils.sol";
 import { IAccountBalance } from "@setprotocol/set-protocol-v2/contracts/interfaces/external/perp-v2/IAccountBalance.sol";
-import { IPerpV2BasisTradingModule } from "@setprotocol/set-protocol-v2/contracts/interfaces/IPerpV2BasisTradingModule.sol";
+import { IPerpV2BasisTradingModule } from "../../interfaces/IPerpV2BasisTradingModule.sol";
 import { IPerpV2LeverageModuleV2 } from "@setprotocol/set-protocol-v2/contracts/interfaces/IPerpV2LeverageModuleV2.sol";
-import { ISetToken } from "@setprotocol/set-protocol-v2/contracts/interfaces/ISetToken.sol";
+import { IJasperVault } from "../../interfaces/IJasperVault.sol";
 import { ITradeModule } from "@setprotocol/set-protocol-v2/contracts/interfaces/ITradeModule.sol";
 import { IVault } from "@setprotocol/set-protocol-v2/contracts/interfaces/external/perp-v2/IVault.sol";
 import { PreciseUnitMath } from "@setprotocol/set-protocol-v2/contracts/lib/PreciseUnitMath.sol";
@@ -48,7 +48,7 @@ import { IUniswapV3Quoter } from "../interfaces/IUniswapV3Quoter.sol";
  * @title DeltaNeutralBasisTradingStrategyExtension
  * @author Set Protocol
  *
- * Strategy smart contract that transforms a SetToken into an on-chain delta neutral basis trading token that earns yield by shorting assets
+ * Strategy smart contract that transforms a JasperVault into an on-chain delta neutral basis trading token that earns yield by shorting assets
  * on PerpV2 and collecting funding, while maintaing delta neutral exposure to the short asset by holding an equal amount of spot asset.
  * This extension is paired with the PerpV2BasisTradingModule from Set Protocol where module interactions are invoked via the IBaseManager
  * contract. Any basis trading token can be constructed as long as the market is listed on Perp V2 and there is enough liquidity for the
@@ -89,7 +89,7 @@ contract DeltaNeutralBasisTradingStrategyExtension is BaseExtension {
         int256 quoteValue;                                  // Valuation in USD adjusted for decimals in precise units (10e18)
         int256 basePrice;                                   // Price of base asset in precise units (10e18) from PerpV2 Oracle
         int256 quotePrice;                                  // Price of quote asset in precise units (10e18) from PerpV2 Oracle
-        uint256 setTotalSupply;                             // Total supply of SetToken
+        uint256 setTotalSupply;                             // Total supply of JasperVault
     }
 
     struct LeverageInfo {
@@ -100,7 +100,7 @@ contract DeltaNeutralBasisTradingStrategyExtension is BaseExtension {
     }
 
     struct ContractSettings {
-        ISetToken setToken;                                 // Instance of leverage token
+        IJasperVault jasperVault;                                 // Instance of leverage token
         IPerpV2BasisTradingModule basisTradingModule;       // Instance of PerpV2 basis trading module
         ITradeModule tradeModule;                           // Instance of the trade module
         IUniswapV3Quoter quoter;                            // Instance of UniswapV3 Quoter
@@ -243,7 +243,7 @@ contract DeltaNeutralBasisTradingStrategyExtension is BaseExtension {
 
     /* ============ State Variables ============ */
 
-    ContractSettings internal strategy;                     // Struct of contracts used in the strategy (SetToken, price oracles, leverage module etc)
+    ContractSettings internal strategy;                     // Struct of contracts used in the strategy (JasperVault, price oracles, leverage module etc)
     MethodologySettings internal methodology;               // Struct containing methodology parameters
     ExecutionSettings internal execution;                   // Struct containing execution parameters
     ExchangeSettings internal exchange;                     // Struct containing exchange settings
@@ -309,7 +309,7 @@ contract DeltaNeutralBasisTradingStrategyExtension is BaseExtension {
     }
 
     /**
-     * OPERATOR ONLY: Withdraws specified units of USDC tokens from Perpetual Protocol and adds it as default position on the SetToken.
+     * OPERATOR ONLY: Withdraws specified units of USDC tokens from Perpetual Protocol and adds it as default position on the JasperVault.
      *
      * @param  _collateralUnits     Collateral to withdraw in position units
      */
@@ -318,7 +318,7 @@ contract DeltaNeutralBasisTradingStrategyExtension is BaseExtension {
     }
 
     /**
-     * OPERATOR ONLY: Engage to enter delta neutral position for the first time. SetToken will use 50% of the collateral token to acquire spot asset on Uniswapv3, and deposit
+     * OPERATOR ONLY: Engage to enter delta neutral position for the first time. JasperVault will use 50% of the collateral token to acquire spot asset on Uniswapv3, and deposit
      * rest of the collateral token to PerpV2 to open a new short base token position on PerpV2 such that net exposure to the spot assetis zero. If total rebalance notional
      * is above max trade size, then TWAP is kicked off.
      * To complete engage if TWAP, any valid caller must call iterateRebalance until target is met.
@@ -353,8 +353,8 @@ contract DeltaNeutralBasisTradingStrategyExtension is BaseExtension {
      * ONLY EOA AND ALLOWED CALLER: Rebalance product. If |min leverage ratio| < |current leverage ratio| < |max leverage ratio|, then rebalance
      * can only be called once the rebalance interval has elapsed since last timestamp. If outside the max and min but below incentivized leverage ratio,
      * rebalance can be called anytime to bring leverage ratio back to the max or min bounds. The methodology will determine whether to delever or lever.
-     * If levering up, SetToken increases the short position on PerpV2, withdraws collateral asset from PerpV2 and uses it to acquire more spot asset to keep
-     * the position delta-neutral. If delevering, SetToken decreases the short position on PerpV2, sells spot asset on UniswapV3 and deposits the returned
+     * If levering up, JasperVault increases the short position on PerpV2, withdraws collateral asset from PerpV2 and uses it to acquire more spot asset to keep
+     * the position delta-neutral. If delevering, JasperVault decreases the short position on PerpV2, sells spot asset on UniswapV3 and deposits the returned
      * collateral token to PerpV2 to collateralize the PerpV2 position.
      *
      * Note: If the calculated current leverage ratio is above the incentivized leverage ratio or in TWAP then rebalance cannot be called. Instead, you must call
@@ -450,7 +450,7 @@ contract DeltaNeutralBasisTradingStrategyExtension is BaseExtension {
 
     /**
      * OPERATOR ONLY: Close open baseToken position on Perpetual Protocol and sell spot assets. TWAP cooldown period must have elapsed. This can be used for upgrading or shutting down the strategy.
-     * SetToken will sell all virtual base token positions into virtual USDC and all spot asset to the collateral token (USDC). It deposits the recieved USDC to PerpV2 to collateralize the Perpetual
+     * JasperVault will sell all virtual base token positions into virtual USDC and all spot asset to the collateral token (USDC). It deposits the recieved USDC to PerpV2 to collateralize the Perpetual
      * position. If the chunk rebalance size is less than the total notional size, then this function will trade out of base and spot token position in one go. If chunk rebalance size is above max
      * trade size, then operator must continue to call this function to completely unwind position. The function iterateRebalance will not work.
      *
@@ -485,7 +485,7 @@ contract DeltaNeutralBasisTradingStrategyExtension is BaseExtension {
     }
 
     /**
-     * ONLY EOA AND ALLOWED CALLER: Reinvests tracked settled funding to increase position. SetToken withdraws funding as collateral token using
+     * ONLY EOA AND ALLOWED CALLER: Reinvests tracked settled funding to increase position. JasperVault withdraws funding as collateral token using
      * PerpV2BasisTradingModule. It uses the collateral token to acquire more spot asset and deposit the rest to PerpV2 to increase short perp position.
      * It can only be called once the reinvest interval has elapsed since last reinvest timestamp. TWAP is not supported because reinvestment amounts
      * would be generally small.
@@ -612,7 +612,7 @@ contract DeltaNeutralBasisTradingStrategyExtension is BaseExtension {
     /* ============ External Getter Functions ============ */
 
     /**
-     * Get current leverage ratio. Current leverage ratio is defined as the sum of USD values of all SetToken open positions on Perp V2 divided by its
+     * Get current leverage ratio. Current leverage ratio is defined as the sum of USD values of all JasperVault open positions on Perp V2 divided by its
      * account value on PerpV2. Prices for base and quote asset are retrieved from the Chainlink Price Oracle.
      *
      * return currentLeverageRatio         Current leverage ratio in precise units (10e18)
@@ -768,7 +768,7 @@ contract DeltaNeutralBasisTradingStrategyExtension is BaseExtension {
     function _deposit(uint256 _collateralUnits) internal {
         bytes memory depositCalldata = abi.encodeWithSelector(
             IPerpV2LeverageModuleV2.deposit.selector,
-            address(strategy.setToken),
+            address(strategy.jasperVault),
             _collateralUnits
         );
 
@@ -779,19 +779,19 @@ contract DeltaNeutralBasisTradingStrategyExtension is BaseExtension {
      * Deposits all current USDC tokens held in the Set to Perpetual Protocol.
      */
     function _depositAll() internal {
-        uint256 defaultUsdcUnits = strategy.setToken.getDefaultPositionRealUnit(address(collateralToken)).toUint256();
+        uint256 defaultUsdcUnits = strategy.jasperVault.getDefaultPositionRealUnit(address(collateralToken)).toUint256();
         _deposit(defaultUsdcUnits);
     }
 
     /**
-     * Withdraws specified units of USDC tokens from Perpetual Protocol and adds it as default position on the SetToken.
+     * Withdraws specified units of USDC tokens from Perpetual Protocol and adds it as default position on the JasperVault.
      *
      * @param  _collateralUnits     Collateral to withdraw in position units
      */
     function _withdraw(uint256 _collateralUnits) internal {
         bytes memory withdrawCalldata = abi.encodeWithSelector(
             IPerpV2LeverageModuleV2.withdraw.selector,
-            address(strategy.setToken),
+            address(strategy.jasperVault),
             _collateralUnits
         );
 
@@ -863,12 +863,12 @@ contract DeltaNeutralBasisTradingStrategyExtension is BaseExtension {
         if (baseRebalanceUnits < 0) {
             _withdraw(oppositeBoundUnits);
 
-            // `_withdraw` sets position units to oppositeBoundUnits. The SetToken converts the real units, in this case oppositeBoundUnits,
+            // `_withdraw` sets position units to oppositeBoundUnits. The JasperVault converts the real units, in this case oppositeBoundUnits,
             // to virtual units and stores the virtual units. Converting the stored virtual units back to real units will return oppositeBoundUnits
             // when position multiplier == 1e18 and oppositeBoundUnits - 1 when position mulitplier < 1e18. Hence, trying to trade
             // oppositeBoundUnits worth of collateral when position unit < 1e18 would revert with "Unit cant be greater than existing".
             // To avoid the revert, we fetch the latest position unit and pass it to the trade function.
-            uint256 collateralSendUnits = strategy.setToken.getDefaultPositionRealUnit(address(collateralToken)).toUint256();
+            uint256 collateralSendUnits = strategy.jasperVault.getDefaultPositionRealUnit(address(collateralToken)).toUint256();
 
             _executeDexTrade(baseRebalanceUnits.abs(), collateralSendUnits, true);
         } else {
@@ -887,7 +887,7 @@ contract DeltaNeutralBasisTradingStrategyExtension is BaseExtension {
 
         bytes memory perpTradeCallData = abi.encodeWithSelector(
             IPerpV2BasisTradingModule.tradeAndTrackFunding.selector,        // tradeAndTrackFunding
-            address(strategy.setToken),
+            address(strategy.jasperVault),
             strategy.virtualBaseAddress,
             _baseRebalanceUnits,
             oppositeBoundUnits
@@ -904,7 +904,7 @@ contract DeltaNeutralBasisTradingStrategyExtension is BaseExtension {
         bytes memory dexTradeCallData = _buy
             ? abi.encodeWithSelector(
                 ITradeModule.trade.selector,
-                address(strategy.setToken),
+                address(strategy.jasperVault),
                 exchange.exchangeName,
                 address(collateralToken),
                 _usdcUnits,
@@ -914,7 +914,7 @@ contract DeltaNeutralBasisTradingStrategyExtension is BaseExtension {
             )
             : abi.encodeWithSelector(
                 ITradeModule.trade.selector,
-                address(strategy.setToken),
+                address(strategy.jasperVault),
                 exchange.exchangeName,
                 address(strategy.spotAssetAddress),
                 _baseUnits,
@@ -932,7 +932,7 @@ contract DeltaNeutralBasisTradingStrategyExtension is BaseExtension {
     function _withdrawFunding(uint256 _fundingNotional) internal {
         bytes memory withdrawCallData = abi.encodeWithSelector(
             IPerpV2BasisTradingModule.withdrawFundingAndAccrueFees.selector,
-            strategy.setToken,
+            strategy.jasperVault,
             _fundingNotional
         );
 
@@ -949,7 +949,7 @@ contract DeltaNeutralBasisTradingStrategyExtension is BaseExtension {
         uint256 _spotBuyNotional
     ) internal {
 
-        uint256 setTotalSupply = strategy.setToken.totalSupply();
+        uint256 setTotalSupply = strategy.jasperVault.totalSupply();
         uint256 baseUnits = _spotBuyNotional.preciseDiv(setTotalSupply);
         uint256 spotReinvestUnits = _spotReinvestNotional.preciseDivCeil(setTotalSupply);
 
@@ -1037,7 +1037,7 @@ contract DeltaNeutralBasisTradingStrategyExtension is BaseExtension {
     }
 
     /**
-     * Calculate total notional rebalance quantity and chunked rebalance quantity in base asset units for engaging the SetToken. Used in engage().
+     * Calculate total notional rebalance quantity and chunked rebalance quantity in base asset units for engaging the JasperVault. Used in engage().
      * Leverage ratio (for the base asset) is zero before engage. We open a new base asset position with size equals to
      * (collateralBalance/2) * targetLeverageRatio / baseAssetPrice) to gain (targetLeverageRatio * collateralBalance/2) worth of exposure to the base asset.
      * Note: We can't use `_calculateChunkRebalanceNotional` function because CLR is 0 during engage and it would lead to a divison by zero error.
@@ -1056,7 +1056,7 @@ contract DeltaNeutralBasisTradingStrategyExtension is BaseExtension {
         // Let C be the total collateral available. Let c be the amount of collateral deposited to Perp to open perp position.
         // Then we acquire, (C - c) worth of spot position. To maintain delta neutrality, we short same amount on PerpV2.
         // So, TLR = (C - c) / c, or c = C / (1 + TLR)
-        int256 collateralAmount = collateralToken.balanceOf(address(strategy.setToken))
+        int256 collateralAmount = collateralToken.balanceOf(address(strategy.jasperVault))
             .preciseDiv(PreciseUnitMath.preciseUnit().add(methodology.targetLeverageRatio.abs()))
             .toPreciseUnitsFromDecimals(collateralDecimals)
             .toInt256();
@@ -1081,11 +1081,11 @@ contract DeltaNeutralBasisTradingStrategyExtension is BaseExtension {
      */
     function _calculateReinvestNotional(LeverageInfo memory _leverageInfo) internal returns (uint256, uint256, uint256) {
 
-        uint256 defaultUsdcUnits = strategy.setToken.getDefaultPositionRealUnit(address(collateralToken)).toUint256();
+        uint256 defaultUsdcUnits = strategy.jasperVault.getDefaultPositionRealUnit(address(collateralToken)).toUint256();
 
         if (defaultUsdcUnits == 0) { return (0, 0, 0); }
 
-        uint256 setTotalSupply = strategy.setToken.totalSupply();
+        uint256 setTotalSupply = strategy.jasperVault.totalSupply();
         uint256 totalReinvestNotional = defaultUsdcUnits.preciseMul(setTotalSupply);
 
         // Let C be the total collateral available. Let c be the amount of collateral deposited to Perp to open perp position.
@@ -1125,7 +1125,7 @@ contract DeltaNeutralBasisTradingStrategyExtension is BaseExtension {
             // When decreasing our short position on PerpV2, we would also be selling spot position to decrease spot exposure and
             // maintain delta-neutrality. `spotNotional` is the max amount of spot we can sell and totalRebalanceNotional should
             // be <= spotNotional.
-            uint256 spotUnits = strategy.setToken.getDefaultPositionRealUnit(strategy.spotAssetAddress).toUint256();
+            uint256 spotUnits = strategy.jasperVault.getDefaultPositionRealUnit(strategy.spotAssetAddress).toUint256();
             uint256 spotNotional = spotUnits.preciseMul(_leverageInfo.action.setTotalSupply);
             totalRebalanceNotional = Math.min(totalRebalanceNotional.abs(), spotNotional).toInt256();
         }
@@ -1199,7 +1199,7 @@ contract DeltaNeutralBasisTradingStrategyExtension is BaseExtension {
     function _getAndValidateLeveragedInfo(uint256 _slippageTolerance, uint256 _maxTradeSize) internal view returns(LeverageInfo memory) {
         ActionInfo memory actionInfo = _createActionInfo();
 
-        require(actionInfo.setTotalSupply > 0, "SetToken must have > 0 supply");
+        require(actionInfo.setTotalSupply > 0, "JasperVault must have > 0 supply");
 
         // Get current leverage ratio
         int256 currentLeverageRatio = _calculateCurrentLeverageRatio(actionInfo);
@@ -1233,18 +1233,18 @@ contract DeltaNeutralBasisTradingStrategyExtension is BaseExtension {
         rebalanceInfo.quotePrice = PreciseUnitMath.preciseUnit().toInt256();
 
         // Note: getTakerPositionSize returns zero if base balance is less than 10 wei
-        rebalanceInfo.baseBalance = strategy.perpV2AccountBalance.getTakerPositionSize(address(strategy.setToken), strategy.virtualBaseAddress);
+        rebalanceInfo.baseBalance = strategy.perpV2AccountBalance.getTakerPositionSize(address(strategy.jasperVault), strategy.virtualBaseAddress);
 
         // Note: Fetching quote balance associated with a single position and not the net quote balance
-        rebalanceInfo.quoteBalance = strategy.perpV2AccountBalance.getTakerOpenNotional(address(strategy.setToken), strategy.virtualBaseAddress);
+        rebalanceInfo.quoteBalance = strategy.perpV2AccountBalance.getTakerOpenNotional(address(strategy.jasperVault), strategy.virtualBaseAddress);
 
-        rebalanceInfo.accountInfo = strategy.basisTradingModule.getAccountInfo(strategy.setToken);
+        rebalanceInfo.accountInfo = strategy.basisTradingModule.getAccountInfo(strategy.jasperVault);
 
         // In Perp v2, all virtual tokens have 18 decimals, therefore we do not need to make further adjustments to determine base valuation.
         rebalanceInfo.basePositionValue = rebalanceInfo.basePrice.preciseMul(rebalanceInfo.baseBalance);
         rebalanceInfo.quoteValue = rebalanceInfo.quoteBalance;
 
-        rebalanceInfo.setTotalSupply = strategy.setToken.totalSupply();
+        rebalanceInfo.setTotalSupply = strategy.jasperVault.totalSupply();
 
         return rebalanceInfo;
     }
@@ -1410,8 +1410,8 @@ contract DeltaNeutralBasisTradingStrategyExtension is BaseExtension {
         // - In this case, the `reinvest()` transaction would not revert. The keeper can SAFELY send the `rebalance()` transaction after the
         //   `reinvest()` transaction is mined.
         if (block.timestamp.sub(lastReinvestTimestamp) > methodology.reinvestInterval) {
-            uint256 reinvestmentNotional = strategy.basisTradingModule.getUpdatedSettledFunding(strategy.setToken);
-            uint256 setTotalSupply = strategy.setToken.totalSupply();
+            uint256 reinvestmentNotional = strategy.basisTradingModule.getUpdatedSettledFunding(strategy.jasperVault);
+            uint256 setTotalSupply = strategy.jasperVault.totalSupply();
             uint256 reinvestUnits = reinvestmentNotional.fromPreciseUnitToDecimals(collateralDecimals).preciseDiv(setTotalSupply);
 
             if (reinvestUnits >= methodology.minReinvestUnits) {

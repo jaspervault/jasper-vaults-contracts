@@ -18,9 +18,9 @@
 
 pragma solidity 0.6.10;
 
-import { IController } from "@setprotocol/set-protocol-v2/contracts/interfaces/IController.sol";
-import { ISetToken } from "@setprotocol/set-protocol-v2/contracts/interfaces/ISetToken.sol";
-import { ModuleBase } from "@setprotocol/set-protocol-v2/contracts/protocol/lib/ModuleBase.sol";
+import { IController } from "../../interfaces/IController.sol";
+import { IJasperVault } from "../../interfaces/IJasperVault.sol";
+import { ModuleBase } from "../../protocol/lib/ModuleBase.sol";
 
 contract ModuleMock is ModuleBase {
 
@@ -33,13 +33,13 @@ contract ModuleMock is ModuleBase {
     /* ============ External Functions ============ */
 
     function initialize(
-        ISetToken _setToken
+        IJasperVault _jasperVault
     )
         external
-        onlyValidAndPendingSet(_setToken)
-        onlySetManager(_setToken, msg.sender)
+        onlyValidAndPendingSet(_jasperVault)
+        onlySetManager(_jasperVault, msg.sender)
     {
-        _setToken.initializeModule();
+        _jasperVault.initializeModule();
     }
 
     function removeModule() external override {

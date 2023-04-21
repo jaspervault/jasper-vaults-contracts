@@ -19,7 +19,7 @@
 pragma solidity 0.6.10;
 
 import { IController } from "../../../interfaces/IController.sol";
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
 import { SetTokenAccessible } from "../../../protocol/lib/SetTokenAccessible.sol";
 
 contract SetTokenAccessibleMock is SetTokenAccessible {
@@ -28,14 +28,14 @@ contract SetTokenAccessibleMock is SetTokenAccessible {
 
     /* ============ External Functions ============ */
 
-    function testOnlyAllowedSet(ISetToken _setToken)
+    function testOnlyAllowedSet(IJasperVault _jasperVault)
         external
         view
-        onlyAllowedSet(_setToken) {}
+        onlyAllowedSet(_jasperVault) {}
 
     /* ============ Helper Functions ============ */
 
-    function initializeModuleOnSet(ISetToken _setToken) external {
-        _setToken.initializeModule();
+    function initializeModuleOnSet(IJasperVault _jasperVault) external {
+        _jasperVault.initializeModule();
     }
 }

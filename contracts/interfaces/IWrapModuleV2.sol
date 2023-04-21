@@ -19,16 +19,16 @@
 pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
 
-import { ISetToken } from "./ISetToken.sol";
+import { IJasperVault } from "./IJasperVault.sol";
 import { IWETH } from "./external/IWETH.sol";
 
 interface IWrapModuleV2 {
     function weth() external view returns(IWETH);
 
-    function initialize(ISetToken _setToken) external;
+    function initialize(IJasperVault _jasperVault) external;
 
     function wrap(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _underlyingToken,
         address _wrappedToken,
         uint256 _underlyingUnits,
@@ -37,7 +37,7 @@ interface IWrapModuleV2 {
     ) external;
 
     function wrapWithEther(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _wrappedToken,
         uint256 _underlyingUnits,
         string calldata _integrationName,
@@ -45,7 +45,7 @@ interface IWrapModuleV2 {
     ) external;
 
     function unwrap(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _underlyingToken,
         address _wrappedToken,
         uint256 _wrappedUnits,
@@ -54,7 +54,7 @@ interface IWrapModuleV2 {
     ) external;
 
     function unwrapWithEther(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _wrappedToken,
         uint256 _wrappedUnits,
         string calldata _integrationName,

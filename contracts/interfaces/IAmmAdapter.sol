@@ -25,7 +25,7 @@ pragma solidity 0.6.10;
 interface IAmmAdapter {
 
     function getProvideLiquidityCalldata(
-        address _setToken,
+        address _jasperVault,
         address _pool,
         address[] calldata _components,
         uint256[] calldata _maxTokensIn,
@@ -36,7 +36,7 @@ interface IAmmAdapter {
         returns (address _target, uint256 _value, bytes memory _calldata);
 
     function getProvideLiquiditySingleAssetCalldata(
-        address _setToken,
+        address _jasperVault,
         address _pool,
         address _component,
         uint256 _maxTokenIn,
@@ -44,7 +44,7 @@ interface IAmmAdapter {
     ) external view returns (address _target, uint256 _value, bytes memory _calldata);
 
     function getRemoveLiquidityCalldata(
-        address _setToken,
+        address _jasperVault,
         address _pool,
         address[] calldata _components,
         uint256[] calldata _minTokensOut,
@@ -52,7 +52,7 @@ interface IAmmAdapter {
     ) external view returns (address _target, uint256 _value, bytes memory _calldata);
 
     function getRemoveLiquiditySingleAssetCalldata(
-        address _setToken,
+        address _jasperVault,
         address _pool,
         address _component,
         uint256 _minTokenOut,

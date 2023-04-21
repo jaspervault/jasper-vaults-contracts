@@ -61,7 +61,7 @@ contract GovernanceAdapterMock {
         bytes memory /* _data */
     )
         external
-        view 
+        view
         returns(address, uint256, bytes memory)
     {
         bytes memory callData = abi.encodeWithSignature("castVote(uint256,bool)", _proposalId, _support);
@@ -70,7 +70,7 @@ contract GovernanceAdapterMock {
 
     function getProposeCalldata(bytes memory _proposalData)
         external
-        view 
+        view
         returns(address, uint256, bytes memory)
     {
         (uint256 proposalId) = abi.decode(_proposalData, (uint256));
@@ -84,8 +84,8 @@ contract GovernanceAdapterMock {
         return (address(this), 0, callData);
     }
 
-    function getRegisterCalldata(address _setToken) external view returns(address, uint256, bytes memory) {
-        bytes memory callData = abi.encodeWithSignature("delegate(address)", _setToken);
+    function getRegisterCalldata(address _jasperVault) external view returns(address, uint256, bytes memory) {
+        bytes memory callData = abi.encodeWithSignature("delegate(address)", _jasperVault);
         return (address(this), 0, callData);
     }
 

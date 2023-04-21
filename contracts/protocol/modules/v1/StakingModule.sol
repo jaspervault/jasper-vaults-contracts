@@ -19,20 +19,19 @@
 pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
 
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { SafeCast } from "@openzeppelin/contracts/utils/SafeCast.sol";
-import { SafeMath } from "@openzeppelin/contracts/math/SafeMath.sol";
-import { SignedSafeMath } from "@openzeppelin/contracts/math/SignedSafeMath.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/SafeCast.sol";
+import {SafeMath} from "@openzeppelin/contracts/math/SafeMath.sol";
+import {SignedSafeMath} from "@openzeppelin/contracts/math/SignedSafeMath.sol";
 
-import { AddressArrayUtils } from "../../../lib/AddressArrayUtils.sol";
-import { IController } from "../../../interfaces/IController.sol";
-import { IModuleIssuanceHook } from "../../../interfaces/IModuleIssuanceHook.sol";
-import { Invoke } from "../../lib/Invoke.sol";
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
-import { IStakingAdapter } from "../../../interfaces/IStakingAdapter.sol";
-import { ModuleBase } from "../../lib/ModuleBase.sol";
-import { Position } from "../../lib/Position.sol";
-
+import {AddressArrayUtils} from "../../../lib/AddressArrayUtils.sol";
+import {IController} from "../../../interfaces/IController.sol";
+import {IModuleIssuanceHook} from "../../../interfaces/IModuleIssuanceHook.sol";
+import {Invoke} from "../../lib/Invoke.sol";
+import {IJasperVault} from "../../../interfaces/IJasperVault.sol";
+import {IStakingAdapter} from "../../../interfaces/IStakingAdapter.sol";
+import {ModuleBase} from "../../lib/ModuleBase.sol";
+import {Position} from "../../lib/Position.sol";
 
 /**
  * @title StakingModule
@@ -50,8 +49,8 @@ import { Position } from "../../lib/Position.sol";
  */
 contract StakingModule is ModuleBase, IModuleIssuanceHook {
     using AddressArrayUtils for address[];
-    using Invoke for ISetToken;
-    using Position for ISetToken;
+    using Invoke for IJasperVault;
+    using Position for IJasperVault;
     using SafeCast for int256;
     using SignedSafeMath for int256;
     using SafeCast for uint256;
@@ -61,7 +60,7 @@ contract StakingModule is ModuleBase, IModuleIssuanceHook {
     /* ============ Events ============ */
 
     event ComponentStaked(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         IERC20 indexed _component,
         address indexed _stakingContract,
         uint256 _componentPositionUnits,
@@ -69,7 +68,7 @@ contract StakingModule is ModuleBase, IModuleIssuanceHook {
     );
 
     event ComponentUnstaked(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         IERC20 indexed _component,
         address indexed _stakingContract,
         uint256 _componentPositionUnits,
@@ -79,18 +78,19 @@ contract StakingModule is ModuleBase, IModuleIssuanceHook {
     /* ============ Structs ============ */
 
     struct StakingPosition {
-        bytes32 adapterHash;                // Hash of adapter name
-        uint256 componentPositionUnits;     // The amount of tokens, per Set, being staked on associated staking contract
+        bytes32 adapterHash; // Hash of adapter name
+        uint256 componentPositionUnits; // The amount of tokens, per Set, being staked on associated staking contract
     }
 
     struct ComponentPositions {
-        address[] stakingContracts;                         // List of staking contracts component is being staked on
-        mapping(address => StakingPosition) positions;      // Details of each stakingContract's position
+        address[] stakingContracts; // List of staking contracts component is being staked on
+        mapping(address => StakingPosition) positions; // Details of each stakingContract's position
     }
 
     /* ============ State Variables ============ */
-    // Mapping relating SetToken to a component to a struct holding all the external staking positions for the component
-    mapping(ISetToken => mapping(IERC20 => ComponentPositions)) internal stakingPositions;
+    // Mapping relating JasperVault to a component to a struct holding all the external staking positions for the component
+    mapping(IJasperVault => mapping(IERC20 => ComponentPositions))
+        internal stakingPositions;
 
     /* ============ Constructor ============ */
 
@@ -99,36 +99,54 @@ contract StakingModule is ModuleBase, IModuleIssuanceHook {
     /* ============ External Functions ============ */
 
     /**
-     * MANAGER ONLY: Stake _component in external staking contract. Update state on StakingModule and SetToken to reflect
+     * MANAGER ONLY: Stake _component in external staking contract. Update state on StakingModule and JasperVault to reflect
      * new position. Manager states the contract they are wishing to stake the passed component in as well as how many
      * position units they wish to stake. Manager must also identify the adapter they wish to use.
      *
-     * @param _setToken                 Address of SetToken contract
+     * @param _jasperVault                 Address of JasperVault contract
      * @param _stakeContract            Address of staking contract
      * @param _component                Address of token being staked
      * @param _adapterName              Name of adapter used to interact with staking contract
      * @param _componentPositionUnits   Quantity of token to stake in position units
      */
     function stake(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _stakeContract,
         IERC20 _component,
         string memory _adapterName,
         uint256 _componentPositionUnits
-    )
-        external
-        onlyManagerAndValidSet(_setToken)
-    {
-        require(_setToken.hasSufficientDefaultUnits(address(_component), _componentPositionUnits), "Not enough component to stake");
+    ) external onlyManagerAndValidSet(_jasperVault) {
+        require(
+            _jasperVault.hasSufficientDefaultUnits(
+                address(_component),
+                _componentPositionUnits
+            ),
+            "Not enough component to stake"
+        );
 
-        IStakingAdapter adapter = IStakingAdapter(getAndValidateAdapter(_adapterName));
+        IStakingAdapter adapter = IStakingAdapter(
+            getAndValidateAdapter(_adapterName)
+        );
 
-        _stake(_setToken, _stakeContract, _component, adapter, _componentPositionUnits, _setToken.totalSupply());
+        _stake(
+            _jasperVault,
+            _stakeContract,
+            _component,
+            adapter,
+            _componentPositionUnits,
+            _jasperVault.totalSupply()
+        );
 
-        _updateStakeState(_setToken, _stakeContract, _component, _adapterName, _componentPositionUnits);
+        _updateStakeState(
+            _jasperVault,
+            _stakeContract,
+            _component,
+            _adapterName,
+            _componentPositionUnits
+        );
 
         emit ComponentStaked(
-            _setToken,
+            _jasperVault,
             _component,
             _stakeContract,
             _componentPositionUnits,
@@ -137,38 +155,50 @@ contract StakingModule is ModuleBase, IModuleIssuanceHook {
     }
 
     /**
-     * MANAGER ONLY: Unstake _component from external staking contract. Update state on StakingModule and SetToken to reflect
+     * MANAGER ONLY: Unstake _component from external staking contract. Update state on StakingModule and JasperVault to reflect
      * new position.
      *
-     * @param _setToken                 Address of SetToken contract
+     * @param _jasperVault                 Address of JasperVault contract
      * @param _stakeContract            Address of staking contract
      * @param _component                Address of token being staked
      * @param _adapterName              Name of adapter used to interact with staking contract
      * @param _componentPositionUnits   Quantity of token to unstake in position units
      */
     function unstake(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _stakeContract,
         IERC20 _component,
         string memory _adapterName,
         uint256 _componentPositionUnits
-    )
-        external
-        onlyManagerAndValidSet(_setToken)
-    {
+    ) external onlyManagerAndValidSet(_jasperVault) {
         require(
-            getStakingPositionUnit(_setToken, _component, _stakeContract) >= _componentPositionUnits,
+            getStakingPositionUnit(_jasperVault, _component, _stakeContract) >=
+                _componentPositionUnits,
             "Not enough component tokens staked"
         );
 
-        IStakingAdapter adapter = IStakingAdapter(getAndValidateAdapter(_adapterName));
+        IStakingAdapter adapter = IStakingAdapter(
+            getAndValidateAdapter(_adapterName)
+        );
 
-        _unstake(_setToken, _stakeContract, _component, adapter, _componentPositionUnits, _setToken.totalSupply());
+        _unstake(
+            _jasperVault,
+            _stakeContract,
+            _component,
+            adapter,
+            _componentPositionUnits,
+            _jasperVault.totalSupply()
+        );
 
-        _updateUnstakeState(_setToken, _stakeContract, _component, _componentPositionUnits);
+        _updateUnstakeState(
+            _jasperVault,
+            _stakeContract,
+            _component,
+            _componentPositionUnits
+        );
 
         emit ComponentUnstaked(
-            _setToken,
+            _jasperVault,
             _component,
             _stakeContract,
             _componentPositionUnits,
@@ -178,24 +208,38 @@ contract StakingModule is ModuleBase, IModuleIssuanceHook {
 
     /**
      * MODULE ONLY: On issuance, replicates all staking positions for a given component by staking the component transferred into
-     * the SetToken by an issuer. The amount staked should only be the notional amount required to replicate a _setTokenQuantity
+     * the JasperVault by an issuer. The amount staked should only be the notional amount required to replicate a _setTokenQuantity
      * amount of a position. No updates to positions should take place.
      *
-     * @param _setToken                 Address of SetToken contract
+     * @param _jasperVault                 Address of JasperVault contract
      * @param _component                Address of token being staked
-     * @param _setTokenQuantity         Quantity of SetToken being issued
+     * @param _setTokenQuantity         Quantity of JasperVault being issued
      */
-    function componentIssueHook(ISetToken _setToken, uint256 _setTokenQuantity, IERC20 _component, bool /* _isEquity */) external override onlyModule(_setToken) {
-        address[] memory stakingContracts = getStakingContracts(_setToken, _component);
+    function componentIssueHook(
+        IJasperVault _jasperVault,
+        uint256 _setTokenQuantity,
+        IERC20 _component,
+        bool /* _isEquity */
+    ) external override onlyModule(_jasperVault) {
+        address[] memory stakingContracts = getStakingContracts(
+            _jasperVault,
+            _component
+        );
         for (uint256 i = 0; i < stakingContracts.length; i++) {
-            // NOTE: We assume here that the calling module has transferred component tokens to the SetToken from the issuer
-            StakingPosition memory stakingPosition = getStakingPosition(_setToken, _component, stakingContracts[i]);
+            // NOTE: We assume here that the calling module has transferred component tokens to the JasperVault from the issuer
+            StakingPosition memory stakingPosition = getStakingPosition(
+                _jasperVault,
+                _component,
+                stakingContracts[i]
+            );
 
             _stake(
-                _setToken,
+                _jasperVault,
                 stakingContracts[i],
                 _component,
-                IStakingAdapter(getAndValidateAdapterWithHash(stakingPosition.adapterHash)),
+                IStakingAdapter(
+                    getAndValidateAdapterWithHash(stakingPosition.adapterHash)
+                ),
                 stakingPosition.componentPositionUnits,
                 _setTokenQuantity
             );
@@ -207,84 +251,121 @@ contract StakingModule is ModuleBase, IModuleIssuanceHook {
      * unstaked should only be the notional amount required to unwind a _setTokenQuantity amount of a position. No updates to
      * positions should take place.
      *
-     * @param _setToken                 Address of SetToken contract
+     * @param _jasperVault                 Address of JasperVault contract
      * @param _component                Address of token being staked
-     * @param _setTokenQuantity         Quantity of SetToken being issued
+     * @param _setTokenQuantity         Quantity of JasperVault being issued
      */
-    function componentRedeemHook(ISetToken _setToken, uint256 _setTokenQuantity, IERC20 _component, bool /* _isEquity */) external override onlyModule(_setToken) {
-        address[] memory stakingContracts = getStakingContracts(_setToken, _component);
+    function componentRedeemHook(
+        IJasperVault _jasperVault,
+        uint256 _setTokenQuantity,
+        IERC20 _component,
+        bool /* _isEquity */
+    ) external override onlyModule(_jasperVault) {
+        address[] memory stakingContracts = getStakingContracts(
+            _jasperVault,
+            _component
+        );
         for (uint256 i = 0; i < stakingContracts.length; i++) {
-            StakingPosition memory stakingPosition = getStakingPosition(_setToken, _component, stakingContracts[i]);
+            StakingPosition memory stakingPosition = getStakingPosition(
+                _jasperVault,
+                _component,
+                stakingContracts[i]
+            );
 
             _unstake(
-                _setToken,
+                _jasperVault,
                 stakingContracts[i],
                 _component,
-                IStakingAdapter(getAndValidateAdapterWithHash(stakingPosition.adapterHash)),
+                IStakingAdapter(
+                    getAndValidateAdapterWithHash(stakingPosition.adapterHash)
+                ),
                 stakingPosition.componentPositionUnits,
                 _setTokenQuantity
             );
         }
     }
 
-    function moduleIssueHook(ISetToken _setToken, uint256 _setTokenQuantity) external override {}
-    function moduleRedeemHook(ISetToken _setToken, uint256 _setTokenQuantity) external override {}
+    function moduleIssueHook(
+        IJasperVault _jasperVault,
+        uint256 _setTokenQuantity
+    ) external override {}
+
+    function moduleRedeemHook(
+        IJasperVault _jasperVault,
+        uint256 _setTokenQuantity
+    ) external override {}
 
     /**
-     * Initializes this module to the SetToken. Only callable by the SetToken's manager.
+     * Initializes this module to the JasperVault. Only callable by the JasperVault's manager.
      *
-     * @param _setToken             Instance of the SetToken to issue
+     * @param _jasperVault             Instance of the JasperVault to issue
      */
     function initialize(
-        ISetToken _setToken
+        IJasperVault _jasperVault
     )
         external
-        onlySetManager(_setToken, msg.sender)
-        onlyValidAndPendingSet(_setToken)
+        onlySetManager(_jasperVault, msg.sender)
+        onlyValidAndPendingSet(_jasperVault)
     {
-        _setToken.initializeModule();
+        _jasperVault.initializeModule();
     }
 
     /**
-     * Removes this module from the SetToken, via call by the SetToken. If an outstanding staking position remains using
+     * Removes this module from the JasperVault, via call by the JasperVault. If an outstanding staking position remains using
      * this module then it cannot be removed. Outstanding staking must be closed out first before removal.
      */
     function removeModule() external override {
-        ISetToken setToken = ISetToken(msg.sender);
-        address[] memory components = setToken.getComponents();
+        IJasperVault jasperVault = IJasperVault(msg.sender);
+        address[] memory components = jasperVault.getComponents();
         for (uint256 i = 0; i < components.length; i++) {
             require(
-                stakingPositions[setToken][IERC20(components[i])].stakingContracts.length == 0,
+                stakingPositions[jasperVault][IERC20(components[i])]
+                    .stakingContracts
+                    .length == 0,
                 "Open positions must be closed"
             );
         }
     }
 
-
     /* ============ External Getter Functions ============ */
 
-    function hasStakingPosition(ISetToken _setToken, IERC20 _component, address _stakeContract) public view returns(bool) {
-        return getStakingContracts(_setToken, _component).contains(_stakeContract);
+    function hasStakingPosition(
+        IJasperVault _jasperVault,
+        IERC20 _component,
+        address _stakeContract
+    ) public view returns (bool) {
+        return
+            getStakingContracts(_jasperVault, _component).contains(
+                _stakeContract
+            );
     }
 
-    function getStakingContracts(ISetToken _setToken, IERC20 _component) public view returns(address[] memory) {
-        return stakingPositions[_setToken][_component].stakingContracts;
+    function getStakingContracts(
+        IJasperVault _jasperVault,
+        IERC20 _component
+    ) public view returns (address[] memory) {
+        return stakingPositions[_jasperVault][_component].stakingContracts;
     }
 
-    function getStakingPosition(ISetToken _setToken, IERC20 _component, address _stakeContract)
-        public
-        view
-        returns(StakingPosition memory)
-    {
-        return stakingPositions[_setToken][_component].positions[_stakeContract];
+    function getStakingPosition(
+        IJasperVault _jasperVault,
+        IERC20 _component,
+        address _stakeContract
+    ) public view returns (StakingPosition memory) {
+        return
+            stakingPositions[_jasperVault][_component].positions[
+                _stakeContract
+            ];
     }
 
-    function getStakingPositionUnit(ISetToken _setToken, IERC20 _component, address _stakeContract)
-        public
-        view
-        returns(uint256)
-    {
-        return getStakingPosition(_setToken, _component, _stakeContract).componentPositionUnits;
+    function getStakingPositionUnit(
+        IJasperVault _jasperVault,
+        IERC20 _component,
+        address _stakeContract
+    ) public view returns (uint256) {
+        return
+            getStakingPosition(_jasperVault, _component, _stakeContract)
+                .componentPositionUnits;
     }
 
     /* ============ Internal Functions ============ */
@@ -292,7 +373,7 @@ contract StakingModule is ModuleBase, IModuleIssuanceHook {
     /**
      * Stake _component in external staking contract.
      *
-     * @param _setToken                 Address of SetToken contract
+     * @param _jasperVault                 Address of JasperVault contract
      * @param _stakeContract            Address of staking contract
      * @param _component                Address of token being staked
      * @param _adapter                  Address of adapter used to interact with staking contract
@@ -300,140 +381,178 @@ contract StakingModule is ModuleBase, IModuleIssuanceHook {
      * @param _setTokenStakeQuantity    Quantity of SetTokens to stake
      */
     function _stake(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _stakeContract,
         IERC20 _component,
         IStakingAdapter _adapter,
         uint256 _componentPositionUnits,
         uint256 _setTokenStakeQuantity
-    )
-        internal
-    {
-        uint256 notionalStakeQuantity = _setTokenStakeQuantity.getDefaultTotalNotional(_componentPositionUnits);
+    ) internal {
+        uint256 notionalStakeQuantity = _setTokenStakeQuantity
+            .getDefaultTotalNotional(_componentPositionUnits);
 
         address spender = _adapter.getSpenderAddress(_stakeContract);
 
-        _setToken.invokeApprove(address(_component), spender, notionalStakeQuantity);
+        _jasperVault.invokeApprove(
+            address(_component),
+            spender,
+            notionalStakeQuantity
+        );
 
-        (
-            address target, uint256 callValue, bytes memory methodData
-        ) = _adapter.getStakeCallData(_stakeContract, notionalStakeQuantity);
+        (address target, uint256 callValue, bytes memory methodData) = _adapter
+            .getStakeCallData(_stakeContract, notionalStakeQuantity);
 
-        _setToken.invoke(target, callValue, methodData);
+        _jasperVault.invoke(target, callValue, methodData);
     }
 
     /**
      * Unstake position from external staking contract and validates expected components were received.
      *
-     * @param _setToken                 Address of SetToken contract
+     * @param _jasperVault                 Address of JasperVault contract
      * @param _stakeContract            Address of staking contract
      * @param _component                Address of token being unstaked
      * @param _adapter                  Address of adapter used to interact with staking contract
      * @param _componentPositionUnits   Quantity of token to unstake in position units
      */
     function _unstake(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _stakeContract,
         IERC20 _component,
         IStakingAdapter _adapter,
         uint256 _componentPositionUnits,
         uint256 _setTokenUnstakeQuantity
-    )
-        internal
-    {
-        uint256 preActionBalance = _component.balanceOf(address(_setToken));
+    ) internal {
+        uint256 preActionBalance = _component.balanceOf(address(_jasperVault));
 
-        uint256 notionalUnstakeQuantity = _setTokenUnstakeQuantity.getDefaultTotalNotional(_componentPositionUnits);
-        (
-            address target, uint256 callValue, bytes memory methodData
-        ) = _adapter.getUnstakeCallData(_stakeContract, notionalUnstakeQuantity);
+        uint256 notionalUnstakeQuantity = _setTokenUnstakeQuantity
+            .getDefaultTotalNotional(_componentPositionUnits);
+        (address target, uint256 callValue, bytes memory methodData) = _adapter
+            .getUnstakeCallData(_stakeContract, notionalUnstakeQuantity);
 
-        _setToken.invoke(target, callValue, methodData);
+        _jasperVault.invoke(target, callValue, methodData);
 
-        uint256 postActionBalance = _component.balanceOf(address(_setToken));
-        require(preActionBalance.add(notionalUnstakeQuantity) <= postActionBalance, "Not enough tokens returned from stake contract");
+        uint256 postActionBalance = _component.balanceOf(address(_jasperVault));
+        require(
+            preActionBalance.add(notionalUnstakeQuantity) <= postActionBalance,
+            "Not enough tokens returned from stake contract"
+        );
     }
 
     /**
-     * Update positions on SetToken and tracking on StakingModule after staking is complete. Includes the following updates:
+     * Update positions on JasperVault and tracking on StakingModule after staking is complete. Includes the following updates:
      *  - If adding to position then add positionUnits to existing position amount on StakingModule
      *  - If opening new staking position add stakeContract to stakingContracts list and create position entry in position mapping
      *    (on StakingModule)
-     *  - Subtract from Default position of _component on SetToken
-     *  - Add to external position of _component on SetToken referencing this module
+     *  - Subtract from Default position of _component on JasperVault
+     *  - Add to external position of _component on JasperVault referencing this module
      *
-     * @param _setToken                 Address of SetToken contract
+     * @param _jasperVault                 Address of JasperVault contract
      * @param _stakeContract            Address of staking contract
      * @param _component                Address of token being unstaked
      * @param _adapterName              Address of adapter used to interact with staking contract
      * @param _componentPositionUnits   Quantity of token to stake in position units
      */
     function _updateStakeState(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _stakeContract,
         IERC20 _component,
         string memory _adapterName,
         uint256 _componentPositionUnits
-    )
-        internal
-    {
-        if (hasStakingPosition(_setToken, _component, _stakeContract)) {
-            stakingPositions[_setToken][_component].positions[_stakeContract].componentPositionUnits = _componentPositionUnits.add(
-                getStakingPositionUnit(_setToken, _component, _stakeContract)
+    ) internal {
+        if (hasStakingPosition(_jasperVault, _component, _stakeContract)) {
+            stakingPositions[_jasperVault][_component]
+                .positions[_stakeContract]
+                .componentPositionUnits = _componentPositionUnits.add(
+                getStakingPositionUnit(_jasperVault, _component, _stakeContract)
             );
         } else {
-            stakingPositions[_setToken][_component].stakingContracts.push(_stakeContract);
-            stakingPositions[_setToken][_component].positions[_stakeContract] = StakingPosition({
+            stakingPositions[_jasperVault][_component].stakingContracts.push(
+                _stakeContract
+            );
+            stakingPositions[_jasperVault][_component].positions[
+                _stakeContract
+            ] = StakingPosition({
                 componentPositionUnits: _componentPositionUnits,
                 adapterHash: getNameHash(_adapterName)
             });
         }
 
-        uint256 newDefaultTokenUnit = _setToken.getDefaultPositionRealUnit(address(_component)).toUint256().sub(_componentPositionUnits);
-        _setToken.editDefaultPosition(address(_component), newDefaultTokenUnit);
+        uint256 newDefaultTokenUnit = _jasperVault
+            .getDefaultPositionRealUnit(address(_component))
+            .toUint256()
+            .sub(_componentPositionUnits);
+        _jasperVault.editDefaultPosition(
+            address(_component),
+            newDefaultTokenUnit
+        );
 
-        int256 newExternalTokenUnit = _setToken.getExternalPositionRealUnit(address(_component), address(this))
+        int256 newExternalTokenUnit = _jasperVault
+            .getExternalPositionRealUnit(address(_component), address(this))
             .add(_componentPositionUnits.toInt256());
-        _setToken.editExternalPosition(address(_component), address(this), newExternalTokenUnit, "");
+        _jasperVault.editExternalPosition(
+            address(_component),
+            address(this),
+            newExternalTokenUnit,
+            ""
+        );
     }
 
     /**
-     * Update positions on SetToken and tracking on StakingModule after unstaking is complete. Includes the following updates:
+     * Update positions on JasperVault and tracking on StakingModule after unstaking is complete. Includes the following updates:
      *  - If paring down position then subtract positionUnits from existing position amount on StakingModule
      *  - If closing staking position remove _stakeContract from stakingContracts list and delete position entry in position mapping
      *    (on StakingModule)
-     *  - Add to Default position of _component on SetToken
-     *  - Subtract from external position of _component on SetToken referencing this module
+     *  - Add to Default position of _component on JasperVault
+     *  - Subtract from external position of _component on JasperVault referencing this module
      *
-     * @param _setToken                 Address of SetToken contract
+     * @param _jasperVault                 Address of JasperVault contract
      * @param _stakeContract            Address of staking contract
      * @param _component                Address of token being unstaked
      * @param _componentPositionUnits   Quantity of token to stake in position units
      */
     function _updateUnstakeState(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _stakeContract,
         IERC20 _component,
         uint256 _componentPositionUnits
-    )
-        internal
-    {
-        uint256 remainingPositionUnits = getStakingPositionUnit(_setToken, _component, _stakeContract).sub(_componentPositionUnits);
+    ) internal {
+        uint256 remainingPositionUnits = getStakingPositionUnit(
+            _jasperVault,
+            _component,
+            _stakeContract
+        ).sub(_componentPositionUnits);
 
         if (remainingPositionUnits > 0) {
-            stakingPositions[_setToken][_component].positions[_stakeContract].componentPositionUnits = remainingPositionUnits;
+            stakingPositions[_jasperVault][_component]
+                .positions[_stakeContract]
+                .componentPositionUnits = remainingPositionUnits;
         } else {
-            stakingPositions[_setToken][_component].stakingContracts = getStakingContracts(_setToken, _component).remove(_stakeContract);
-            delete stakingPositions[_setToken][_component].positions[_stakeContract];
+            stakingPositions[_jasperVault][_component]
+                .stakingContracts = getStakingContracts(
+                _jasperVault,
+                _component
+            ).remove(_stakeContract);
+            delete stakingPositions[_jasperVault][_component].positions[
+                _stakeContract
+            ];
         }
 
-        uint256 newTokenUnit = _setToken.getDefaultPositionRealUnit(address(_component)).toUint256().add(_componentPositionUnits);
+        uint256 newTokenUnit = _jasperVault
+            .getDefaultPositionRealUnit(address(_component))
+            .toUint256()
+            .add(_componentPositionUnits);
 
-        _setToken.editDefaultPosition(address(_component), newTokenUnit);
+        _jasperVault.editDefaultPosition(address(_component), newTokenUnit);
 
-        int256 newExternalTokenUnit = _setToken.getExternalPositionRealUnit(address(_component), address(this))
+        int256 newExternalTokenUnit = _jasperVault
+            .getExternalPositionRealUnit(address(_component), address(this))
             .sub(_componentPositionUnits.toInt256());
 
-        _setToken.editExternalPosition(address(_component), address(this), newExternalTokenUnit, "");
+        _jasperVault.editExternalPosition(
+            address(_component),
+            address(this),
+            newExternalTokenUnit,
+            ""
+        );
     }
 }

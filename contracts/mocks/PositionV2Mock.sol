@@ -19,7 +19,7 @@
 pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
 
-import { ISetToken } from "../interfaces/ISetToken.sol";
+import { IJasperVault } from "../interfaces/IJasperVault.sol";
 import { PositionV2 } from "../protocol/lib/PositionV2.sol";
 
 
@@ -29,22 +29,22 @@ contract PositionV2Mock {
         public
     {}
 
-    function initialize(ISetToken _setToken) external {
-        _setToken.initializeModule();
+    function initialize(IJasperVault _jasperVault) external {
+        _jasperVault.initializeModule();
     }
 
-    function testHasDefaultPosition(ISetToken _setToken, address _component) external view returns(bool) {
-        return PositionV2.hasDefaultPosition(_setToken, _component);    
+    function testHasDefaultPosition(IJasperVault _jasperVault, address _component) external view returns(bool) {
+        return PositionV2.hasDefaultPosition(_jasperVault, _component);
     }
 
-    function testHasExternalPosition(ISetToken _setToken, address _component) external view returns(bool) {
-        return PositionV2.hasExternalPosition(_setToken, _component);
+    function testHasExternalPosition(IJasperVault _jasperVault, address _component) external view returns(bool) {
+        return PositionV2.hasExternalPosition(_jasperVault, _component);
     }
-    function testHasSufficientDefaultUnits(ISetToken _setToken, address _component, uint256 _unit) external view returns(bool) {
-        return PositionV2.hasSufficientDefaultUnits(_setToken, _component, _unit);    
+    function testHasSufficientDefaultUnits(IJasperVault _jasperVault, address _component, uint256 _unit) external view returns(bool) {
+        return PositionV2.hasSufficientDefaultUnits(_jasperVault, _component, _unit);
     }
     function testHasSufficientExternalUnits(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _component,
         address _module,
         uint256 _unit
@@ -53,15 +53,15 @@ contract PositionV2Mock {
         view
         returns(bool)
     {
-        return PositionV2.hasSufficientExternalUnits(_setToken, _component, _module, _unit);    
+        return PositionV2.hasSufficientExternalUnits(_jasperVault, _component, _module, _unit);
     }
 
-    function testEditDefaultPosition(ISetToken _setToken, address _component, uint256 _newUnit) external {
-        return PositionV2.editDefaultPosition(_setToken, _component, _newUnit);   
+    function testEditDefaultPosition(IJasperVault _jasperVault, address _component, uint256 _newUnit) external {
+        return PositionV2.editDefaultPosition(_jasperVault, _component, _newUnit);
     }
 
     function testEditExternalPosition(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _component,
         address _module,
         int256 _newUnit,
@@ -69,7 +69,7 @@ contract PositionV2Mock {
     )
         external
     {
-        PositionV2.editExternalPosition(_setToken, _component, _module, _newUnit, _data);
+        PositionV2.editExternalPosition(_jasperVault, _component, _module, _newUnit, _data);
     }
 
     function testGetDefaultTotalNotional(
@@ -94,16 +94,16 @@ contract PositionV2Mock {
         return PositionV2.getDefaultPositionUnit(_setTokenSupply, _totalNotional);
     }
 
-    function testGetDefaultTrackedBalance(ISetToken _setToken, address _component)
+    function testGetDefaultTrackedBalance(IJasperVault _jasperVault, address _component)
         external
         view
         returns (uint256)
     {
-        return PositionV2.getDefaultTrackedBalance(_setToken, _component);
+        return PositionV2.getDefaultTrackedBalance(_jasperVault, _component);
     }
 
     function testCalculateAndEditDefaultPosition(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _component,
         uint256 _setTotalSupply,
         uint256 _componentPreviousBalance
@@ -112,7 +112,7 @@ contract PositionV2Mock {
         returns (uint256, uint256, uint256)
     {
         return PositionV2.calculateAndEditDefaultPosition(
-            _setToken,
+            _jasperVault,
             _component,
             _setTotalSupply,
             _componentPreviousBalance

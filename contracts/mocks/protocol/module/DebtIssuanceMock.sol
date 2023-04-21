@@ -19,23 +19,23 @@ pragma solidity 0.6.10;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
 
 contract DebtIssuanceMock {
 
-    mapping(ISetToken => bool) public isRegistered;
-    
-    function initialize(ISetToken _setToken) external {
-        _setToken.initializeModule();
+    mapping(IJasperVault => bool) public isRegistered;
+
+    function initialize(IJasperVault _jasperVault) external {
+        _jasperVault.initializeModule();
     }
 
     function removeModule() external {}
 
-    function registerToIssuanceModule(ISetToken _setToken) external {
-        isRegistered[_setToken] = true;
+    function registerToIssuanceModule(IJasperVault _jasperVault) external {
+        isRegistered[_jasperVault] = true;
     }
 
-    function unregisterFromIssuanceModule(ISetToken _setToken) external {
-        isRegistered[_setToken] = false;
+    function unregisterFromIssuanceModule(IJasperVault _jasperVault) external {
+        isRegistered[_jasperVault] = false;
     }
 }

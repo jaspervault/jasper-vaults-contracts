@@ -20,7 +20,7 @@ pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
 
 import { ISetValuer } from "../../interfaces/ISetValuer.sol";
-import { ISetToken } from "../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../interfaces/IJasperVault.sol";
 
 /**
  * @title CustomSetValuerMock
@@ -39,8 +39,8 @@ contract CustomSetValuerMock is ISetValuer {
     }
 
     /**
-     * Gets the valuation of a SetToken using data from the price oracle. Reverts
-     * if no price exists for a component in the SetToken. Note: this works for external
+     * Gets the valuation of a JasperVault using data from the price oracle. Reverts
+     * if no price exists for a component in the JasperVault. Note: this works for external
      * positions and negative (debt) positions.
      *
      * Note: There is a risk that the valuation is off if airdrops aren't retrieved or
@@ -48,9 +48,9 @@ contract CustomSetValuerMock is ISetValuer {
      *
      * @param _quoteAsset      Address of token to quote valuation in
      *
-     * @return                 SetToken valuation in terms of quote asset in precise units 1e18
+     * @return                 JasperVault valuation in terms of quote asset in precise units 1e18
      */
-    function calculateSetTokenValuation(ISetToken /* _setToken */, address _quoteAsset) external view override returns (uint256) {
+    function calculateSetTokenValuation(IJasperVault /* _jasperVault */, address _quoteAsset) external view override returns (uint256) {
         return valuation[_quoteAsset];
     }
 }

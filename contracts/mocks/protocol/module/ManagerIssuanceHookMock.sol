@@ -17,25 +17,25 @@
 */
 pragma solidity 0.6.10;
 
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
 
 contract ManagerIssuanceHookMock {
-    ISetToken public retrievedSetToken;
+    IJasperVault public retrievedSetToken;
     uint256 public retrievedIssueQuantity;
     address public retrievedSender;
     address public retrievedTo;
 
-    function invokePreIssueHook(ISetToken _setToken, uint256 _issueQuantity, address _sender, address _to) external {
-        retrievedSetToken = _setToken;
+    function invokePreIssueHook(IJasperVault _jasperVault, uint256 _issueQuantity, address _sender, address _to) external {
+        retrievedSetToken = _jasperVault;
         retrievedIssueQuantity = _issueQuantity;
-        retrievedSender = _sender;    
-        retrievedTo = _to;        
+        retrievedSender = _sender;
+        retrievedTo = _to;
     }
 
-    function invokePreRedeemHook(ISetToken _setToken, uint256 _redeemQuantity, address _sender, address _to) external {
-        retrievedSetToken = _setToken;
+    function invokePreRedeemHook(IJasperVault _jasperVault, uint256 _redeemQuantity, address _sender, address _to) external {
+        retrievedSetToken = _jasperVault;
         retrievedIssueQuantity = _redeemQuantity;
-        retrievedSender = _sender;    
-        retrievedTo = _to;        
+        retrievedSender = _sender;
+        retrievedTo = _to;
     }
 }

@@ -18,7 +18,7 @@
 
 pragma solidity 0.6.10;
 
-import { ISetToken } from "@setprotocol/set-protocol-v2/contracts/interfaces/ISetToken.sol";
+import { IJasperVault } from "../../interfaces/IJasperVault.sol";
 
 import { BaseGlobalExtension } from "../lib/BaseGlobalExtension.sol";
 import { IDelegatedManager } from "../interfaces/IDelegatedManager.sol";
@@ -52,7 +52,7 @@ contract BaseGlobalExtensionMock is BaseGlobalExtension {
     {
         require(_delegatedManager.isPendingExtension(address(this)), "Extension must be pending");
 
-        _initializeExtension(_delegatedManager.setToken(), _delegatedManager);
+        _initializeExtension(_delegatedManager.jasperVault(), _delegatedManager);
     }
 
     function initializeModuleAndExtension(
@@ -63,31 +63,31 @@ contract BaseGlobalExtensionMock is BaseGlobalExtension {
     {
         require(_delegatedManager.isPendingExtension(address(this)), "Extension must be pending");
 
-        ISetToken setToken = _delegatedManager.setToken();
+        IJasperVault jasperVault = _delegatedManager.jasperVault();
 
-        _initializeExtension(setToken, _delegatedManager);
+        _initializeExtension(jasperVault, _delegatedManager);
 
-        bytes memory callData = abi.encodeWithSignature("initialize(address)", setToken);
+        bytes memory callData = abi.encodeWithSignature("initialize(address)", jasperVault);
         _invokeManager(_delegatedManager, address(module), callData);
     }
 
-    function testInvokeManager(ISetToken _setToken, address _module, bytes calldata _encoded) external {
-        _invokeManager(_manager(_setToken), _module, _encoded);
+    function testInvokeManager(IJasperVault _jasperVault, address _module, bytes calldata _encoded) external {
+        _invokeManager(_manager(_jasperVault), _module, _encoded);
     }
 
-    function testOnlyOwner(ISetToken _setToken)
+    function testOnlyOwner(IJasperVault _jasperVault)
         external
-        onlyOwner(_setToken)
+        onlyOwner(_jasperVault)
     {}
 
-    function testOnlyMethodologist(ISetToken _setToken)
+    function testOnlyMethodologist(IJasperVault _jasperVault)
         external
-        onlyMethodologist(_setToken)
+        onlyMethodologist(_jasperVault)
     {}
 
-    function testOnlyOperator(ISetToken _setToken)
+    function testOnlyOperator(IJasperVault _jasperVault)
         external
-        onlyOperator(_setToken)
+        onlyOperator(_jasperVault)
     {}
 
     function testOnlyOwnerAndValidManager(IDelegatedManager _delegatedManager)
@@ -95,15 +95,15 @@ contract BaseGlobalExtensionMock is BaseGlobalExtension {
         onlyOwnerAndValidManager(_delegatedManager)
     {}
 
-    function testOnlyAllowedAsset(ISetToken _setToken, address _asset)
+    function testOnlyAllowedAsset(IJasperVault _jasperVault, address _asset)
         external
-        onlyAllowedAsset(_setToken, _asset)
+        onlyAllowedAsset(_jasperVault, _asset)
     {}
 
     function removeExtension() external override {
         IDelegatedManager delegatedManager = IDelegatedManager(msg.sender);
-        ISetToken setToken = delegatedManager.setToken();
+        IJasperVault jasperVault = delegatedManager.jasperVault();
 
-        _removeExtension(setToken, delegatedManager);
+        _removeExtension(jasperVault, delegatedManager);
     }
 }

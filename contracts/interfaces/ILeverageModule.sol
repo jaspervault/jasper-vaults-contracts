@@ -1,16 +1,16 @@
 pragma solidity 0.6.10;
-import {ISetToken} from "./ISetToken.sol";
+import {IJasperVault} from "./IJasperVault.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 interface ILeverageModule {
     function initialize(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IERC20[] memory _collateralAssets,
         IERC20[] memory _borrowAssets
     ) external;
 
     function lever(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IERC20 _borrowAsset,
         IERC20 _collateralAsset,
         uint256 _borrowQuantityUnits,
@@ -20,7 +20,7 @@ interface ILeverageModule {
     ) external;
 
     function delever(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IERC20 _collateralAsset,
         IERC20 _repayAsset,
         uint256 _redeemQuantityUnits,
@@ -30,7 +30,7 @@ interface ILeverageModule {
     ) external;
 
     function deleverToZeroBorrowBalance(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IERC20 _collateralAsset,
         IERC20 _repayAsset,
         uint256 _redeemQuantityUnits,
@@ -39,22 +39,22 @@ interface ILeverageModule {
     ) external;
 
     function addCollateralAssets(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IERC20[] memory _newCollateralAssets
     ) external;
 
     function removeCollateralAssets(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IERC20[] memory _collateralAssets
     ) external;
 
     function addBorrowAssets(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IERC20[] memory _newBorrowAssets
     ) external;
 
     function removeBorrowAssets(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IERC20[] memory _borrowAssets
     ) external;
 }

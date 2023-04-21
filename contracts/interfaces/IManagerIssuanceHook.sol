@@ -17,9 +17,9 @@
 */
 pragma solidity 0.6.10;
 
-import { ISetToken } from "./ISetToken.sol";
+import { IJasperVault } from "./IJasperVault.sol";
 
 interface IManagerIssuanceHook {
-    function invokePreIssueHook(ISetToken _setToken, uint256 _issueQuantity, address _sender, address _to) external;
-    function invokePreRedeemHook(ISetToken _setToken, uint256 _redeemQuantity, address _sender, address _to) external;
+    function invokePreIssueHook(IJasperVault _jasperVault, uint256 _issueQuantity, address _sender, address _to) external;
+    function invokePreRedeemHook(IJasperVault _jasperVault, uint256 _redeemQuantity, address _sender, address _to) external;
 }

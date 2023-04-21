@@ -19,28 +19,27 @@
 pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
 
-import { Address } from "@openzeppelin/contracts/utils/Address.sol";
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import { SafeCast } from "@openzeppelin/contracts/utils/SafeCast.sol";
-import { SafeMath } from "@openzeppelin/contracts/math/SafeMath.sol";
-import { SignedSafeMath } from "@openzeppelin/contracts/math/SignedSafeMath.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/SafeCast.sol";
+import {SafeMath} from "@openzeppelin/contracts/math/SafeMath.sol";
+import {SignedSafeMath} from "@openzeppelin/contracts/math/SignedSafeMath.sol";
 
-import { IController } from "../interfaces/IController.sol";
-import { IModule } from "../interfaces/IModule.sol";
-import { ISetToken } from "../interfaces/ISetToken.sol";
-import { Position } from "./lib/Position.sol";
-import { PreciseUnitMath } from "../lib/PreciseUnitMath.sol";
-import { AddressArrayUtils } from "../lib/AddressArrayUtils.sol";
-
+import {IController} from "../interfaces/IController.sol";
+import {IModule} from "../interfaces/IModule.sol";
+import {IJasperVault} from "../interfaces/IJasperVault.sol";
+import {Position} from "./lib/Position.sol";
+import {PreciseUnitMath} from "../lib/PreciseUnitMath.sol";
+import {AddressArrayUtils} from "../lib/AddressArrayUtils.sol";
 
 /**
- * @title SetToken
+ * @title JasperVault
  * @author Set Protocol
  *
  * ERC20 Token contract that allows privileged modules to make modifications to its positions and invoke function calls
- * from the SetToken. 
+ * from the JasperVault.
  */
-contract SetToken is ERC20 {
+contract JasperVault is ERC20 {
     using SafeMath for uint256;
     using SafeCast for int256;
     using SafeCast for uint256;
@@ -52,7 +51,7 @@ contract SetToken is ERC20 {
     /* ============ Constants ============ */
 
     /*
-        The PositionState is the status of the Position, whether it is Default (held on the SetToken)
+        The PositionState is the status of the Position, whether it is Default (held on the JasperVault)
         or otherwise held on a separate smart contract (whether a module or external source).
         There are issues with cross-usage of enums, so we are defining position states
         as a uint8.
@@ -62,25 +61,48 @@ contract SetToken is ERC20 {
 
     /* ============ Events ============ */
 
-    event Invoked(address indexed _target, uint indexed _value, bytes _data, bytes _returnValue);
+    event Invoked(
+        address indexed _target,
+        uint indexed _value,
+        bytes _data,
+        bytes _returnValue
+    );
     event ModuleAdded(address indexed _module);
-    event ModuleRemoved(address indexed _module);    
+    event ModuleRemoved(address indexed _module);
     event ModuleInitialized(address indexed _module);
     event ManagerEdited(address _newManager, address _oldManager);
     event PendingModuleRemoved(address indexed _module);
     event PositionMultiplierEdited(int256 _newMultiplier);
     event ComponentAdded(address indexed _component);
     event ComponentRemoved(address indexed _component);
-    event DefaultPositionUnitEdited(address indexed _component, int256 _realUnit);
-    event ExternalPositionUnitEdited(address indexed _component, address indexed _positionModule, int256 _realUnit);
-    event ExternalPositionDataEdited(address indexed _component, address indexed _positionModule, bytes _data);
-    event PositionModuleAdded(address indexed _component, address indexed _positionModule);
-    event PositionModuleRemoved(address indexed _component, address indexed _positionModule);
+    event DefaultPositionUnitEdited(
+        address indexed _component,
+        int256 _realUnit
+    );
+    event ExternalPositionUnitEdited(
+        address indexed _component,
+        address indexed _positionModule,
+        int256 _realUnit
+    );
+    event ExternalPositionDataEdited(
+        address indexed _component,
+        address indexed _positionModule,
+        bytes _data
+    );
+    event PositionModuleAdded(
+        address indexed _component,
+        address indexed _positionModule
+    );
+    event PositionModuleRemoved(
+        address indexed _component,
+        address indexed _positionModule
+    );
+    event MasterTokenEdited(address _newMasterToken, address _oldMasterToken);
 
     /* ============ Modifiers ============ */
 
     /**
-     * Throws if the sender is not a SetToken's module or module not enabled
+     * Throws if the sender is not a JasperVault's module or module not enabled
      */
     modifier onlyModule() {
         // Internal function used to reduce bytecode size
@@ -89,7 +111,7 @@ contract SetToken is ERC20 {
     }
 
     /**
-     * Throws if the sender is not the SetToken's manager
+     * Throws if the sender is not the JasperVault's manager
      */
     modifier onlyManager() {
         _validateOnlyManager();
@@ -97,7 +119,7 @@ contract SetToken is ERC20 {
     }
 
     /**
-     * Throws if SetToken is locked and called by any account other than the locker.
+     * Throws if JasperVault is locked and called by any account other than the locker.
      */
     modifier whenLockedOnlyLocker() {
         _validateWhenLockedOnlyLocker();
@@ -121,7 +143,7 @@ contract SetToken is ERC20 {
 
     // Modules are initialized from NONE -> PENDING -> INITIALIZED through the
     // addModule (called by manager) and initialize  (called by module) functions
-    mapping(address => ISetToken.ModuleState) public moduleStates;
+    mapping(address => IJasperVault.ModuleState) public moduleStates;
 
     // When locked, only the locker (a module) can call privileged functionality
     // Typically utilized if a module (e.g. Auction) needs multiple transactions to complete an action
@@ -134,26 +156,33 @@ contract SetToken is ERC20 {
     // Mapping that stores all Default and External position information for a given component.
     // Position quantities are represented as virtual units; Default positions are on the top-level,
     // while external positions are stored in a module array and accessed through its externalPositions mapping
-    mapping(address => ISetToken.ComponentPosition) private componentPositions;
+    mapping(address => IJasperVault.ComponentPosition)
+        private componentPositions;
 
     // The multiplier applied to the virtual position unit to achieve the real/actual unit.
     // This multiplier is used for efficiently modifying the entire position units (e.g. streaming fee)
     int256 public positionMultiplier;
 
+    address public masterToken;
+
+    
+    string private jasperName;
+    string private jasperSymbol;
+
     /* ============ Constructor ============ */
 
     /**
-     * When a new SetToken is created, initializes Positions in default state and adds modules into pending state.
-     * All parameter validations are on the SetTokenCreator contract. Validations are performed already on the 
+     * When a new JasperVault is created, initializes Positions in default state and adds modules into pending state.
+     * All parameter validations are on the SetTokenCreator contract. Validations are performed already on the
      * SetTokenCreator. Initiates the positionMultiplier as 1e18 (no adjustments).
      *
      * @param _components             List of addresses of components for initial Positions
-     * @param _units                  List of units. Each unit is the # of components per 10^18 of a SetToken
+     * @param _units                  List of units. Each unit is the # of components per 10^18 of a JasperVault
      * @param _modules                List of modules to enable. All modules must be approved by the Controller
      * @param _controller             Address of the controller
      * @param _manager                Address of the manager
-     * @param _name                   Name of the SetToken
-     * @param _symbol                 Symbol of the SetToken
+     * @param _name                   Name of the JasperVault
+     * @param _symbol                 Symbol of the JasperVault
      */
     constructor(
         address[] memory _components,
@@ -163,18 +192,19 @@ contract SetToken is ERC20 {
         address _manager,
         string memory _name,
         string memory _symbol
-    )
-        public
-        ERC20(_name, _symbol)
-    {
+    ) public ERC20(_name, _symbol) {
+        jasperName=_name;
+        jasperSymbol=_symbol;
         controller = _controller;
         manager = _manager;
         positionMultiplier = PreciseUnitMath.preciseUnitInt();
         components = _components;
-
+        if (_components.length > 0) {
+            masterToken = _components[0];
+        }
         // Modules are put in PENDING state, as they need to be individually initialized by the Module
         for (uint256 i = 0; i < _modules.length; i++) {
-            moduleStates[_modules[i]] = ISetToken.ModuleState.PENDING;
+            moduleStates[_modules[i]] = IJasperVault.ModuleState.PENDING;
         }
 
         // Positions are put in default state initially
@@ -214,18 +244,40 @@ contract SetToken is ERC20 {
     /**
      * PRIVELEGED MODULE FUNCTION. Low level function that adds a component to the components array.
      */
-    function addComponent(address _component) external onlyModule whenLockedOnlyLocker {
+    function addComponent(
+        address _component
+    ) external onlyModule whenLockedOnlyLocker {
         require(!isComponent(_component), "Must not be component");
-        
+
         components.push(_component);
 
         emit ComponentAdded(_component);
     }
 
+    function setBaseProperty(   
+        address _masterToken,    
+        string memory _name,
+        string memory _symbol) external onlyManager{
+        masterToken=_masterToken;
+        jasperName=_name;
+        jasperSymbol=_symbol;
+    }
+
+   function name() public view override  returns(string memory){
+        return jasperName;
+   }
+   function symbol() public view override returns(string memory){
+        return jasperSymbol;
+   }
+
+
+
     /**
      * PRIVELEGED MODULE FUNCTION. Low level function that removes a component from the components array.
      */
-    function removeComponent(address _component) external onlyModule whenLockedOnlyLocker {
+    function removeComponent(
+        address _component
+    ) external onlyModule whenLockedOnlyLocker {
         components.removeStorage(_component);
 
         emit ComponentRemoved(_component);
@@ -233,62 +285,77 @@ contract SetToken is ERC20 {
 
     /**
      * PRIVELEGED MODULE FUNCTION. Low level function that edits a component's virtual unit. Takes a real unit
-     * and converts it to virtual before committing.
+     * and converts it to virtual before committing. 
      */
-    function editDefaultPositionUnit(address _component, int256 _realUnit) external onlyModule whenLockedOnlyLocker {
+    function editDefaultPositionUnit(
+        address _component,
+        int256 _realUnit
+    ) external onlyModule whenLockedOnlyLocker {
         int256 virtualUnit = _convertRealToVirtualUnit(_realUnit);
-
         componentPositions[_component].virtualUnit = virtualUnit;
-
         emit DefaultPositionUnitEdited(_component, _realUnit);
+    }
+
+    function editDefaultPositionCoinType(address _component,uint256 coinType)  external onlyModule whenLockedOnlyLocker{
+        componentPositions[_component].coinType=coinType;
+    }
+
+    function editExternalPositionCoinType(address _component, address _module,uint256 coinType) external onlyModule whenLockedOnlyLocker{
+        componentPositions[_component].externalPositions[_module].coinType=coinType;
     }
 
     /**
      * PRIVELEGED MODULE FUNCTION. Low level function that adds a module to a component's externalPositionModules array
      */
-    function addExternalPositionModule(address _component, address _positionModule) external onlyModule whenLockedOnlyLocker {
-        require(!isExternalPositionModule(_component, _positionModule), "Module already added");
+    function addExternalPositionModule(
+        address _component,
+        address _positionModule
+    ) external onlyModule whenLockedOnlyLocker {
+        require(
+            !isExternalPositionModule(_component, _positionModule),
+            "Module already added"
+        );
 
-        componentPositions[_component].externalPositionModules.push(_positionModule);
+        componentPositions[_component].externalPositionModules.push(
+            _positionModule
+        );
 
         emit PositionModuleAdded(_component, _positionModule);
     }
 
     /**
-     * PRIVELEGED MODULE FUNCTION. Low level function that removes a module from a component's 
+     * PRIVELEGED MODULE FUNCTION. Low level function that removes a module from a component's
      * externalPositionModules array and deletes the associated externalPosition.
      */
     function removeExternalPositionModule(
         address _component,
         address _positionModule
-    )
-        external
-        onlyModule
-        whenLockedOnlyLocker
-    {
-        componentPositions[_component].externalPositionModules.removeStorage(_positionModule);
+    ) external onlyModule whenLockedOnlyLocker {
+        componentPositions[_component].externalPositionModules.removeStorage(
+            _positionModule
+        );
 
-        delete componentPositions[_component].externalPositions[_positionModule];
+        delete componentPositions[_component].externalPositions[
+            _positionModule
+        ];
 
         emit PositionModuleRemoved(_component, _positionModule);
     }
 
     /**
-     * PRIVELEGED MODULE FUNCTION. Low level function that edits a component's external position virtual unit. 
+     * PRIVELEGED MODULE FUNCTION. Low level function that edits a component's external position virtual unit.
      * Takes a real unit and converts it to virtual before committing.
      */
     function editExternalPositionUnit(
         address _component,
         address _positionModule,
         int256 _realUnit
-    )
-        external
-        onlyModule
-        whenLockedOnlyLocker
-    {
+    ) external onlyModule whenLockedOnlyLocker {
         int256 virtualUnit = _convertRealToVirtualUnit(_realUnit);
 
-        componentPositions[_component].externalPositions[_positionModule].virtualUnit = virtualUnit;
+        componentPositions[_component]
+            .externalPositions[_positionModule]
+            .virtualUnit = virtualUnit;
 
         emit ExternalPositionUnitEdited(_component, _positionModule, _realUnit);
     }
@@ -300,12 +367,10 @@ contract SetToken is ERC20 {
         address _component,
         address _positionModule,
         bytes calldata _data
-    )
-        external
-        onlyModule
-        whenLockedOnlyLocker
-    {
-        componentPositions[_component].externalPositions[_positionModule].data = _data;
+    ) external onlyModule whenLockedOnlyLocker {
+        componentPositions[_component]
+            .externalPositions[_positionModule]
+            .data = _data;
 
         emit ExternalPositionDataEdited(_component, _positionModule, _data);
     }
@@ -314,7 +379,9 @@ contract SetToken is ERC20 {
      * PRIVELEGED MODULE FUNCTION. Modifies the position multiplier. This is typically used to efficiently
      * update all the Positions' units at once in applications where inflation is awarded (e.g. subscription fees).
      */
-    function editPositionMultiplier(int256 _newMultiplier) external onlyModule whenLockedOnlyLocker {        
+    function editPositionMultiplier(
+        int256 _newMultiplier
+    ) external onlyModule whenLockedOnlyLocker {
         _validateNewMultiplier(_newMultiplier);
 
         positionMultiplier = _newMultiplier;
@@ -325,7 +392,10 @@ contract SetToken is ERC20 {
     /**
      * PRIVELEGED MODULE FUNCTION. Increases the "account" balance by the "quantity".
      */
-    function mint(address _account, uint256 _quantity) external onlyModule whenLockedOnlyLocker {
+    function mint(
+        address _account,
+        uint256 _quantity
+    ) external onlyModule whenLockedOnlyLocker {
         _mint(_account, _quantity);
     }
 
@@ -333,12 +403,15 @@ contract SetToken is ERC20 {
      * PRIVELEGED MODULE FUNCTION. Decreases the "account" balance by the "quantity".
      * _burn checks that the "account" already has the required "quantity".
      */
-    function burn(address _account, uint256 _quantity) external onlyModule whenLockedOnlyLocker {
+    function burn(
+        address _account,
+        uint256 _quantity
+    ) external onlyModule whenLockedOnlyLocker {
         _burn(_account, _quantity);
     }
 
     /**
-     * PRIVELEGED MODULE FUNCTION. When a SetToken is locked, only the locker can call privileged functions.
+     * PRIVELEGED MODULE FUNCTION. When a JasperVault is locked, only the locker can call privileged functions.
      */
     function lock() external onlyModule {
         require(!isLocked, "Must not be locked");
@@ -347,7 +420,7 @@ contract SetToken is ERC20 {
     }
 
     /**
-     * PRIVELEGED MODULE FUNCTION. Unlocks the SetToken and clears the locker
+     * PRIVELEGED MODULE FUNCTION. Unlocks the JasperVault and clears the locker
      */
     function unlock() external onlyModule {
         require(isLocked, "Must be locked");
@@ -357,29 +430,35 @@ contract SetToken is ERC20 {
     }
 
     /**
-     * MANAGER ONLY. Adds a module into a PENDING state; Module must later be initialized via 
+     * MANAGER ONLY. Adds a module into a PENDING state; Module must later be initialized via
      * module's initialize function
      */
     function addModule(address _module) external onlyManager {
-        require(moduleStates[_module] == ISetToken.ModuleState.NONE, "Module must not be added");
+        require(
+            moduleStates[_module] == IJasperVault.ModuleState.NONE,
+            "Module must not be added"
+        );
         require(controller.isModule(_module), "Must be enabled on Controller");
 
-        moduleStates[_module] = ISetToken.ModuleState.PENDING;
+        moduleStates[_module] = IJasperVault.ModuleState.PENDING;
 
         emit ModuleAdded(_module);
     }
 
     /**
-     * MANAGER ONLY. Removes a module from the SetToken. SetToken calls removeModule on module itself to confirm
+     * MANAGER ONLY. Removes a module from the JasperVault. JasperVault calls removeModule on module itself to confirm
      * it is not needed to manage any remaining positions and to remove state.
      */
     function removeModule(address _module) external onlyManager {
         require(!isLocked, "Only when unlocked");
-        require(moduleStates[_module] == ISetToken.ModuleState.INITIALIZED, "Module must be added");
+        require(
+            moduleStates[_module] == IJasperVault.ModuleState.INITIALIZED,
+            "Module must be added"
+        );
 
         IModule(_module).removeModule();
 
-        moduleStates[_module] = ISetToken.ModuleState.NONE;
+        moduleStates[_module] = IJasperVault.ModuleState.NONE;
 
         modules.removeStorage(_module);
 
@@ -387,13 +466,16 @@ contract SetToken is ERC20 {
     }
 
     /**
-     * MANAGER ONLY. Removes a pending module from the SetToken.
+     * MANAGER ONLY. Removes a pending module from the JasperVault.
      */
     function removePendingModule(address _module) external onlyManager {
         require(!isLocked, "Only when unlocked");
-        require(moduleStates[_module] == ISetToken.ModuleState.PENDING, "Module must be pending");
+        require(
+            moduleStates[_module] == IJasperVault.ModuleState.PENDING,
+            "Module must be pending"
+        );
 
-        moduleStates[_module] = ISetToken.ModuleState.NONE;
+        moduleStates[_module] = IJasperVault.ModuleState.NONE;
 
         emit PendingModuleRemoved(_module);
     }
@@ -405,16 +487,19 @@ contract SetToken is ERC20 {
      */
     function initializeModule() external {
         require(!isLocked, "Only when unlocked");
-        require(moduleStates[msg.sender] == ISetToken.ModuleState.PENDING, "Module must be pending");
-        
-        moduleStates[msg.sender] = ISetToken.ModuleState.INITIALIZED;
+        require(
+            moduleStates[msg.sender] == IJasperVault.ModuleState.PENDING,
+            "Module must be pending"
+        );
+
+        moduleStates[msg.sender] = IJasperVault.ModuleState.INITIALIZED;
         modules.push(msg.sender);
 
         emit ModuleInitialized(msg.sender);
     }
 
     /**
-     * MANAGER ONLY. Changes manager; We allow null addresses in case the manager wishes to wind down the SetToken.
+     * MANAGER ONLY. Changes manager; We allow null addresses in case the manager wishes to wind down the JasperVault.
      * Modules may rely on the manager state, so only changable when unlocked
      */
     function setManager(address _manager) external onlyManager {
@@ -425,25 +510,47 @@ contract SetToken is ERC20 {
         emit ManagerEdited(_manager, oldManager);
     }
 
+    function setMasterToken(address _masterToken) external onlyManager {
+        require(!isLocked, "Only when unlocked");
+        address oldMasterToken = masterToken;
+        masterToken = _masterToken;
+
+        emit MasterTokenEdited(_masterToken, oldMasterToken);
+    }
+
     /* ============ External Getter Functions ============ */
 
-    function getComponents() external view returns(address[] memory) {
+    function getComponents() external view returns (address[] memory) {
         return components;
     }
 
-    function getDefaultPositionRealUnit(address _component) public view returns(int256) {
-        return _convertVirtualToRealUnit(_defaultPositionVirtualUnit(_component));
+    function getDefaultPositionRealUnit(
+        address _component
+    ) public view returns (int256) {
+        return
+            _convertVirtualToRealUnit(_defaultPositionVirtualUnit(_component));
     }
 
-    function getExternalPositionRealUnit(address _component, address _positionModule) public view returns(int256) {
-        return _convertVirtualToRealUnit(_externalPositionVirtualUnit(_component, _positionModule));
+    function getExternalPositionRealUnit(
+        address _component,
+        address _positionModule
+    ) public view returns (int256) {
+        return
+            _convertVirtualToRealUnit(
+                _externalPositionVirtualUnit(_component, _positionModule)
+            );
     }
 
-    function getExternalPositionModules(address _component) external view returns(address[] memory) {
+    function getExternalPositionModules(
+        address _component
+    ) external view returns (address[] memory) {
         return _externalPositionModules(_component);
     }
 
-    function getExternalPositionData(address _component,address _positionModule) external view returns(bytes memory) {
+    function getExternalPositionData(
+        address _component,
+        address _positionModule
+    ) external view returns (bytes memory) {
         return _externalPositionData(_component, _positionModule);
     }
 
@@ -451,11 +558,14 @@ contract SetToken is ERC20 {
         return modules;
     }
 
-    function isComponent(address _component) public view returns(bool) {
+    function isComponent(address _component) public view returns (bool) {
         return components.contains(_component);
     }
 
-    function isExternalPositionModule(address _component, address _module) public view returns(bool) {
+    function isExternalPositionModule(
+        address _component,
+        address _module
+    ) public view returns (bool) {
         return _externalPositionModules(_component).contains(_module);
     }
 
@@ -463,14 +573,14 @@ contract SetToken is ERC20 {
      * Only ModuleStates of INITIALIZED modules are considered enabled
      */
     function isInitializedModule(address _module) external view returns (bool) {
-        return moduleStates[_module] == ISetToken.ModuleState.INITIALIZED;
+        return moduleStates[_module] == IJasperVault.ModuleState.INITIALIZED;
     }
 
     /**
      * Returns whether the module is in a pending state
      */
     function isPendingModule(address _module) external view returns (bool) {
-        return moduleStates[_module] == ISetToken.ModuleState.PENDING;
+        return moduleStates[_module] == IJasperVault.ModuleState.PENDING;
     }
 
     /**
@@ -478,8 +588,14 @@ contract SetToken is ERC20 {
      * is considered a Default Position, and each externalPositionModule will generate a unique position.
      * Virtual units are converted to real units. This function is typically used off-chain for data presentation purposes.
      */
-    function getPositions() external view returns (ISetToken.Position[] memory) {
-        ISetToken.Position[] memory positions = new ISetToken.Position[](_getPositionCount());
+    function getPositions()
+        external
+        view
+        returns (IJasperVault.Position[] memory)
+    {
+        IJasperVault.Position[] memory positions = new IJasperVault.Position[](
+            _getPositionCount()
+        );
         uint256 positionCount = 0;
 
         for (uint256 i = 0; i < components.length; i++) {
@@ -487,26 +603,30 @@ contract SetToken is ERC20 {
 
             // A default position exists if the default virtual unit is > 0
             if (_defaultPositionVirtualUnit(component) > 0) {
-                positions[positionCount] = ISetToken.Position({
+                positions[positionCount] = IJasperVault.Position({
                     component: component,
                     module: address(0),
                     unit: getDefaultPositionRealUnit(component),
                     positionState: DEFAULT,
+                    coinType:componentPositions[component].coinType,
                     data: ""
                 });
 
                 positionCount++;
             }
 
-            address[] memory externalModules = _externalPositionModules(component);
+            address[] memory externalModules = _externalPositionModules(
+                component
+            );
             for (uint256 j = 0; j < externalModules.length; j++) {
                 address currentModule = externalModules[j];
 
-                positions[positionCount] = ISetToken.Position({
+                positions[positionCount] = IJasperVault.Position({
                     component: component,
                     module: currentModule,
                     unit: getExternalPositionRealUnit(component, currentModule),
                     positionState: EXTERNAL,
+                    coinType:componentPositions[component].externalPositions[currentModule].coinType,
                     data: _externalPositionData(component, currentModule)
                 });
 
@@ -520,36 +640,52 @@ contract SetToken is ERC20 {
     /**
      * Returns the total Real Units for a given component, summing the default and external position units.
      */
-    function getTotalComponentRealUnits(address _component) external view returns(int256) {
+    function getTotalComponentRealUnits(
+        address _component
+    ) external view returns (int256) {
         int256 totalUnits = getDefaultPositionRealUnit(_component);
 
         address[] memory externalModules = _externalPositionModules(_component);
         for (uint256 i = 0; i < externalModules.length; i++) {
             // We will perform the summation no matter what, as an external position virtual unit can be negative
-            totalUnits = totalUnits.add(getExternalPositionRealUnit(_component, externalModules[i]));
+            totalUnits = totalUnits.add(
+                getExternalPositionRealUnit(_component, externalModules[i])
+            );
         }
 
         return totalUnits;
     }
 
-
     receive() external payable {} // solium-disable-line quotes
 
     /* ============ Internal Functions ============ */
 
-    function _defaultPositionVirtualUnit(address _component) internal view returns(int256) {
+    function _defaultPositionVirtualUnit(
+        address _component
+    ) internal view returns (int256) {
         return componentPositions[_component].virtualUnit;
     }
 
-    function _externalPositionModules(address _component) internal view returns(address[] memory) {
+    function _externalPositionModules(
+        address _component
+    ) internal view returns (address[] memory) {
         return componentPositions[_component].externalPositionModules;
     }
 
-    function _externalPositionVirtualUnit(address _component, address _module) internal view returns(int256) {
-        return componentPositions[_component].externalPositions[_module].virtualUnit;
+    function _externalPositionVirtualUnit(
+        address _component,
+        address _module
+    ) internal view returns (int256) {
+        return
+            componentPositions[_component]
+                .externalPositions[_module]
+                .virtualUnit;
     }
 
-    function _externalPositionData(address _component, address _module) internal view returns(bytes memory) {
+    function _externalPositionData(
+        address _component,
+        address _module
+    ) internal view returns (bytes memory) {
         return componentPositions[_component].externalPositions[_module].data;
     }
 
@@ -557,8 +693,12 @@ contract SetToken is ERC20 {
      * Takes a real unit and divides by the position multiplier to return the virtual unit. Negative units will
      * be rounded away from 0 so no need to check that unit will be rounded down to 0 in conversion.
      */
-    function _convertRealToVirtualUnit(int256 _realUnit) internal view returns(int256) {
-        int256 virtualUnit = _realUnit.conservativePreciseDiv(positionMultiplier);
+    function _convertRealToVirtualUnit(
+        int256 _realUnit
+    ) internal view returns (int256) {
+        int256 virtualUnit = _realUnit.conservativePreciseDiv(
+            positionMultiplier
+        );
 
         // This check ensures that the virtual unit does not return a result that has rounded down to 0
         if (_realUnit > 0 && virtualUnit == 0) {
@@ -576,28 +716,37 @@ contract SetToken is ERC20 {
     /**
      * Takes a virtual unit and multiplies by the position multiplier to return the real unit
      */
-    function _convertVirtualToRealUnit(int256 _virtualUnit) internal view returns(int256) {
+    function _convertVirtualToRealUnit(
+        int256 _virtualUnit
+    ) internal view returns (int256) {
         return _virtualUnit.conservativePreciseMul(positionMultiplier);
     }
 
     /**
-     * To prevent virtual to real unit conversion issues (where real unit may be 0), the 
+     * To prevent virtual to real unit conversion issues (where real unit may be 0), the
      * product of the positionMultiplier and the lowest absolute virtualUnit value (across default and
      * external positions) must be greater than 0.
      */
     function _validateNewMultiplier(int256 _newMultiplier) internal view {
         int256 minVirtualUnit = _getPositionsAbsMinimumVirtualUnit();
 
-        require(minVirtualUnit.conservativePreciseMul(_newMultiplier) > 0, "New multiplier too small");
+        require(
+            minVirtualUnit.conservativePreciseMul(_newMultiplier) > 0,
+            "New multiplier too small"
+        );
     }
 
     /**
-     * Loops through all of the positions and returns the smallest absolute value of 
+     * Loops through all of the positions and returns the smallest absolute value of
      * the virtualUnit.
      *
      * @return Min virtual unit across positions denominated as int256
      */
-    function _getPositionsAbsMinimumVirtualUnit() internal view returns(int256) {
+    function _getPositionsAbsMinimumVirtualUnit()
+        internal
+        view
+        returns (int256)
+    {
         // Additional assignment happens in the loop below
         uint256 minimumUnit = uint256(-1);
 
@@ -605,12 +754,15 @@ contract SetToken is ERC20 {
             address component = components[i];
 
             // A default position exists if the default virtual unit is > 0
-            uint256 defaultUnit = _defaultPositionVirtualUnit(component).toUint256();
+            uint256 defaultUnit = _defaultPositionVirtualUnit(component)
+                .toUint256();
             if (defaultUnit > 0 && defaultUnit < minimumUnit) {
                 minimumUnit = defaultUnit;
             }
 
-            address[] memory externalModules = _externalPositionModules(component);
+            address[] memory externalModules = _externalPositionModules(
+                component
+            );
             for (uint256 j = 0; j < externalModules.length; j++) {
                 address currentModule = externalModules[j];
 
@@ -623,7 +775,7 @@ contract SetToken is ERC20 {
             }
         }
 
-        return minimumUnit.toInt256();        
+        return minimumUnit.toInt256();
     }
 
     /**
@@ -642,9 +794,11 @@ contract SetToken is ERC20 {
             }
 
             // Increment the position count by each external position module
-            address[] memory externalModules = _externalPositionModules(component);
+            address[] memory externalModules = _externalPositionModules(
+                component
+            );
             if (externalModules.length > 0) {
-                positionCount = positionCount.add(externalModules.length);  
+                positionCount = positionCount.add(externalModules.length);
             }
         }
 
@@ -656,18 +810,18 @@ contract SetToken is ERC20 {
      * @param _a Signed interger value
      * @return Returns the absolute value in uint256
      */
-    function _absoluteValue(int256 _a) internal pure returns(uint256) {
+    function _absoluteValue(int256 _a) internal pure returns (uint256) {
         return _a >= 0 ? _a.toUint256() : (-_a).toUint256();
     }
 
     /**
      * Due to reason error bloat, internal functions are used to reduce bytecode size
      *
-     * Module must be initialized on the SetToken and enabled by the controller
+     * Module must be initialized on the JasperVault and enabled by the controller
      */
     function _validateOnlyModule() internal view {
         require(
-            moduleStates[msg.sender] == ISetToken.ModuleState.INITIALIZED,
+            moduleStates[msg.sender] == IJasperVault.ModuleState.INITIALIZED,
             "Only the module can call"
         );
 
@@ -683,7 +837,10 @@ contract SetToken is ERC20 {
 
     function _validateWhenLockedOnlyLocker() internal view {
         if (isLocked) {
-            require(msg.sender == locker, "When locked, only the locker can call");
+            require(
+                msg.sender == locker,
+                "When locked, only the locker can call"
+            );
         }
     }
 }

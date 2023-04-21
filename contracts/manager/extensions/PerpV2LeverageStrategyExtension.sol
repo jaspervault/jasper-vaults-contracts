@@ -27,8 +27,8 @@ import { SafeMath } from "@openzeppelin/contracts/math/SafeMath.sol";
 import { SignedSafeMath } from "@openzeppelin/contracts/math/SignedSafeMath.sol";
 
 import { IAccountBalance } from "@setprotocol/set-protocol-v2/contracts/interfaces/external/perp-v2/IAccountBalance.sol";
-import { IPerpV2LeverageModuleV2 } from "@setprotocol/set-protocol-v2/contracts/interfaces/IPerpV2LeverageModuleV2.sol";
-import { ISetToken } from "@setprotocol/set-protocol-v2/contracts/interfaces/ISetToken.sol";
+import { IPerpV2LeverageModuleV2 } from "../../interfaces/IPerpV2LeverageModuleV2.sol";
+import { IJasperVault } from "../../interfaces/IJasperVault.sol";
 import { IVault } from "@setprotocol/set-protocol-v2/contracts/interfaces/external/perp-v2/IVault.sol";
 import { PreciseUnitMath } from "@setprotocol/set-protocol-v2/contracts/lib/PreciseUnitMath.sol";
 import { StringArrayUtils } from "@setprotocol/set-protocol-v2/contracts/lib/StringArrayUtils.sol";
@@ -76,7 +76,7 @@ contract PerpV2LeverageStrategyExtension is BaseExtension {
         int256 quoteValue;                                  // Valuation in USD adjusted for decimals in precise units (10e18)
         int256 basePrice;                                   // Price of base asset in precise units (10e18) from PerpV2 Oracle
         int256 quotePrice;                                  // Price of quote asset in precise units (10e18) from PerpV2 Oracle
-        uint256 setTotalSupply;                             // Total supply of SetToken
+        uint256 setTotalSupply;                             // Total supply of JasperVault
     }
 
     struct LeverageInfo {
@@ -87,7 +87,7 @@ contract PerpV2LeverageStrategyExtension is BaseExtension {
     }
 
     struct ContractSettings {
-        ISetToken setToken;                             // Instance of leverage token
+        IJasperVault jasperVault;                             // Instance of leverage token
         IPerpV2LeverageModuleV2 perpV2LeverageModule;     // Instance of Perp V2 leverage module
         IAccountBalance perpV2AccountBalance;           // Instance of Perp V2 AccountBalance contract used to fetch position balances
         IPriceFeed baseUSDPriceOracle;                  // PerpV2 oracle that returns TWAP price for base asset in USD. IPriceFeed is a PerpV2 specific interface
@@ -186,7 +186,7 @@ contract PerpV2LeverageStrategyExtension is BaseExtension {
 
     /* ============ State Variables ============ */
 
-    ContractSettings internal strategy;                     // Struct of contracts used in the strategy (SetToken, price oracles, leverage module etc)
+    ContractSettings internal strategy;                     // Struct of contracts used in the strategy (JasperVault, price oracles, leverage module etc)
     MethodologySettings internal methodology;               // Struct containing methodology parameters
     ExecutionSettings internal execution;                   // Struct containing execution parameters
     ExchangeSettings internal exchange;                     // Struct containing exchange settings
@@ -230,8 +230,8 @@ contract PerpV2LeverageStrategyExtension is BaseExtension {
     /* ============ External Functions ============ */
 
     /**
-     * OPERATOR ONLY: Engage to target leverage ratio for the first time. SetToken will open a new base token position on PerpV2. Under the hood, perp would
-     * mint virtual quote assets (vUSDC) for SetToken and swap them for base token. If target leverage ratio is above max trade size, then TWAP is kicked off.
+     * OPERATOR ONLY: Engage to target leverage ratio for the first time. JasperVault will open a new base token position on PerpV2. Under the hood, perp would
+     * mint virtual quote assets (vUSDC) for JasperVault and swap them for base token. If target leverage ratio is above max trade size, then TWAP is kicked off.
      * To complete engage if TWAP, any valid caller must call iterateRebalance until target is met.
      * Note: Engage should be called after collateral has been deposited to PerpV2 using `deposit()`.
      */
@@ -357,7 +357,7 @@ contract PerpV2LeverageStrategyExtension is BaseExtension {
     }
 
     /**
-     * OPERATOR ONLY: Close open baseToken position on Perpetual Protocol. TWAP cooldown period must have elapsed. This can be used for upgrading or shutting down the strategy. SetToken will sell all
+     * OPERATOR ONLY: Close open baseToken position on Perpetual Protocol. TWAP cooldown period must have elapsed. This can be used for upgrading or shutting down the strategy. JasperVault will sell all
      * virtual base token positions into virtual USDC. If the chunk rebalance size is less than the total notional size, then this function will trade out of base
      * token position in one go. If chunk rebalance size is above max trade size, then operator must continue to call this function to completely unwind position.
      * The function iterateRebalance will not work.
@@ -400,7 +400,7 @@ contract PerpV2LeverageStrategyExtension is BaseExtension {
     function deposit(uint256 _collateralUnits) external onlyOperator {
         bytes memory depositCalldata = abi.encodeWithSelector(
             IPerpV2LeverageModuleV2.deposit.selector,
-            address(strategy.setToken),
+            address(strategy.jasperVault),
             _collateralUnits
         );
 
@@ -408,14 +408,14 @@ contract PerpV2LeverageStrategyExtension is BaseExtension {
     }
 
     /**
-     * OPERATOR ONLY: Withdraws specified units of USDC tokens from Perpetual Protocol and adds it as default position on the SetToken.
+     * OPERATOR ONLY: Withdraws specified units of USDC tokens from Perpetual Protocol and adds it as default position on the JasperVault.
      *
      * @param  _collateralUnits     Collateral to withdraw in position units
      */
     function withdraw(uint256 _collateralUnits) external onlyOperator {
         bytes memory withdrawCalldata = abi.encodeWithSelector(
             IPerpV2LeverageModuleV2.withdraw.selector,
-            address(strategy.setToken),
+            address(strategy.jasperVault),
             _collateralUnits
         );
 
@@ -512,7 +512,7 @@ contract PerpV2LeverageStrategyExtension is BaseExtension {
     /* ============ External Getter Functions ============ */
 
     /**
-     * Get current leverage ratio. Current leverage ratio is defined as the sum of USD values of all SetToken open positions on Perp V2 divided by its account value on
+     * Get current leverage ratio. Current leverage ratio is defined as the sum of USD values of all JasperVault open positions on Perp V2 divided by its account value on
      * PerpV2. Prices for base and quote asset are retrieved from the Chainlink Price Oracle.
      *
      * return currentLeverageRatio         Current leverage ratio in precise units (10e18)
@@ -674,7 +674,7 @@ contract PerpV2LeverageStrategyExtension is BaseExtension {
 
         bytes memory tradeCallData = abi.encodeWithSelector(
             IPerpV2LeverageModuleV2.trade.selector,
-            address(strategy.setToken),
+            address(strategy.jasperVault),
             strategy.virtualBaseAddress,
             baseRebalanceUnits,
             oppositeBoundUnits
@@ -709,7 +709,7 @@ contract PerpV2LeverageStrategyExtension is BaseExtension {
         require(engageInfo.accountInfo.collateralBalance > 0, "Collateral balance must be > 0");
 
         // Assert base position unit is zero. Asserting base position unit instead of base balance allows us to neglect small dust amounts.
-        require(engageInfo.baseBalance.preciseDiv(strategy.setToken.totalSupply().toInt256()) == 0, "Base position must NOT exist");
+        require(engageInfo.baseBalance.preciseDiv(strategy.jasperVault.totalSupply().toInt256()) == 0, "Base position must NOT exist");
 
         return LeverageInfo({
             action: engageInfo,
@@ -727,7 +727,7 @@ contract PerpV2LeverageStrategyExtension is BaseExtension {
     function _getAndValidateLeveragedInfo(uint256 _slippageTolerance, uint256 _maxTradeSize) internal view returns(LeverageInfo memory) {
         ActionInfo memory actionInfo = _createActionInfo();
 
-        require(actionInfo.setTotalSupply > 0, "SetToken must have > 0 supply");
+        require(actionInfo.setTotalSupply > 0, "JasperVault must have > 0 supply");
 
         // Get current leverage ratio
         int256 currentLeverageRatio = _calculateCurrentLeverageRatio(actionInfo);
@@ -760,18 +760,18 @@ contract PerpV2LeverageStrategyExtension is BaseExtension {
         rebalanceInfo.quotePrice = PreciseUnitMath.preciseUnit().toInt256();
 
         // Note: getTakerPositionSize returns zero if base balance is less than 10 wei
-        rebalanceInfo.baseBalance = strategy.perpV2AccountBalance.getTakerPositionSize(address(strategy.setToken), strategy.virtualBaseAddress);
+        rebalanceInfo.baseBalance = strategy.perpV2AccountBalance.getTakerPositionSize(address(strategy.jasperVault), strategy.virtualBaseAddress);
 
         // Note: Fetching quote balance associated with a single position and not the net quote balance
-        rebalanceInfo.quoteBalance = strategy.perpV2AccountBalance.getTakerOpenNotional(address(strategy.setToken), strategy.virtualBaseAddress);
+        rebalanceInfo.quoteBalance = strategy.perpV2AccountBalance.getTakerOpenNotional(address(strategy.jasperVault), strategy.virtualBaseAddress);
 
-        rebalanceInfo.accountInfo = strategy.perpV2LeverageModule.getAccountInfo(strategy.setToken);
+        rebalanceInfo.accountInfo = strategy.perpV2LeverageModule.getAccountInfo(strategy.jasperVault);
 
         // In Perp v2, all virtual tokens have 18 decimals, therefore we do not need to make further adjustments to determine base valuation.
         rebalanceInfo.basePositionValue = rebalanceInfo.basePrice.preciseMul(rebalanceInfo.baseBalance);
         rebalanceInfo.quoteValue = rebalanceInfo.quoteBalance;
 
-        rebalanceInfo.setTotalSupply = strategy.setToken.totalSupply();
+        rebalanceInfo.setTotalSupply = strategy.jasperVault.totalSupply();
 
         return rebalanceInfo;
     }
@@ -998,7 +998,7 @@ contract PerpV2LeverageStrategyExtension is BaseExtension {
     }
 
     /**
-     * Calculate total notional rebalance quantity and chunked rebalance quantity in base asset units for engaging the SetToken. Used in engage().
+     * Calculate total notional rebalance quantity and chunked rebalance quantity in base asset units for engaging the JasperVault. Used in engage().
      * Leverage ratio (for the base asset) is zero before engage. We open a new base asset position with size equals to (collateralBalance * targetLeverageRatio / baseAssetPrice)
      * to gain (targetLeverageRatio * collateralBalance) worth of exposure to the base asset.
      * Note: We can't use `_calculateChunkRebalanceNotional` function because CLR is 0 during engage and it would lead to a divison by zero error.

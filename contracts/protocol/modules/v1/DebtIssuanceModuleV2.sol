@@ -25,7 +25,7 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 import { DebtIssuanceModule } from "./DebtIssuanceModule.sol";
 import { IController } from "../../../interfaces/IController.sol";
 import { Invoke } from "../../lib/Invoke.sol";
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
 import { IssuanceValidationUtils } from "../../lib/IssuanceValidationUtils.sol";
 import { Position } from "../../lib/Position.sol";
 
@@ -39,10 +39,10 @@ import { Position } from "../../lib/Position.sol";
  * in the manager hook, as well as specify issue and redeem fees.
  *
  * NOTE:
- * DebtIssuanceModule contract confirms increase/decrease in balance of component held by the SetToken after every transfer in/out
+ * DebtIssuanceModule contract confirms increase/decrease in balance of component held by the JasperVault after every transfer in/out
  * for each component during issuance/redemption. This contract replaces those strict checks with slightly looser checks which
- * ensure that the SetToken remains collateralized after every transfer in/out for each component during issuance/redemption.
- * This module should be used to issue/redeem SetToken whose one or more components return a balance value with +/-1 wei error.
+ * ensure that the JasperVault remains collateralized after every transfer in/out for each component during issuance/redemption.
+ * This module should be used to issue/redeem JasperVault whose one or more components return a balance value with +/-1 wei error.
  * For example, this module can be used to issue/redeem SetTokens which has one or more aTokens as its components.
  * The new checks do NOT apply to any transfers that are part of an external position. A token that has rounding issues may lead to
  * reverts if it is included as an external position unless explicitly allowed in a module hook.
@@ -60,42 +60,42 @@ contract DebtIssuanceModuleV2 is DebtIssuanceModule {
     /* ============ External Functions ============ */
 
     /**
-     * Deposits components to the SetToken, replicates any external module component positions and mints
-     * the SetToken. If the token has a debt position all collateral will be transferred in first then debt
+     * Deposits components to the JasperVault, replicates any external module component positions and mints
+     * the JasperVault. If the token has a debt position all collateral will be transferred in first then debt
      * will be returned to the minting address. If specified, a fee will be charged on issuance.
      *
      * NOTE: Overrides DebtIssuanceModule#issue external function and adds undercollateralization checks in place of the
      * previous default strict balances checks. The undercollateralization checks are implemented in IssuanceValidationUtils library and they
-     * revert upon undercollateralization of the SetToken post component transfer.
+     * revert upon undercollateralization of the JasperVault post component transfer.
      *
-     * @param _setToken         Instance of the SetToken to issue
-     * @param _quantity         Quantity of SetToken to issue
-     * @param _to               Address to mint SetToken to
+     * @param _jasperVault         Instance of the JasperVault to issue
+     * @param _quantity         Quantity of JasperVault to issue
+     * @param _to               Address to mint JasperVault to
      */
     function issue(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _quantity,
         address _to
     )
         external
         override
         nonReentrant
-        onlyValidAndInitializedSet(_setToken)
+        onlyValidAndInitializedSet(_jasperVault)
     {
         require(_quantity > 0, "Issue quantity must be > 0");
 
-        address hookContract = _callManagerPreIssueHooks(_setToken, _quantity, msg.sender, _to);
+        address hookContract = _callManagerPreIssueHooks(_jasperVault, _quantity, msg.sender, _to);
 
-        _callModulePreIssueHooks(_setToken, _quantity);
+        _callModulePreIssueHooks(_jasperVault, _quantity);
 
 
-        uint256 initialSetSupply = _setToken.totalSupply();
+        uint256 initialSetSupply = _jasperVault.totalSupply();
 
         (
             uint256 quantityWithFees,
             uint256 managerFee,
             uint256 protocolFee
-        ) = calculateTotalFees(_setToken, _quantity, true);
+        ) = calculateTotalFees(_jasperVault, _quantity, true);
 
         // Prevent stack too deep
         {
@@ -103,19 +103,19 @@ contract DebtIssuanceModuleV2 is DebtIssuanceModule {
                 address[] memory components,
                 uint256[] memory equityUnits,
                 uint256[] memory debtUnits
-            ) = _calculateRequiredComponentIssuanceUnits(_setToken, quantityWithFees, true);
+            ) = _calculateRequiredComponentIssuanceUnits(_jasperVault, quantityWithFees, true);
 
             uint256 finalSetSupply = initialSetSupply.add(quantityWithFees);
 
-            _resolveEquityPositions(_setToken, quantityWithFees, _to, true, components, equityUnits, initialSetSupply, finalSetSupply);
-            _resolveDebtPositions(_setToken, quantityWithFees, true, components, debtUnits, initialSetSupply, finalSetSupply);
-            _resolveFees(_setToken, managerFee, protocolFee);
+            _resolveEquityPositions(_jasperVault, quantityWithFees, _to, true, components, equityUnits, initialSetSupply, finalSetSupply);
+            _resolveDebtPositions(_jasperVault, quantityWithFees, true, components, debtUnits, initialSetSupply, finalSetSupply);
+            _resolveFees(_jasperVault, managerFee, protocolFee);
         }
 
-        _setToken.mint(_to, _quantity);
+        _jasperVault.mint(_to, _quantity);
 
         emit SetTokenIssued(
-            _setToken,
+            _jasperVault,
             msg.sender,
             _to,
             hookContract,
@@ -126,43 +126,43 @@ contract DebtIssuanceModuleV2 is DebtIssuanceModule {
     }
 
     /**
-     * Returns components from the SetToken, unwinds any external module component positions and burns the SetToken.
+     * Returns components from the JasperVault, unwinds any external module component positions and burns the JasperVault.
      * If the token has debt positions, the module transfers in the required debt amounts from the caller and uses
-     * those funds to repay the debts on behalf of the SetToken. All debt will be paid down first then equity positions
+     * those funds to repay the debts on behalf of the JasperVault. All debt will be paid down first then equity positions
      * will be returned to the minting address. If specified, a fee will be charged on redeem.
      *
      * NOTE: Overrides DebtIssuanceModule#redeem internal function and adds undercollateralization checks in place of the
      * previous default strict balances checks. The undercollateralization checks are implemented in IssuanceValidationUtils library
-     * and they revert upon undercollateralization of the SetToken post component transfer.
+     * and they revert upon undercollateralization of the JasperVault post component transfer.
      *
-     * @param _setToken         Instance of the SetToken to redeem
-     * @param _quantity         Quantity of SetToken to redeem
+     * @param _jasperVault         Instance of the JasperVault to redeem
+     * @param _quantity         Quantity of JasperVault to redeem
      * @param _to               Address to send collateral to
      */
     function redeem(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _quantity,
         address _to
     )
         external
         override
         nonReentrant
-        onlyValidAndInitializedSet(_setToken)
+        onlyValidAndInitializedSet(_jasperVault)
     {
         require(_quantity > 0, "Redeem quantity must be > 0");
 
-        _callModulePreRedeemHooks(_setToken, _quantity);
+        _callModulePreRedeemHooks(_jasperVault, _quantity);
 
-        uint256 initialSetSupply = _setToken.totalSupply();
+        uint256 initialSetSupply = _jasperVault.totalSupply();
 
         // Place burn after pre-redeem hooks because burning tokens may lead to false accounting of synced positions
-        _setToken.burn(msg.sender, _quantity);
+        _jasperVault.burn(msg.sender, _quantity);
 
         (
             uint256 quantityNetFees,
             uint256 managerFee,
             uint256 protocolFee
-        ) = calculateTotalFees(_setToken, _quantity, false);
+        ) = calculateTotalFees(_jasperVault, _quantity, false);
 
         // Prevent stack too deep
         {
@@ -170,17 +170,17 @@ contract DebtIssuanceModuleV2 is DebtIssuanceModule {
                 address[] memory components,
                 uint256[] memory equityUnits,
                 uint256[] memory debtUnits
-            ) = _calculateRequiredComponentIssuanceUnits(_setToken, quantityNetFees, false);
+            ) = _calculateRequiredComponentIssuanceUnits(_jasperVault, quantityNetFees, false);
 
             uint256 finalSetSupply = initialSetSupply.sub(quantityNetFees);
 
-            _resolveDebtPositions(_setToken, quantityNetFees, false, components, debtUnits, initialSetSupply, finalSetSupply);
-            _resolveEquityPositions(_setToken, quantityNetFees, _to, false, components, equityUnits, initialSetSupply, finalSetSupply);
-            _resolveFees(_setToken, managerFee, protocolFee);
+            _resolveDebtPositions(_jasperVault, quantityNetFees, false, components, debtUnits, initialSetSupply, finalSetSupply);
+            _resolveEquityPositions(_jasperVault, quantityNetFees, _to, false, components, equityUnits, initialSetSupply, finalSetSupply);
+            _resolveFees(_jasperVault, managerFee, protocolFee);
         }
 
         emit SetTokenRedeemed(
-            _setToken,
+            _jasperVault,
             msg.sender,
             _to,
             _quantity,
@@ -197,7 +197,7 @@ contract DebtIssuanceModuleV2 is DebtIssuanceModule {
      * closely track any accrued tokens that will be synced during issuance. External equity and debt positions will use the stored position
      * units. IF TOKEN VALUES ARE NOT BEING SYNCED DURING ISSUANCE THIS FUNCTION WILL OVER ESTIMATE THE AMOUNT OF REQUIRED TOKENS.
      *
-     * @param _setToken         Instance of the SetToken to issue
+     * @param _jasperVault         Instance of the JasperVault to issue
      * @param _quantity         Amount of Sets to be issued
      *
      * @return address[]        Array of component addresses making up the Set
@@ -205,7 +205,7 @@ contract DebtIssuanceModuleV2 is DebtIssuanceModule {
      * @return uint256[]        Array of debt notional amounts of each component, respectively, represented as uint256
      */
     function getRequiredComponentIssuanceUnits(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _quantity
     )
         external
@@ -215,16 +215,16 @@ contract DebtIssuanceModuleV2 is DebtIssuanceModule {
     {
         (
             uint256 totalQuantity,,
-        ) = calculateTotalFees(_setToken, _quantity, true);
+        ) = calculateTotalFees(_jasperVault, _quantity, true);
 
-        if(_setToken.totalSupply() == 0) {
-            return _calculateRequiredComponentIssuanceUnits(_setToken, totalQuantity, true);
+        if(_jasperVault.totalSupply() == 0) {
+            return _calculateRequiredComponentIssuanceUnits(_jasperVault, totalQuantity, true);
         } else {
             (
                 address[] memory components,
                 uint256[] memory equityUnits,
                 uint256[] memory debtUnits
-            ) = _getTotalIssuanceUnitsFromBalances(_setToken);
+            ) = _getTotalIssuanceUnitsFromBalances(_jasperVault);
 
             uint256 componentsLength = components.length;
             uint256[] memory totalEquityUnits = new uint256[](componentsLength);
@@ -243,13 +243,13 @@ contract DebtIssuanceModuleV2 is DebtIssuanceModule {
     /* ============ Internal Functions ============ */
 
     /**
-     * Resolve equity positions associated with SetToken. On issuance, the total equity position for an asset (including default and external
+     * Resolve equity positions associated with JasperVault. On issuance, the total equity position for an asset (including default and external
      * positions) is transferred in. Then any external position hooks are called to transfer the external positions to their necessary place.
      * On redemption all external positions are recalled by the external position hook, then those position plus any default position are
      * transferred back to the _to address.
      */
     function _resolveEquityPositions(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _quantity,
         address _to,
         bool _isIssue,
@@ -269,32 +269,32 @@ contract DebtIssuanceModuleV2 is DebtIssuanceModule {
                     SafeERC20.safeTransferFrom(
                         IERC20(component),
                         msg.sender,
-                        address(_setToken),
+                        address(_jasperVault),
                         componentQuantity
                     );
 
-                    IssuanceValidationUtils.validateCollateralizationPostTransferInPreHook(_setToken, component, _initialSetSupply, componentQuantity);
+                    IssuanceValidationUtils.validateCollateralizationPostTransferInPreHook(_jasperVault, component, _initialSetSupply, componentQuantity);
 
-                    _executeExternalPositionHooks(_setToken, _quantity, IERC20(component), true, true);
+                    _executeExternalPositionHooks(_jasperVault, _quantity, IERC20(component), true, true);
                 } else {
-                    _executeExternalPositionHooks(_setToken, _quantity, IERC20(component), false, true);
+                    _executeExternalPositionHooks(_jasperVault, _quantity, IERC20(component), false, true);
 
                     // Call Invoke#invokeTransfer instead of Invoke#strictInvokeTransfer
-                    _setToken.invokeTransfer(component, _to, componentQuantity);
+                    _jasperVault.invokeTransfer(component, _to, componentQuantity);
 
-                    IssuanceValidationUtils.validateCollateralizationPostTransferOut(_setToken, component, _finalSetSupply);
+                    IssuanceValidationUtils.validateCollateralizationPostTransferOut(_jasperVault, component, _finalSetSupply);
                 }
             }
         }
     }
 
     /**
-     * Resolve debt positions associated with SetToken. On issuance, debt positions are entered into by calling the external position hook. The
+     * Resolve debt positions associated with JasperVault. On issuance, debt positions are entered into by calling the external position hook. The
      * resulting debt is then returned to the calling address. On redemption, the module transfers in the required debt amount from the caller
-     * and uses those funds to repay the debt on behalf of the SetToken.
+     * and uses those funds to repay the debt on behalf of the JasperVault.
      */
     function _resolveDebtPositions(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _quantity,
         bool _isIssue,
         address[] memory _components,
@@ -309,24 +309,24 @@ contract DebtIssuanceModuleV2 is DebtIssuanceModule {
             uint256 componentQuantity = _componentDebtQuantities[i];
             if (componentQuantity > 0) {
                 if (_isIssue) {
-                    _executeExternalPositionHooks(_setToken, _quantity, IERC20(component), true, false);
+                    _executeExternalPositionHooks(_jasperVault, _quantity, IERC20(component), true, false);
 
                     // Call Invoke#invokeTransfer instead of Invoke#strictInvokeTransfer
-                    _setToken.invokeTransfer(component, msg.sender, componentQuantity);
+                    _jasperVault.invokeTransfer(component, msg.sender, componentQuantity);
 
-                    IssuanceValidationUtils.validateCollateralizationPostTransferOut(_setToken, component, _finalSetSupply);
+                    IssuanceValidationUtils.validateCollateralizationPostTransferOut(_jasperVault, component, _finalSetSupply);
                 } else {
                     // Call SafeERC20#safeTransferFrom instead of ExplicitERC20#transferFrom
                     SafeERC20.safeTransferFrom(
                         IERC20(component),
                         msg.sender,
-                        address(_setToken),
+                        address(_jasperVault),
                         componentQuantity
                     );
 
-                    IssuanceValidationUtils.validateCollateralizationPostTransferInPreHook(_setToken, component, _initialSetSupply, componentQuantity);
+                    IssuanceValidationUtils.validateCollateralizationPostTransferInPreHook(_jasperVault, component, _initialSetSupply, componentQuantity);
 
-                    _executeExternalPositionHooks(_setToken, _quantity, IERC20(component), false, false);
+                    _executeExternalPositionHooks(_jasperVault, _quantity, IERC20(component), false, false);
                 }
             }
         }
@@ -336,38 +336,38 @@ contract DebtIssuanceModuleV2 is DebtIssuanceModule {
      * position units. This function is ONLY to be used in getRequiredComponentIssuanceUnits in order to return more accurate required
      * token amounts to issuers when positions are being synced on issuance.
      *
-     * @param _setToken         Instance of the SetToken to issue
+     * @param _jasperVault         Instance of the JasperVault to issue
      *
      * @return address[]        Array of component addresses making up the Set
      * @return uint256[]        Array of equity unit amounts of each component, respectively, represented as uint256
      * @return uint256[]        Array of debt unit amounts of each component, respectively, represented as uint256
      */
     function _getTotalIssuanceUnitsFromBalances(
-        ISetToken _setToken
+        IJasperVault _jasperVault
     )
         internal
         view
         returns (address[] memory, uint256[] memory, uint256[] memory)
     {
-        address[] memory components = _setToken.getComponents();
+        address[] memory components = _jasperVault.getComponents();
         uint256 componentsLength = components.length;
 
         uint256[] memory equityUnits = new uint256[](componentsLength);
         uint256[] memory debtUnits = new uint256[](componentsLength);
 
-        uint256 totalSupply = _setToken.totalSupply();
+        uint256 totalSupply = _jasperVault.totalSupply();
 
         for (uint256 i = 0; i < components.length; i++) {
             address component = components[i];
             int256 cumulativeEquity = totalSupply
-                                        .getDefaultPositionUnit(IERC20(component).balanceOf(address(_setToken)))
+                                        .getDefaultPositionUnit(IERC20(component).balanceOf(address(_jasperVault)))
                                         .toInt256();
             int256 cumulativeDebt = 0;
-            address[] memory externalPositions = _setToken.getExternalPositionModules(component);
+            address[] memory externalPositions = _jasperVault.getExternalPositionModules(component);
 
             if (externalPositions.length > 0) {
                 for (uint256 j = 0; j < externalPositions.length; j++) {
-                    int256 externalPositionUnit = _setToken.getExternalPositionRealUnit(component, externalPositions[j]);
+                    int256 externalPositionUnit = _jasperVault.getExternalPositionRealUnit(component, externalPositions[j]);
 
                     // If positionUnit <= 0 it will be "added" to debt position
                     if (externalPositionUnit > 0) {

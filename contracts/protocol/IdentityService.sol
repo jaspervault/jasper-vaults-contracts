@@ -24,8 +24,8 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {AddressArrayUtils} from "../lib/AddressArrayUtils.sol";
 
 /**
- 
- 
+
+
  *
  * The IntegrationRegistry holds state relating to the Modules and the integrations they are connected with.
  * The state is combined into a single Registry to allow governance updates to be aggregated to one contract.
@@ -33,8 +33,8 @@ import {AddressArrayUtils} from "../lib/AddressArrayUtils.sol";
 contract IdentityService is Ownable {
     using AddressArrayUtils for address[];
 
-    modifier onlyValidSet(address _setToken) {
-        _isSetValid(_setToken);
+    modifier onlyValidSet(address _jasperVault) {
+        _isSetValid(_jasperVault);
         _;
     }
 
@@ -118,7 +118,7 @@ contract IdentityService is Ownable {
         return accounts;
     }
 
-    function _isSetValid(address _setToken) internal view returns (bool) {
-        return controller.isSet(_setToken);
+    function _isSetValid(address _jasperVault) internal view returns (bool) {
+        return controller.isSet(_jasperVault);
     }
 }

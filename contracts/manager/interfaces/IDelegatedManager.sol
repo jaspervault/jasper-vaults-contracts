@@ -19,14 +19,25 @@
 pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
 
-import { ISetToken } from "@setprotocol/set-protocol-v2/contracts/interfaces/ISetToken.sol";
+import {IJasperVault} from "../../interfaces/IJasperVault.sol";
 
 interface IDelegatedManager {
     function interactManager(address _module, bytes calldata _encoded) external;
 
     function initializeExtension() external;
 
-    function transferTokens(address _token, address _destination, uint256 _amount) external;
+    function transferTokens(
+        address _token,
+        address _destination,
+        uint256 _amount
+    ) external;
+
+    function factoryReset(
+        uint256 _newFeeSplit,
+        uint256 _managerFees,
+        uint256 _delay,
+        address _masterToken
+    ) external;
 
     function updateOwnerFeeSplit(uint256 _newFeeSplit) external;
 
@@ -36,20 +47,43 @@ interface IDelegatedManager {
 
     function transferOwnership(address _owner) external;
 
-    function setToken() external view returns(ISetToken);
-    function owner() external view returns(address);
-    function methodologist() external view returns(address);
-    function operatorAllowlist(address _operator) external view returns(bool);
-    function assetAllowlist(address _asset) external view returns(bool);
-    function useAssetAllowlist() external view returns(bool);
-    function isAllowedAsset(address _asset) external view returns(bool);
-    function isPendingExtension(address _extension) external view returns(bool);
-    function isInitializedExtension(address _extension) external view returns(bool);
-    function getExtensions() external view returns(address[] memory);
-    function getOperators() external view returns(address[] memory);
-    function getAllowedAssets() external view returns(address[] memory);
-    function ownerFeeRecipient() external view returns(address);
-    function ownerFeeSplit() external view returns(uint256);
-    function subscribeStatus() external view returns (bool);
-    function setSubscribeStatus(bool) external;
+    function isAllowedAdapter(address _adapter) external view returns (bool);
+
+    function jasperVault() external view returns (IJasperVault);
+
+    function owner() external view returns (address);
+
+    function methodologist() external view returns (address);
+
+    function operatorAllowlist(address _operator) external view returns (bool);
+
+    function assetAllowlist(address _asset) external view returns (bool);
+
+    function useAssetAllowlist() external view returns (bool);
+
+    function isAllowedAsset(address _asset) external view returns (bool);
+
+    function isPendingExtension(
+        address _extension
+    ) external view returns (bool);
+
+    function isInitializedExtension(
+        address _extension
+    ) external view returns (bool);
+
+    function getExtensions() external view returns (address[] memory);
+
+    function getOperators() external view returns (address[] memory);
+
+    function getAllowedAssets() external view returns (address[] memory);
+
+    function ownerFeeRecipient() external view returns (address);
+
+    function ownerFeeSplit() external view returns (uint256);
+
+    function subscribeStatus() external view returns (uint256);
+
+    function setSubscribeStatus(uint256) external;
+
+    function getAdapters() external view returns (address[] memory);
 }

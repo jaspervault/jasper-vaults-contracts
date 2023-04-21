@@ -18,11 +18,14 @@
 
 pragma solidity 0.6.10;
 
-import { AddressArrayUtils } from "@setprotocol/set-protocol-v2/contracts/lib/AddressArrayUtils.sol";
-import { ISetToken } from "@setprotocol/set-protocol-v2/contracts/interfaces/ISetToken.sol";
+import {AddressArrayUtils} from "@setprotocol/set-protocol-v2/contracts/lib/AddressArrayUtils.sol";
+import {IJasperVault} from "../../interfaces/IJasperVault.sol";
 
-import { IDelegatedManager } from "../interfaces/IDelegatedManager.sol";
-import { IManagerCore } from "../interfaces/IManagerCore.sol";
+import {IDelegatedManager} from "../interfaces/IDelegatedManager.sol";
+import {IManagerCore} from "../interfaces/IManagerCore.sol";
+
+import {IController} from "../../interfaces/IController.sol";
+import {ResourceIdentifier} from "../../protocol/lib/ResourceIdentifier.sol";
 
 /**
  * @title BaseGlobalExtension
@@ -33,11 +36,11 @@ import { IManagerCore } from "../interfaces/IManagerCore.sol";
  */
 abstract contract BaseGlobalExtension {
     using AddressArrayUtils for address[];
-
+    using ResourceIdentifier for IController;
     /* ============ Events ============ */
 
     event ExtensionRemoved(
-        address indexed _setToken,
+        address indexed _jasperVault,
         address indexed _delegatedManager
     );
 
@@ -47,66 +50,109 @@ abstract contract BaseGlobalExtension {
     IManagerCore public immutable managerCore;
 
     // Mapping from Set Token to DelegatedManager
-    mapping(ISetToken => IDelegatedManager) public setManagers;
+    mapping(IJasperVault => IDelegatedManager) public setManagers;
 
     /* ============ Modifiers ============ */
 
     /**
-     * Throws if the sender is not the SetToken manager contract owner
+     * Throws if the sender is not the JasperVault manager contract owner
      */
-    modifier onlyOwner(ISetToken _setToken) {
-        require(msg.sender == _manager(_setToken).owner(), "Must be owner");
+    modifier onlyOwner(IJasperVault _jasperVault) {
+        require(msg.sender == _manager(_jasperVault).owner(), "Must be owner");
         _;
     }
 
     /**
-     * Throws if the sender is not the SetToken methodologist
+     * Throws if the sender is not the JasperVault methodologist
      */
-    modifier onlyMethodologist(ISetToken _setToken) {
-        require(msg.sender == _manager(_setToken).methodologist(), "Must be methodologist");
-        _;
-    }
-    
-    modifier onlyUnSubscribed(ISetToken _setToken) {
-        require(!_manager(_setToken).subscribeStatus(),"setToken subscribed");
-        _;
-    }
-
-    modifier  onlySubscribed(ISetToken _setToken) {
-        require(_manager(_setToken).subscribeStatus(),"setToken unSubscribe");
+    modifier onlyMethodologist(IJasperVault _jasperVault) {
+        require(
+            msg.sender == _manager(_jasperVault).methodologist(),
+            "Must be methodologist"
+        );
         _;
     }
 
+    modifier onlyUnSubscribed(IJasperVault _jasperVault) {
+        require(
+            _manager(_jasperVault).subscribeStatus()==2,
+            "jasperVault not unsubscribed"
+        );
+        _;
+    }
 
-    modifier onlySubscribedAndNoOwner(ISetToken _setToken){
-        if(_manager(_setToken).subscribeStatus()){
-              require(msg.sender!=_manager(_setToken).owner(),"setToken have subscribe,reject owner action");
-        }
+
+    modifier onlySubscribed(IJasperVault _jasperVault) {
+        require(
+            _manager(_jasperVault).subscribeStatus()==1,
+            "jasperVault not subscribed"
+        );
+        _;
+    }
+
+
+    modifier onlySettle(IJasperVault _jasperVault) {
+        require(
+            _manager(_jasperVault).subscribeStatus()==0,
+            "jasperVault not unsettle"
+        );
+        _;
+    }
+
+
+    modifier onlyNotSubscribed(IJasperVault _jasperVault) {
+        require(
+            _manager(_jasperVault).subscribeStatus()!=1,
+            "jasperVault not unsettle"
+        );
         _;
     }
 
     /**
-     * Throws if the sender is not a SetToken operator
+     * Throws if the sender is not a JasperVault operator
      */
-    modifier onlyOperator(ISetToken _setToken) {
-        require(_manager(_setToken).operatorAllowlist(msg.sender), "Must be approved operator");
+    modifier onlyOperator(IJasperVault _jasperVault) {
+        require(
+            _manager(_jasperVault).operatorAllowlist(msg.sender),
+            "Must be approved operator"
+        );
+        _;
+    }
+
+    modifier ValidAdapter(
+        IJasperVault _jasperVault,
+        address _module,
+        string memory _integrationName
+    ) {
+        bool isValid = ValidAdapterByModule(
+            _jasperVault,
+            _module,
+            _integrationName
+        );
+        require(isValid, "Must be allowed adapter");
         _;
     }
 
     /**
-     * Throws if the sender is not the SetToken manager contract owner or if the manager is not enabled on the ManagerCore
+     * Throws if the sender is not the JasperVault manager contract owner or if the manager is not enabled on the ManagerCore
      */
     modifier onlyOwnerAndValidManager(IDelegatedManager _delegatedManager) {
         require(msg.sender == _delegatedManager.owner(), "Must be owner");
-        require(managerCore.isManager(address(_delegatedManager)), "Must be ManagerCore-enabled manager");
+        require(
+            managerCore.isManager(address(_delegatedManager)),
+            "Must be ManagerCore-enabled manager"
+        );
         _;
     }
 
     /**
      * Throws if asset is not allowed to be held by the Set
      */
-    modifier onlyAllowedAsset(ISetToken _setToken, address _asset) {
-        require(_manager(_setToken).isAllowedAsset(_asset), "Must be allowed asset");
+    modifier onlyAllowedAsset(IJasperVault _jasperVault, address _asset) {
+        require(
+            _manager(_jasperVault).isAllowedAsset(_asset),
+            "Must be allowed asset"
+        );
         _;
     }
 
@@ -123,8 +169,21 @@ abstract contract BaseGlobalExtension {
 
     /* ============ External Functions ============ */
 
+    function ValidAdapterByModule(
+        IJasperVault _jasperVault,
+        address _module,
+        string memory _integrationName
+    ) public view returns (bool) {
+        address controller = _jasperVault.controller();
+        bytes32 _integrationHash = keccak256(bytes(_integrationName));
+        address adapter = IController(controller)
+            .getIntegrationRegistry()
+            .getIntegrationAdapterWithHash(_module, _integrationHash);
+        return _manager(_jasperVault).isAllowedAdapter(adapter);
+    }
+
     /**
-     * ONLY MANAGER: Deletes SetToken/Manager state from extension. Must only be callable by manager!
+     * ONLY MANAGER: Deletes JasperVault/Manager state from extension. Must only be callable by manager!
      */
     function removeExtension() external virtual;
 
@@ -137,39 +196,56 @@ abstract contract BaseGlobalExtension {
      * @param _module                Module to interact with
      * @param _encoded               Encoded byte data
      */
-    function _invokeManager(IDelegatedManager _delegatedManager, address _module, bytes memory _encoded) internal {
+    function _invokeManager(
+        IDelegatedManager _delegatedManager,
+        address _module,
+        bytes memory _encoded
+    ) internal {
         _delegatedManager.interactManager(_module, _encoded);
     }
 
     /**
-     * Internal function to grab manager of passed SetToken from extensions data structure.
+     * Internal function to grab manager of passed JasperVault from extensions data structure.
      *
-     * @param _setToken         SetToken who's manager is needed
+     * @param _jasperVault         JasperVault who's manager is needed
      */
-    function _manager(ISetToken _setToken) internal view returns (IDelegatedManager) {
-        return setManagers[_setToken];
+    function _manager(
+        IJasperVault _jasperVault
+    ) internal view returns (IDelegatedManager) {
+        return setManagers[_jasperVault];
     }
 
     /**
      * Internal function to initialize extension to the DelegatedManager.
      *
-     * @param _setToken             Instance of the SetToken corresponding to the DelegatedManager
+     * @param _jasperVault             Instance of the JasperVault corresponding to the DelegatedManager
      * @param _delegatedManager     Instance of the DelegatedManager to initialize
      */
-    function _initializeExtension(ISetToken _setToken, IDelegatedManager _delegatedManager) internal {
-        setManagers[_setToken] = _delegatedManager;
+    function _initializeExtension(
+        IJasperVault _jasperVault,
+        IDelegatedManager _delegatedManager
+    ) internal {
+        setManagers[_jasperVault] = _delegatedManager;
         _delegatedManager.initializeExtension();
     }
 
     /**
-     * ONLY MANAGER: Internal function to delete SetToken/Manager state from extension
+     * ONLY MANAGER: Internal function to delete JasperVault/Manager state from extension
      */
-    function _removeExtension(ISetToken _setToken, IDelegatedManager _delegatedManager) internal {
-        require(msg.sender == address(_manager(_setToken)), "Must be Manager");
+    function _removeExtension(
+        IJasperVault _jasperVault,
+        IDelegatedManager _delegatedManager
+    ) internal {
+        require(
+            msg.sender == address(_manager(_jasperVault)),
+            "Must be Manager"
+        );
 
-        delete setManagers[_setToken];
+        delete setManagers[_jasperVault];
 
-        emit ExtensionRemoved(address(_setToken), address(_delegatedManager));
+        emit ExtensionRemoved(
+            address(_jasperVault),
+            address(_delegatedManager)
+        );
     }
-    
 }

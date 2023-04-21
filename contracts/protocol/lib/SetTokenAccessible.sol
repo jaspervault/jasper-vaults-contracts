@@ -21,7 +21,7 @@ pragma solidity 0.6.10;
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 import { IController } from "../../interfaces/IController.sol";
-import { ISetToken } from "../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../interfaces/IJasperVault.sol";
 
 /**
  * @title  SetTokenAccessible
@@ -35,11 +35,11 @@ abstract contract SetTokenAccessible is Ownable {
 
     /**
      * @dev Emitted on updateAllowedSetToken()
-     * @param _setToken SetToken being whose allowance to initialize this module is being updated
+     * @param _jasperVault JasperVault being whose allowance to initialize this module is being updated
      * @param _added    true if added false if removed
      */
     event SetTokenStatusUpdated(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         bool indexed _added
     );
 
@@ -53,11 +53,11 @@ abstract contract SetTokenAccessible is Ownable {
 
     /* ============ Modifiers ============ */
 
-    // @dev If anySetAllowed is true or _setToken is registered in allowedSetTokens, modifier succeeds.
+    // @dev If anySetAllowed is true or _jasperVault is registered in allowedSetTokens, modifier succeeds.
     // Reverts otherwise.
-    modifier onlyAllowedSet(ISetToken _setToken) {
+    modifier onlyAllowedSet(IJasperVault _jasperVault) {
         if (!anySetAllowed) {
-            require(allowedSetTokens[_setToken], "Not allowed SetToken");
+            require(allowedSetTokens[_jasperVault], "Not allowed JasperVault");
         }
         _;
     }
@@ -67,10 +67,10 @@ abstract contract SetTokenAccessible is Ownable {
     // Address of the controller
     IController private controller;
 
-    // Mapping of SetToken to boolean indicating if SetToken is on allow list. Updateable by governance
-    mapping(ISetToken => bool) public allowedSetTokens;
+    // Mapping of JasperVault to boolean indicating if JasperVault is on allow list. Updateable by governance
+    mapping(IJasperVault => bool) public allowedSetTokens;
 
-    // Boolean that returns if any SetToken can initialize this module. If false, then subject to allow list.
+    // Boolean that returns if any JasperVault can initialize this module. If false, then subject to allow list.
     // Updateable by governance.
     bool public anySetAllowed;
 
@@ -89,21 +89,21 @@ abstract contract SetTokenAccessible is Ownable {
     /* ============ External Functions ============ */
 
     /**
-     * @dev GOVERNANCE ONLY: Enable/disable ability of a SetToken to initialize this module.
+     * @dev GOVERNANCE ONLY: Enable/disable ability of a JasperVault to initialize this module.
      *
-     * @param _setToken             Instance of the SetToken
-     * @param _status               Bool indicating if _setToken is allowed to initialize this module
+     * @param _jasperVault             Instance of the JasperVault
+     * @param _status               Bool indicating if _jasperVault is allowed to initialize this module
      */
-    function updateAllowedSetToken(ISetToken _setToken, bool _status) public onlyOwner {
-        require(controller.isSet(address(_setToken)) || allowedSetTokens[_setToken], "Invalid SetToken");
-        allowedSetTokens[_setToken] = _status;
-        emit SetTokenStatusUpdated(_setToken, _status);
+    function updateAllowedSetToken(IJasperVault _jasperVault, bool _status) public onlyOwner {
+        require(controller.isSet(address(_jasperVault)) || allowedSetTokens[_jasperVault], "Invalid JasperVault");
+        allowedSetTokens[_jasperVault] = _status;
+        emit SetTokenStatusUpdated(_jasperVault, _status);
     }
 
     /**
-     * @dev GOVERNANCE ONLY: Toggle whether ANY SetToken is allowed to initialize this module.
+     * @dev GOVERNANCE ONLY: Toggle whether ANY JasperVault is allowed to initialize this module.
      *
-     * @param _anySetAllowed             Bool indicating if ANY SetToken is allowed to initialize this module
+     * @param _anySetAllowed             Bool indicating if ANY JasperVault is allowed to initialize this module
      */
     function updateAnySetAllowed(bool _anySetAllowed) public onlyOwner {
         anySetAllowed = _anySetAllowed;

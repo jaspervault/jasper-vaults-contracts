@@ -64,7 +64,7 @@ contract ZeroExMock {
     address public mockSendToken;
     uint256 public mockReceiveAmount;
     uint256 public mockSendAmount;
-    // Address of SetToken which will send/receive token
+    // Address of JasperVault which will send/receive token
     address public setTokenAddress;
 
     constructor(
@@ -79,7 +79,7 @@ contract ZeroExMock {
         mockReceiveAmount = _mockReceiveAmount;
     }
 
-    // Initialize SetToken address which will send/receive tokens for the trade
+    // Initialize JasperVault address which will send/receive tokens for the trade
     function addSetTokenAddress(address _setTokenAddress) external {
         setTokenAddress = _setTokenAddress;
     }

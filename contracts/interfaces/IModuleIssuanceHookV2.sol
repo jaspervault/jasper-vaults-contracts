@@ -19,7 +19,7 @@ pragma solidity 0.6.10;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import { ISetToken } from "./ISetToken.sol";
+import { IJasperVault } from "./IJasperVault.sol";
 
 
 /**
@@ -31,18 +31,18 @@ import { ISetToken } from "./ISetToken.sol";
  */
 interface IModuleIssuanceHookV2 {
 
-    function moduleIssueHook(ISetToken _setToken, uint256 _setTokenQuantity) external;
-    function moduleRedeemHook(ISetToken _setToken, uint256 _setTokenQuantity) external;
+    function moduleIssueHook(IJasperVault _jasperVault, uint256 _setTokenQuantity) external;
+    function moduleRedeemHook(IJasperVault _jasperVault, uint256 _setTokenQuantity) external;
 
     function componentIssueHook(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _setTokenQuantity,
         IERC20 _component,
         bool _isEquity
     ) external;
 
     function componentRedeemHook(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _setTokenQuantity,
         IERC20 _component,
         bool _isEquity
@@ -58,7 +58,7 @@ interface IModuleIssuanceHookV2 {
      * an external protocol and reverting. It should only be called by off-chain methods via static call.
      */
     function getIssuanceAdjustments(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _setTokenQuantity
     )
         external
@@ -74,7 +74,7 @@ interface IModuleIssuanceHookV2 {
      * an external protocol and reverting. It should only be called by off-chain methods via static call.
      */
     function getRedemptionAdjustments(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _setTokenQuantity
     )
         external

@@ -25,7 +25,7 @@ import { IVault } from "../../../../interfaces/external/perp-v2/IVault.sol";
 import { IQuoter } from "../../../../interfaces/external/perp-v2/IQuoter.sol";
 
 import { PerpV2 } from "../../../../protocol/integration/lib/PerpV2.sol";
-import { ISetToken } from "../../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../../interfaces/IJasperVault.sol";
 
 /**
  * @title PerpV2Mock
@@ -51,14 +51,14 @@ contract PerpV2Mock {
     }
 
     function testInvokeDeposit(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IVault _vault,
         IERC20 _asset,
         uint256 _amountNotional
     )
         external
     {
-        return PerpV2.invokeDeposit(_setToken, _vault, _asset, _amountNotional);
+        return PerpV2.invokeDeposit(_jasperVault, _vault, _asset, _amountNotional);
     }
 
     function testGetWithdrawCalldata(
@@ -74,14 +74,14 @@ contract PerpV2Mock {
     }
 
     function testInvokeWithdraw(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IVault _vault,
         IERC20 _asset,
         uint256 _amountNotional
     )
         external
     {
-        return PerpV2.invokeWithdraw(_setToken, _vault, _asset, _amountNotional);
+        return PerpV2.invokeWithdraw(_jasperVault, _vault, _asset, _amountNotional);
     }
 
     function testGetOpenPositionCalldata(
@@ -96,14 +96,14 @@ contract PerpV2Mock {
     }
 
     function testInvokeOpenPosition(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IClearingHouse _clearingHouse,
         IClearingHouse.OpenPositionParams memory _params
     )
         external
         returns (uint256 deltaBase, uint256 deltaQuote)
     {
-        return PerpV2.invokeOpenPosition(_setToken, _clearingHouse, _params);
+        return PerpV2.invokeOpenPosition(_jasperVault, _clearingHouse, _params);
     }
 
     function testGetSwapCalldata(
@@ -118,19 +118,19 @@ contract PerpV2Mock {
     }
 
     function testInvokeSwap(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IQuoter _quoter,
         IQuoter.SwapParams memory _params
     )
         external
         returns (IQuoter.SwapResponse memory)
     {
-        return PerpV2.invokeSwap(_setToken, _quoter, _params);
+        return PerpV2.invokeSwap(_jasperVault, _quoter, _params);
     }
 
     /* ============ Helper Functions ============ */
 
-    function initializeModuleOnSet(ISetToken _setToken) external {
-        _setToken.initializeModule();
+    function initializeModuleOnSet(IJasperVault _jasperVault) external {
+        _jasperVault.initializeModule();
     }
 }

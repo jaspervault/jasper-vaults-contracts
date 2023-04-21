@@ -24,7 +24,7 @@ import { AddressArrayUtils } from "../../lib/AddressArrayUtils.sol";
 import { ExplicitERC20 } from "../../lib/ExplicitERC20.sol";
 import { IController } from "../../interfaces/IController.sol";
 import { IModule } from "../../interfaces/IModule.sol";
-import { ISetToken } from "../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../interfaces/IJasperVault.sol";
 import { Invoke } from "./Invoke.sol";
 import { PositionV2 } from "./PositionV2.sol";
 import { PreciseUnitMath } from "../../lib/PreciseUnitMath.sol";
@@ -45,8 +45,8 @@ import { SignedSafeMath } from "@openzeppelin/contracts/math/SignedSafeMath.sol"
  */
 abstract contract ModuleBaseV2 is IModule {
     using AddressArrayUtils for address[];
-    using Invoke for ISetToken;
-    using PositionV2 for ISetToken;
+    using Invoke for IJasperVault;
+    using PositionV2 for IJasperVault;
     using PreciseUnitMath for uint256;
     using ResourceIdentifier for IController;
     using SafeCast for int256;
@@ -61,35 +61,35 @@ abstract contract ModuleBaseV2 is IModule {
 
     /* ============ Modifiers ============ */
 
-    modifier onlyManagerAndValidSet(ISetToken _setToken) {
-        _validateOnlyManagerAndValidSet(_setToken);
+    modifier onlyManagerAndValidSet(IJasperVault _jasperVault) {
+        _validateOnlyManagerAndValidSet(_jasperVault);
         _;
     }
 
-    modifier onlySetManager(ISetToken _setToken, address _caller) {
-        _validateOnlySetManager(_setToken, _caller);
+    modifier onlySetManager(IJasperVault _jasperVault, address _caller) {
+        _validateOnlySetManager(_jasperVault, _caller);
         _;
     }
 
-    modifier onlyValidAndInitializedSet(ISetToken _setToken) {
-        _validateOnlyValidAndInitializedSet(_setToken);
+    modifier onlyValidAndInitializedSet(IJasperVault _jasperVault) {
+        _validateOnlyValidAndInitializedSet(_jasperVault);
         _;
     }
 
     /**
-     * Throws if the sender is not a SetToken's module or module not enabled
+     * Throws if the sender is not a JasperVault's module or module not enabled
      */
-    modifier onlyModule(ISetToken _setToken) {
-        _validateOnlyModule(_setToken);
+    modifier onlyModule(IJasperVault _jasperVault) {
+        _validateOnlyModule(_jasperVault);
         _;
     }
 
     /**
      * Utilized during module initializations to check that the module is in pending state
-     * and that the SetToken is valid
+     * and that the JasperVault is valid
      */
-    modifier onlyValidAndPendingSet(ISetToken _setToken) {
-        _validateOnlyValidAndPendingSet(_setToken);
+    modifier onlyValidAndPendingSet(IJasperVault _jasperVault) {
+        _validateOnlyValidAndPendingSet(_jasperVault);
         _;
     }
 
@@ -121,7 +121,7 @@ abstract contract ModuleBaseV2 is IModule {
     /**
      * Gets the integration for the module with the passed in name. Validates that the address is not empty
      */
-    function getAndValidateAdapter(string memory _integrationName) internal view returns(address) { 
+    function getAndValidateAdapter(string memory _integrationName) internal view returns(address) {
         bytes32 integrationHash = getNameHash(_integrationName);
         return getAndValidateAdapterWithHash(integrationHash);
     }
@@ -129,13 +129,13 @@ abstract contract ModuleBaseV2 is IModule {
     /**
      * Gets the integration for the module with the passed in hash. Validates that the address is not empty
      */
-    function getAndValidateAdapterWithHash(bytes32 _integrationHash) internal view returns(address) { 
+    function getAndValidateAdapterWithHash(bytes32 _integrationHash) internal view returns(address) {
         address adapter = controller.getIntegrationRegistry().getIntegrationAdapterWithHash(
             address(this),
             _integrationHash
         );
 
-        require(adapter != address(0), "Must be valid adapter"); 
+        require(adapter != address(0), "Must be valid adapter");
         return adapter;
     }
 
@@ -148,35 +148,35 @@ abstract contract ModuleBaseV2 is IModule {
     }
 
     /**
-     * Pays the _feeQuantity from the _setToken denominated in _token to the protocol fee recipient
+     * Pays the _feeQuantity from the _jasperVault denominated in _token to the protocol fee recipient
      */
-    function payProtocolFeeFromSetToken(ISetToken _setToken, address _token, uint256 _feeQuantity) internal {
+    function payProtocolFeeFromSetToken(IJasperVault _jasperVault, address _token, uint256 _feeQuantity) internal {
         if (_feeQuantity > 0) {
-            _setToken.strictInvokeTransfer(_token, controller.feeRecipient(), _feeQuantity); 
+            _jasperVault.strictInvokeTransfer(_token, controller.feeRecipient(), _feeQuantity);
         }
     }
 
     /**
-     * Returns true if the module is in process of initialization on the SetToken
+     * Returns true if the module is in process of initialization on the JasperVault
      */
-    function isSetPendingInitialization(ISetToken _setToken) internal view returns(bool) {
-        return _setToken.isPendingModule(address(this));
+    function isSetPendingInitialization(IJasperVault _jasperVault) internal view returns(bool) {
+        return _jasperVault.isPendingModule(address(this));
     }
 
     /**
-     * Returns true if the address is the SetToken's manager
+     * Returns true if the address is the JasperVault's manager
      */
-    function isSetManager(ISetToken _setToken, address _toCheck) internal view returns(bool) {
-        return _setToken.manager() == _toCheck;
+    function isSetManager(IJasperVault _jasperVault, address _toCheck) internal view returns(bool) {
+        return _jasperVault.manager() == _toCheck;
     }
 
     /**
-     * Returns true if SetToken must be enabled on the controller 
-     * and module is registered on the SetToken
+     * Returns true if JasperVault must be enabled on the controller
+     * and module is registered on the JasperVault
      */
-    function isSetValidAndInitialized(ISetToken _setToken) internal view returns(bool) {
-        return controller.isSet(address(_setToken)) &&
-            _setToken.isInitializedModule(address(this));
+    function isSetValidAndInitialized(IJasperVault _jasperVault) internal view returns(bool) {
+        return controller.isSet(address(_jasperVault)) &&
+            _jasperVault.isInitializedModule(address(this));
     }
 
     /**
@@ -191,33 +191,33 @@ abstract contract ModuleBaseV2 is IModule {
      */
 
     /**
-     * Caller must SetToken manager and SetToken must be valid and initialized
+     * Caller must JasperVault manager and JasperVault must be valid and initialized
      */
-    function _validateOnlyManagerAndValidSet(ISetToken _setToken) internal view {
-       require(isSetManager(_setToken, msg.sender), "Must be the SetToken manager");
-       require(isSetValidAndInitialized(_setToken), "Must be a valid and initialized SetToken");
+    function _validateOnlyManagerAndValidSet(IJasperVault _jasperVault) internal view {
+       require(isSetManager(_jasperVault, msg.sender), "Must be the JasperVault manager");
+       require(isSetValidAndInitialized(_jasperVault), "Must be a valid and initialized JasperVault");
     }
 
     /**
-     * Caller must SetToken manager
+     * Caller must JasperVault manager
      */
-    function _validateOnlySetManager(ISetToken _setToken, address _caller) internal view {
-        require(isSetManager(_setToken, _caller), "Must be the SetToken manager");
+    function _validateOnlySetManager(IJasperVault _jasperVault, address _caller) internal view {
+        require(isSetManager(_jasperVault, _caller), "Must be the JasperVault manager");
     }
 
     /**
-     * SetToken must be valid and initialized
+     * JasperVault must be valid and initialized
      */
-    function _validateOnlyValidAndInitializedSet(ISetToken _setToken) internal view {
-        require(isSetValidAndInitialized(_setToken), "Must be a valid and initialized SetToken");
+    function _validateOnlyValidAndInitializedSet(IJasperVault _jasperVault) internal view {
+        require(isSetValidAndInitialized(_jasperVault), "Must be a valid and initialized JasperVault");
     }
 
     /**
      * Caller must be initialized module and module must be enabled on the controller
      */
-    function _validateOnlyModule(ISetToken _setToken) internal view {
+    function _validateOnlyModule(IJasperVault _jasperVault) internal view {
         require(
-            _setToken.moduleStates(msg.sender) == ISetToken.ModuleState.INITIALIZED,
+            _jasperVault.moduleStates(msg.sender) == IJasperVault.ModuleState.INITIALIZED,
             "Only the module can call"
         );
 
@@ -228,10 +228,10 @@ abstract contract ModuleBaseV2 is IModule {
     }
 
     /**
-     * SetToken must be in a pending state and module must be in pending state
+     * JasperVault must be in a pending state and module must be in pending state
      */
-    function _validateOnlyValidAndPendingSet(ISetToken _setToken) internal view {
-        require(controller.isSet(address(_setToken)), "Must be controller-enabled SetToken");
-        require(isSetPendingInitialization(_setToken), "Must be pending initialization");
+    function _validateOnlyValidAndPendingSet(IJasperVault _jasperVault) internal view {
+        require(controller.isSet(address(_jasperVault)), "Must be controller-enabled JasperVault");
+        require(isSetPendingInitialization(_jasperVault), "Must be pending initialization");
     }
 }

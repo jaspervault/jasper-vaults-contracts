@@ -22,7 +22,7 @@ pragma experimental "ABIEncoderV2";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import { IAccountBalance } from "../../../../interfaces/external/perp-v2/IAccountBalance.sol";
-import { ISetToken } from "../../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../../interfaces/IJasperVault.sol";
 import { PerpV2Positions } from "../../../../protocol/integration/lib/PerpV2Positions.sol";
 
 /**
@@ -37,55 +37,55 @@ contract PerpV2PositionsMock {
     /* ============ External Functions ============ */
 
     function testGetNetQuoteBalance(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address[] memory _baseTokens,
         IAccountBalance _perpAccountBalance
-    ) 
-        external 
-        view 
-        returns (int256 netQuoteBalance) 
+    )
+        external
+        view
+        returns (int256 netQuoteBalance)
     {
         return PerpV2Positions.getNetQuoteBalance(
-            _setToken, 
-            _baseTokens, 
+            _jasperVault,
+            _baseTokens,
             _perpAccountBalance
         );
     }
 
     function testGetPositionNotionalInfo(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address[] memory _baseTokens,
         IAccountBalance _perpAccountBalance
-    ) 
-        public 
-        view 
-        returns (PerpV2Positions.PositionNotionalInfo[] memory) 
+    )
+        public
+        view
+        returns (PerpV2Positions.PositionNotionalInfo[] memory)
     {
         return PerpV2Positions.getPositionNotionalInfo(
-            _setToken, 
-            _baseTokens, 
+            _jasperVault,
+            _baseTokens,
             _perpAccountBalance
         );
     }
-    
+
     function testGetPositionUnitInfo(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address[] memory _baseTokens,
         IAccountBalance _perpAccountBalance
-    ) 
-        external 
-        view 
-        returns (PerpV2Positions.PositionUnitInfo[] memory) 
+    )
+        external
+        view
+        returns (PerpV2Positions.PositionUnitInfo[] memory)
     {
         return PerpV2Positions.getPositionUnitInfo(
-            _setToken, 
-            _baseTokens, 
+            _jasperVault,
+            _baseTokens,
             _perpAccountBalance
         );
     }
 
     function testFormatAdjustments(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _adjustmentComponent,
         int256 _currentExternalPositionUnit,
         int256 _newExternalPositionUnit
@@ -95,7 +95,7 @@ contract PerpV2PositionsMock {
         returns (int256[] memory, int256[] memory)
     {
         return PerpV2Positions.formatAdjustments(
-            _setToken,
+            _jasperVault,
             _adjustmentComponent,
             _currentExternalPositionUnit,
             _newExternalPositionUnit
@@ -104,7 +104,7 @@ contract PerpV2PositionsMock {
 
     /* ============ Helper Functions ============ */
 
-    function initializeModuleOnSet(ISetToken _setToken) external {
-        _setToken.initializeModule();
+    function initializeModuleOnSet(IJasperVault _jasperVault) external {
+        _jasperVault.initializeModule();
     }
 }

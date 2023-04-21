@@ -25,7 +25,7 @@ import { IController } from "../../../interfaces/IController.sol";
 import { IMarketRegistry } from "../../../interfaces/external/perp-v2/IMarketRegistry.sol";
 import { Invoke } from "../../lib/Invoke.sol";
 import { IQuoter } from "../../../interfaces/external/perp-v2/IQuoter.sol";
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
 import { IVault } from "../../../interfaces/external/perp-v2/IVault.sol";
 import { ModuleBase } from "../../lib/ModuleBase.sol";
 import { PerpV2LeverageModuleV2 } from "./PerpV2LeverageModuleV2.sol";
@@ -57,28 +57,28 @@ contract PerpV2BasisTradingModule is PerpV2LeverageModuleV2 {
 
     /**
      * @dev Emitted on performance fee update
-     * @param _setToken             Instance of SetToken
+     * @param _jasperVault             Instance of JasperVault
      * @param _newPerformanceFee    New performance fee percentage (1% = 1e16)
      */
-    event PerformanceFeeUpdated(ISetToken indexed _setToken, uint256 _newPerformanceFee);
+    event PerformanceFeeUpdated(IJasperVault indexed _jasperVault, uint256 _newPerformanceFee);
 
     /**
      * @dev Emitted on fee recipient update
-     * @param _setToken             Instance of SetToken
+     * @param _jasperVault             Instance of JasperVault
      * @param _newFeeRecipient      New performance fee recipient
      */
-    event FeeRecipientUpdated(ISetToken indexed _setToken, address _newFeeRecipient);
+    event FeeRecipientUpdated(IJasperVault indexed _jasperVault, address _newFeeRecipient);
 
     /**
      * @dev Emitted on funding withdraw
-     * @param _setToken             Instance of SetToken
+     * @param _jasperVault             Instance of JasperVault
      * @param _collateralToken      Token being withdrawn as funding (USDC)
      * @param _amountWithdrawn      Amount of funding being withdrawn from Perp (USDC)
      * @param _managerFee           Amount of performance fee accrued to manager (USDC)
      * @param _protocolFee          Amount of performance fee accrued to protocol (USDC)
      */
     event FundingWithdrawn(
-        ISetToken indexed  _setToken,
+        IJasperVault indexed  _jasperVault,
         IERC20 _collateralToken,
         uint256 _amountWithdrawn,
         uint256 _managerFee,
@@ -92,12 +92,12 @@ contract PerpV2BasisTradingModule is PerpV2LeverageModuleV2 {
 
     /* ============ State Variables ============ */
 
-    // Mapping to store fee settings for each SetToken
-    mapping(ISetToken => FeeState) public feeSettings;
+    // Mapping to store fee settings for each JasperVault
+    mapping(IJasperVault => FeeState) public feeSettings;
 
     // Mapping to store funding that has been settled on Perpetual Protocol due to actions via this module
     // and hasn't been withdrawn for reinvesting yet. Values are stored in precise units (10e18).
-    mapping(ISetToken => uint256) public settledFunding;
+    mapping(IJasperVault => uint256) public settledFunding;
 
     /* ============ Constructor ============ */
 
@@ -109,7 +109,7 @@ contract PerpV2BasisTradingModule is PerpV2LeverageModuleV2 {
      * @param _perpVault                Address of Perp Vault contract
      * @param _perpQuoter               Address of Perp Quoter contract
      * @param _perpMarketRegistry       Address of Perp MarketRegistry contract
-     * @param _maxPerpPositionsPerSet   Max perpetual positions in one SetToken
+     * @param _maxPerpPositionsPerSet   Max perpetual positions in one JasperVault
      */
     constructor(
         IController _controller,
@@ -131,21 +131,21 @@ contract PerpV2BasisTradingModule is PerpV2LeverageModuleV2 {
     /* ============ External Functions ============ */
 
     /**
-     * @dev Reverts upon calling. Use `initialize(_setToken, _settings)` instead.
+     * @dev Reverts upon calling. Use `initialize(_jasperVault, _settings)` instead.
      */
-    function initialize(ISetToken /*_setToken*/) public override(PerpV2LeverageModuleV2) {
-        revert("Use initialize(_setToken, _settings) instead");
+    function initialize(IJasperVault /*_jasperVault*/) public override(PerpV2LeverageModuleV2) {
+        revert("Use initialize(_jasperVault, _settings) instead");
     }
 
     /**
-     * @dev MANAGER ONLY: Initializes this module to the SetToken and sets fee settings. Either the SetToken needs to
+     * @dev MANAGER ONLY: Initializes this module to the JasperVault and sets fee settings. Either the JasperVault needs to
      * be on the allowed list or anySetAllowed needs to be true.
      *
-     * @param _setToken             Instance of the SetToken to initialize
+     * @param _jasperVault             Instance of the JasperVault to initialize
      * @param _settings             FeeState struct defining performance fee settings
      */
     function initialize(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         FeeState memory _settings
     )
         external
@@ -154,41 +154,41 @@ contract PerpV2BasisTradingModule is PerpV2LeverageModuleV2 {
 
         // Initialize by calling PerpV2LeverageModuleV2#initialize.
         // Verifies caller is manager. Verifies Set is valid, allowed and in pending state.
-        PerpV2LeverageModuleV2.initialize(_setToken);
+        PerpV2LeverageModuleV2.initialize(_jasperVault);
 
-        feeSettings[_setToken] = _settings;
+        feeSettings[_jasperVault] = _settings;
     }
 
     /**
      * @dev MANAGER ONLY: Similar to PerpV2LeverageModuleV2#trade. Allows manager to buy or sell perps to change exposure
      * to the underlying baseToken. Any pending funding that would be settled during opening a position on Perpetual
-     * protocol is added to (or subtracted from) `settledFunding[_setToken]` and can be withdrawn later using
-     * `withdrawFundingAndAccrueFees` by the SetToken manager.
+     * protocol is added to (or subtracted from) `settledFunding[_jasperVault]` and can be withdrawn later using
+     * `withdrawFundingAndAccrueFees` by the JasperVault manager.
      * NOTE: Calling a `nonReentrant` function from another `nonReentrant` function is not supported. Hence, we can't
      * add the `nonReentrant` modifier here because `PerpV2LeverageModuleV2#trade` function has a reentrancy check.
      * NOTE: This method doesn't update the externalPositionUnit because it is a function of UniswapV3 virtual
      * token market prices and needs to be generated on the fly to be meaningful.
      *
-     * @param _setToken                     Instance of the SetToken
+     * @param _jasperVault                     Instance of the JasperVault
      * @param _baseToken                    Address virtual token being traded
      * @param _baseQuantityUnits            Quantity of virtual token to trade in position units
      * @param _quoteBoundQuantityUnits      Max/min of vQuote asset to pay/receive when buying or selling
      */
     function tradeAndTrackFunding(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _baseToken,
         int256 _baseQuantityUnits,
         uint256 _quoteBoundQuantityUnits
     )
         external
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
         // Track funding before it is settled
-        _updateSettledFunding(_setToken);
+        _updateSettledFunding(_jasperVault);
 
         // Trade using PerpV2LeverageModuleV2#trade.
         PerpV2LeverageModuleV2.trade(
-            _setToken,
+            _jasperVault,
             _baseToken,
             _baseQuantityUnits,
             _quoteBoundQuantityUnits
@@ -196,77 +196,77 @@ contract PerpV2BasisTradingModule is PerpV2LeverageModuleV2 {
     }
 
     /**
-     * @dev MANAGER ONLY: Withdraws collateral token from the PerpV2 Vault to a default position on the SetToken.
+     * @dev MANAGER ONLY: Withdraws collateral token from the PerpV2 Vault to a default position on the JasperVault.
      * This method is useful when adjusting the overall composition of a Set which has a Perp account external
      * position as one of several components. Any pending funding that would be settled during withdrawl on Perpetual
-     * protocol is added to (or subtracted from) `settledFunding[_setToken]` and can be withdrawn later using
-     * `withdrawFundingAndAccrueFees` by the SetToken manager.
+     * protocol is added to (or subtracted from) `settledFunding[_jasperVault]` and can be withdrawn later using
+     * `withdrawFundingAndAccrueFees` by the JasperVault manager.
      *
      * NOTE: Within PerpV2, `withdraw` settles `owedRealizedPnl` and any pending funding payments to the Perp vault
      * prior to transfer.
      *
-     * @param  _setToken                    Instance of the SetToken
+     * @param  _jasperVault                    Instance of the JasperVault
      * @param  _collateralQuantityUnits     Quantity of collateral to withdraw in position units
      */
     function withdraw(
-      ISetToken _setToken,
+      IJasperVault _jasperVault,
       uint256 _collateralQuantityUnits
     )
       public
       override
       nonReentrant
-      onlyManagerAndValidSet(_setToken)
+      onlyManagerAndValidSet(_jasperVault)
     {
         require(_collateralQuantityUnits > 0, "Withdraw amount is 0");
 
-        _updateSettledFunding(_setToken);
+        _updateSettledFunding(_jasperVault);
 
-        uint256 notionalWithdrawnQuantity = _withdrawAndUpdatePositions(_setToken, _collateralQuantityUnits);
+        uint256 notionalWithdrawnQuantity = _withdrawAndUpdatePositions(_jasperVault, _collateralQuantityUnits);
 
-        emit CollateralWithdrawn(_setToken, collateralToken, notionalWithdrawnQuantity);
+        emit CollateralWithdrawn(_jasperVault, collateralToken, notionalWithdrawnQuantity);
     }
 
     /**
      * @dev MANAGER ONLY: Withdraws tracked settled funding (in USDC) from the PerpV2 Vault to a default position
-     * on the SetToken. Collects manager and protocol performance fees on the withdrawn amount.
+     * on the JasperVault. Collects manager and protocol performance fees on the withdrawn amount.
      * This method is useful when withdrawing funding to be reinvested into the Basis Trading product.
      * Allows the manager to withdraw entire funding accrued by setting `_notionalFunding` to MAX_UINT_256.
      *
      * NOTE: Within PerpV2, `withdraw` settles `owedRealizedPnl` and any pending funding payments
      * to the Perp vault prior to transfer.
      *
-     * @param _setToken                 Instance of the SetToken
+     * @param _jasperVault                 Instance of the JasperVault
      * @param _notionalFunding          Notional amount of funding to withdraw (in USDC decimals)
      */
     function withdrawFundingAndAccrueFees(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _notionalFunding
     )
         external
         nonReentrant
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
         if (_notionalFunding == 0) return;
 
-        uint256 newSettledFunding = _updateSettledFunding(_setToken);
+        uint256 newSettledFunding = _updateSettledFunding(_jasperVault);
 
         uint256 settledFundingInCollateralDecimals = newSettledFunding.fromPreciseUnitToDecimals(collateralDecimals);
 
         if (_notionalFunding > settledFundingInCollateralDecimals) { _notionalFunding = settledFundingInCollateralDecimals; }
 
-        uint256 collateralBalanceBeforeWithdraw = collateralToken.balanceOf(address(_setToken));
+        uint256 collateralBalanceBeforeWithdraw = collateralToken.balanceOf(address(_jasperVault));
 
-        _withdraw(_setToken, _notionalFunding);
+        _withdraw(_jasperVault, _notionalFunding);
 
-        (uint256 managerFee, uint256 protocolFee) = _handleFees(_setToken, _notionalFunding);
+        (uint256 managerFee, uint256 protocolFee) = _handleFees(_jasperVault, _notionalFunding);
 
-        _updateWithdrawFundingState(_setToken, _notionalFunding, collateralBalanceBeforeWithdraw);
+        _updateWithdrawFundingState(_jasperVault, _notionalFunding, collateralBalanceBeforeWithdraw);
 
-        emit FundingWithdrawn(_setToken, collateralToken, _notionalFunding, managerFee, protocolFee);
+        emit FundingWithdrawn(_jasperVault, collateralToken, _notionalFunding, managerFee, protocolFee);
     }
 
     /**
-     * @dev SETTOKEN ONLY: Removes this module from the SetToken, via call by the SetToken. Deletes
+     * @dev SETTOKEN ONLY: Removes this module from the JasperVault, via call by the SetToken. Deletes
      * position mappings and fee states associated with SetToken. Resets settled funding to zero.
      * Fees are not accrued in case the reason for removing the module is related to fee accrual.
      *
@@ -277,11 +277,11 @@ contract PerpV2BasisTradingModule is PerpV2LeverageModuleV2 {
         // Verifies Set is valid and initialized.
         PerpV2LeverageModuleV2.removeModule();
 
-        ISetToken setToken = ISetToken(msg.sender);
+        IJasperVault jasperVault = IJasperVault(msg.sender);
 
         // Not charging any fees
-        delete feeSettings[setToken];
-        delete settledFunding[setToken];
+        delete feeSettings[jasperVault];
+        delete settledFunding[jasperVault];
     }
 
     /**
@@ -290,25 +290,25 @@ contract PerpV2BasisTradingModule is PerpV2LeverageModuleV2 {
      * issuance module can transfer in the right amount of collateral accounting for accrued fees/pnl and slippage
      * incurred during issuance. Any pending funding payments and accrued owedRealizedPnl are attributed to current
      * Set holders. Any pending funding payment that would be settled during trading into positions on Perpetual
-     * protocol is added to (or subtracted from) `settledFunding[_setToken]` and can be withdrawn later by the manager.
+     * protocol is added to (or subtracted from) `settledFunding[_jasperVault]` and can be withdrawn later by the manager.
      *
-     * @param _setToken             Instance of the SetToken
+     * @param _jasperVault             Instance of the SetToken
      * @param _setTokenQuantity     Quantity of Set to issue
      */
     function moduleIssueHook(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _setTokenQuantity
     )
         public
         override(PerpV2LeverageModuleV2)
-        onlyModule(_setToken)
+        onlyModule(_jasperVault)
     {
         // Track funding before it is settled
-        _updateSettledFunding(_setToken);
+        _updateSettledFunding(_jasperVault);
 
         // Call PerpV2LeverageModuleV2#moduleIssueHook to set external position unit.
         // Validates caller is module.
-        PerpV2LeverageModuleV2.moduleIssueHook(_setToken, _setTokenQuantity);
+        PerpV2LeverageModuleV2.moduleIssueHook(_jasperVault, _setTokenQuantity);
     }
 
     /**
@@ -319,31 +319,31 @@ contract PerpV2BasisTradingModule is PerpV2LeverageModuleV2 {
      * Any `owedRealizedPnl` and pending funding payments are socialized in this step so that redeemer
      * pays/receives their share of them. Should only be called ONCE during redeem. Any pending funding payment
      * that would be settled during trading out of positions on Perpetual protocol is added to (or subtracted from)
-     * `settledFunding[_setToken]` and can be withdrawn later by the manager.
+     * `settledFunding[_jasperVault]` and can be withdrawn later by the manager.
      *
-     * @param _setToken             Instance of the SetToken
+     * @param _jasperVault             Instance of the SetToken
      * @param _setTokenQuantity     Quantity of SetToken to redeem
      */
     function moduleRedeemHook(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _setTokenQuantity
     )
         external
         override(PerpV2LeverageModuleV2)
-        onlyModule(_setToken)
+        onlyModule(_jasperVault)
     {
-        if (_setToken.totalSupply() == 0) return;
-        if (!_setToken.hasExternalPosition(address(collateralToken))) return;
+        if (_jasperVault.totalSupply() == 0) return;
+        if (!_jasperVault.hasExternalPosition(address(collateralToken))) return;
 
         // Track funding before it is settled
-        uint256 newSettledFunding = _updateSettledFunding(_setToken);
+        uint256 newSettledFunding = _updateSettledFunding(_jasperVault);
 
-        int256 newExternalPositionUnit = _executePositionTrades(_setToken, _setTokenQuantity, false, false);
+        int256 newExternalPositionUnit = _executePositionTrades(_jasperVault, _setTokenQuantity, false, false);
 
-        int256 newExternalPositionUnitNetFees = _calculateNetFeesPositionUnit(_setToken, newExternalPositionUnit, newSettledFunding);
+        int256 newExternalPositionUnitNetFees = _calculateNetFeesPositionUnit(_jasperVault, newExternalPositionUnit, newSettledFunding);
 
         // Set USDC externalPositionUnit such that DIM can use it for transfer calculation
-        _setToken.editExternalPositionUnit(
+        _jasperVault.editExternalPositionUnit(
             address(collateralToken),
             address(this),
             newExternalPositionUnitNetFees
@@ -359,49 +359,49 @@ contract PerpV2BasisTradingModule is PerpV2LeverageModuleV2 {
      * equals MAX_UINT_256 to withdraw all existing settled funding and set settled funding to zero. Funding accrues slowly, so calling
      * this function within a reasonable duration after `withdrawFundingAndAccrueFees` is called, should work in practice.
      *
-     * @param _setToken         Instance of SetToken
+     * @param _jasperVault         Instance of SetToken
      * @param _newFee           New performance fee percentage in precise units (1e16 = 1%)
      */
     function updatePerformanceFee(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _newFee
     )
         external
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
-        require(_newFee <= feeSettings[_setToken].maxPerformanceFeePercentage, "Fee must be less than max");
+        require(_newFee <= feeSettings[_jasperVault].maxPerformanceFeePercentage, "Fee must be less than max");
 
-        // We require `settledFunding[_setToken]` to be zero. Hence, we do not call `_updateSettledFunding` here, which
+        // We require `settledFunding[_jasperVault]` to be zero. Hence, we do not call `_updateSettledFunding` here, which
         // eases the UX of updating performance fees for the manager. Although, manager loses the ability to collect fees
         // on pending funding that has been accrued on PerpV2 but not tracked on this module.
 
         // Assert all settled funding (in USD) has been withdrawn. Comparing USD amount allows us to neglect small
         // dust amounts that aren't withdrawable.
         require(
-            settledFunding[_setToken].fromPreciseUnitToDecimals(collateralDecimals) == 0,
+            settledFunding[_jasperVault].fromPreciseUnitToDecimals(collateralDecimals) == 0,
             "Non-zero settled funding remains"
         );
 
-        feeSettings[_setToken].performanceFeePercentage = _newFee;
+        feeSettings[_jasperVault].performanceFeePercentage = _newFee;
 
-        emit PerformanceFeeUpdated(_setToken, _newFee);
+        emit PerformanceFeeUpdated(_jasperVault, _newFee);
     }
 
     /**
      * @dev MANAGER ONLY. Update performance fee recipient (address to which performance fees are sent).
      *
-     * @param _setToken             Instance of SetToken
+     * @param _jasperVault             Instance of SetToken
      * @param _newFeeRecipient      Address of new fee recipient
      */
-    function updateFeeRecipient(ISetToken _setToken, address _newFeeRecipient)
+    function updateFeeRecipient(IJasperVault _jasperVault, address _newFeeRecipient)
         external
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
         require(_newFeeRecipient != address(0), "Fee Recipient must be non-zero address");
 
-        feeSettings[_setToken].feeRecipient = _newFeeRecipient;
+        feeSettings[_jasperVault].feeRecipient = _newFeeRecipient;
 
-        emit FeeRecipientUpdated(_setToken, _newFeeRecipient);
+        emit FeeRecipientUpdated(_jasperVault, _newFeeRecipient);
     }
 
 
@@ -412,13 +412,13 @@ contract PerpV2BasisTradingModule is PerpV2LeverageModuleV2 {
      * redeeming a quantity of SetToken representing the amount of collateral returned per SetToken.
      * Values in the returned arrays map to the same index in the SetToken's components array.
      *
-     * @param _setToken             Instance of SetToken
+     * @param _jasperVault             Instance of SetToken
      * @param _setTokenQuantity     Number of sets to redeem
      *
      * @return equityAdjustments array containing a single element and an empty debtAdjustments array
      */
     function getRedemptionAdjustments(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _setTokenQuantity
     )
         external
@@ -427,41 +427,41 @@ contract PerpV2BasisTradingModule is PerpV2LeverageModuleV2 {
     {
         int256 newExternalPositionUnitNetFees = 0;
 
-        if (positions[_setToken].length > 0) {
+        if (positions[_jasperVault].length > 0) {
 
-            uint256 updatedSettledFunding = getUpdatedSettledFunding(_setToken);
+            uint256 updatedSettledFunding = getUpdatedSettledFunding(_jasperVault);
 
-            int256 newExternalPositionUnit = _executePositionTrades(_setToken, _setTokenQuantity, false, true);
+            int256 newExternalPositionUnit = _executePositionTrades(_jasperVault, _setTokenQuantity, false, true);
 
-            newExternalPositionUnitNetFees = _calculateNetFeesPositionUnit(_setToken, newExternalPositionUnit, updatedSettledFunding);
+            newExternalPositionUnitNetFees = _calculateNetFeesPositionUnit(_jasperVault, newExternalPositionUnit, updatedSettledFunding);
         }
 
-        return _formatAdjustments(_setToken, newExternalPositionUnitNetFees);
+        return _formatAdjustments(_jasperVault, newExternalPositionUnitNetFees);
     }
 
     /**
      * @dev Adds pending funding payment to tracked settled funding. Returns updated settled funding value in precise units (10e18).
      *
      * NOTE: Tracked settled funding value can not be less than zero, hence it is reset to zero if pending funding
-     * payment is negative and |pending funding payment| >= |settledFunding[_setToken]|.
+     * payment is negative and |pending funding payment| >= |settledFunding[_jasperVault]|.
      *
      * NOTE: Returned updated settled funding value is correct only for the current block since pending funding payment
      * updates every block.
      *
-     * @param _setToken             Instance of SetToken
+     * @param _jasperVault             Instance of SetToken
      */
-    function getUpdatedSettledFunding(ISetToken _setToken) public view returns (uint256) {
+    function getUpdatedSettledFunding(IJasperVault _jasperVault) public view returns (uint256) {
         // NOTE: pendingFundingPayments are represented as in the Perp system as "funding owed"
         // e.g a positive number is a debt which gets subtracted from owedRealizedPnl on settlement.
         // We are flipping its sign here to reflect its settlement value.
-        int256 pendingFundingToBeSettled =  perpExchange.getAllPendingFundingPayment(address(_setToken)).neg();
+        int256 pendingFundingToBeSettled =  perpExchange.getAllPendingFundingPayment(address(_jasperVault)).neg();
 
         if (pendingFundingToBeSettled >= 0) {
-            return settledFunding[_setToken].add(pendingFundingToBeSettled.toUint256());
+            return settledFunding[_jasperVault].add(pendingFundingToBeSettled.toUint256());
         }
 
-        if (settledFunding[_setToken] > pendingFundingToBeSettled.abs()) {
-            return settledFunding[_setToken].sub(pendingFundingToBeSettled.abs());
+        if (settledFunding[_jasperVault] > pendingFundingToBeSettled.abs()) {
+            return settledFunding[_jasperVault].sub(pendingFundingToBeSettled.abs());
         }
 
         return 0;
@@ -474,12 +474,12 @@ contract PerpV2BasisTradingModule is PerpV2LeverageModuleV2 {
      * extract out the funding value again on-chain. This function is called in an external function and is used to track and store
      * pending funding payment that is about to be settled due to subsequent logic in the external function.
      *
-     * @param _setToken             Instance of SetToken
+     * @param _jasperVault             Instance of SetToken
      * @return uint256              Returns the updated settled funding value
      */
-    function _updateSettledFunding(ISetToken _setToken) internal returns (uint256) {
-        uint256 newSettledFunding = getUpdatedSettledFunding(_setToken);
-        settledFunding[_setToken] = newSettledFunding;
+    function _updateSettledFunding(IJasperVault _jasperVault) internal returns (uint256) {
+        uint256 newSettledFunding = getUpdatedSettledFunding(_jasperVault);
+        settledFunding[_jasperVault] = newSettledFunding;
         return newSettledFunding;
     }
 
@@ -487,20 +487,20 @@ contract PerpV2BasisTradingModule is PerpV2LeverageModuleV2 {
      * @dev Calculates manager and protocol fees on withdrawn funding amount and transfers them to
      * their respective recipients (in USDC).
      *
-     * @param _setToken                     Instance of SetToken
+     * @param _jasperVault                     Instance of SetToken
      * @param _notionalFundingAmount        Notional funding amount on which fees is charged
      *
      * @return managerFee      Manager performance fees
      * @return protocolFee     Protocol performance fees
      */
     function _handleFees(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _notionalFundingAmount
     )
         internal
         returns (uint256 managerFee, uint256 protocolFee)
     {
-        uint256 performanceFee = feeSettings[_setToken].performanceFeePercentage;
+        uint256 performanceFee = feeSettings[_jasperVault].performanceFeePercentage;
 
         if (performanceFee > 0) {
             uint256 protocolFeeSplit = controller.getModuleFee(address(this), PROTOCOL_PERFORMANCE_FEE_INDEX);
@@ -509,8 +509,8 @@ contract PerpV2BasisTradingModule is PerpV2LeverageModuleV2 {
             protocolFee = totalFee.preciseMul(protocolFeeSplit);
             managerFee = totalFee.sub(protocolFee);
 
-            _setToken.strictInvokeTransfer(address(collateralToken), feeSettings[_setToken].feeRecipient, managerFee);
-            payProtocolFeeFromSetToken(_setToken, address(collateralToken), protocolFee);
+            _jasperVault.strictInvokeTransfer(address(collateralToken), feeSettings[_jasperVault].feeRecipient, managerFee);
+            payProtocolFeeFromSetToken(_jasperVault, address(collateralToken), protocolFee);
         }
 
         return (managerFee, protocolFee);
@@ -519,22 +519,22 @@ contract PerpV2BasisTradingModule is PerpV2LeverageModuleV2 {
     /**
      * @dev Updates collateral token default position unit and tracked settled funding. Used in `withdrawFundingAndAccrueFees()`
      *
-     * @param _setToken                         Instance of the SetToken
+     * @param _jasperVault                         Instance of the SetToken
      * @param _notionalFunding                  Amount of funding withdrawn (in USDC decimals)
      * @param _collateralBalanceBeforeWithdraw  Balance of collateral token in the Set before withdrawing more USDC from Perp
      */
-    function _updateWithdrawFundingState(ISetToken _setToken, uint256 _notionalFunding, uint256 _collateralBalanceBeforeWithdraw) internal {
+    function _updateWithdrawFundingState(IJasperVault _jasperVault, uint256 _notionalFunding, uint256 _collateralBalanceBeforeWithdraw) internal {
         // Update default position unit to add the withdrawn funding (in USDC)
-        _setToken.calculateAndEditDefaultPosition(
+        _jasperVault.calculateAndEditDefaultPosition(
             address(collateralToken),
-            _setToken.totalSupply(),
+            _jasperVault.totalSupply(),
             _collateralBalanceBeforeWithdraw
         );
 
-        _updateExternalPositionUnit(_setToken);
+        _updateExternalPositionUnit(_jasperVault);
 
         // Subtract withdrawn funding from tracked settled funding
-        settledFunding[_setToken] = settledFunding[_setToken].sub(
+        settledFunding[_jasperVault] = settledFunding[_jasperVault].sub(
             _notionalFunding.toPreciseUnitsFromDecimals(collateralDecimals)
         );
     }
@@ -542,12 +542,12 @@ contract PerpV2BasisTradingModule is PerpV2LeverageModuleV2 {
     /**
      * @dev Returns external position unit net performance fees. Calculates performance fees unit and subtracts it from `_newExternalPositionUnit`.
      *
-     * @param _setToken                     Instance of SetToken
+     * @param _jasperVault                     Instance of SetToken
      * @param _newExternalPositionUnit      New external position unit calculated using `_executePositionTrades`
      * @param _updatedSettledFunding        Updated track settled funding value
      */
     function _calculateNetFeesPositionUnit(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         int256 _newExternalPositionUnit,
         uint256 _updatedSettledFunding
     )
@@ -559,8 +559,8 @@ contract PerpV2BasisTradingModule is PerpV2LeverageModuleV2 {
 
         // Calculate performance fee unit; Performance fee unit = (Tracked settled funding * Performance fee) / Set total supply
         uint256 performanceFeeUnit = _updatedSettledFunding
-            .preciseDiv(_setToken.totalSupply())
-            .preciseMulCeil(_performanceFeePercentage(_setToken))
+            .preciseDiv(_jasperVault.totalSupply())
+            .preciseMulCeil(_performanceFeePercentage(_jasperVault))
             .fromPreciseUnitToDecimals(collateralDecimals);
 
         // Subtract performance fee unit from `_newExternalPositionUnit` to get `newExternalPositionUnitNetFees`.
@@ -590,10 +590,10 @@ contract PerpV2BasisTradingModule is PerpV2LeverageModuleV2 {
     /**
      * @dev Helper function that returns performance fee percentage.
      *
-     * @param _setToken     Instance of SetToken
+     * @param _jasperVault     Instance of SetToken
      */
-    function _performanceFeePercentage(ISetToken _setToken) internal view returns (uint256) {
-        return feeSettings[_setToken].performanceFeePercentage;
+    function _performanceFeePercentage(IJasperVault _jasperVault) internal view returns (uint256) {
+        return feeSettings[_jasperVault].performanceFeePercentage;
     }
 
 }

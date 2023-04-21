@@ -35,7 +35,7 @@ interface IGovernanceAdapter {
 
     function getDelegateCalldata(address _delegatee) external view returns (address _target, uint256 _value, bytes memory _calldata);
 
-    function getRegisterCalldata(address _setToken) external view returns (address _target, uint256 _value, bytes memory _calldata);
+    function getRegisterCalldata(address _jasperVault) external view returns (address _target, uint256 _value, bytes memory _calldata);
 
     function getRevokeCalldata() external view returns (address _target, uint256 _value, bytes memory _calldata);
 

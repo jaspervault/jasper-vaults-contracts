@@ -19,7 +19,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IClearingHouse } from "../../../interfaces/external/perp-v2/IClearingHouse.sol";
 import { IVault } from "../../../interfaces/external/perp-v2/IVault.sol";
 import { IQuoter } from "../../../interfaces/external/perp-v2/IQuoter.sol";
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
 
 /**
  * @title PerpV2
@@ -63,17 +63,17 @@ library PerpV2 {
     }
 
     /**
-     * Invoke `deposit` on Vault from SetToken
+     * Invoke `deposit` on Vault from JasperVault
      *
      * Deposits an `_amountNotional` of collateral asset into the Perp Protocol vault
      *
-     * @param _setToken             Address of the SetToken
+     * @param _jasperVault             Address of the JasperVault
      * @param _vault                Address of Perp Protocol vault contract
      * @param _asset                The address of the collateral asset to deposit
      * @param _amountNotional       Notional amount in collateral decimals to deposit
      */
     function invokeDeposit(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IVault _vault,
         IERC20 _asset,
         uint256 _amountNotional
@@ -86,7 +86,7 @@ library PerpV2 {
             _amountNotional
         );
 
-        _setToken.invoke(address(_vault), 0, depositCalldata);
+        _jasperVault.invoke(address(_vault), 0, depositCalldata);
     }
 
     /**
@@ -121,17 +121,17 @@ library PerpV2 {
     }
 
     /**
-     * Invoke `withdraw` on Vault from SetToken
+     * Invoke `withdraw` on Vault from JasperVault
      *
      * Withdraws an `_amountNotional` of collateral asset from the Perp protocol vault
      *
-     * @param _setToken         Address of the SetToken
+     * @param _jasperVault         Address of the JasperVault
      * @param _vault            Address of the Perp Protocol vault contract
      * @param _asset            The address of the collateral asset to withdraw
      * @param _amountNotional   The notional amount in collateral decimals to be withdrawn     *
      */
     function invokeWithdraw(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IVault _vault,
         IERC20 _asset,
         uint256 _amountNotional
@@ -144,7 +144,7 @@ library PerpV2 {
             _amountNotional
         );
 
-        _setToken.invoke(address(_vault), 0, withdrawCalldata);
+        _jasperVault.invoke(address(_vault), 0, withdrawCalldata);
     }
 
     /**
@@ -177,11 +177,11 @@ library PerpV2 {
     }
 
     /**
-     * Invoke `openPosition` on ClearingHouse from SetToken
+     * Invoke `openPosition` on ClearingHouse from JasperVault
      *
      * Executes a trade via the Perp protocol ClearingHouse contract
      *
-     * @param _setToken             Address of the SetToken
+     * @param _jasperVault             Address of the JasperVault
      * @param _clearingHouse        Address of the Clearinghouse contract
      * @param _params               OpenPositionParams struct. For details see definition
      *                              in contracts/interfaces/external/perp-v2/IClearingHouse.sol
@@ -190,7 +190,7 @@ library PerpV2 {
      * @return deltaQuote           Positive or negative change in quote token balance resulting from trade
      */
     function invokeOpenPosition(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IClearingHouse _clearingHouse,
         IClearingHouse.OpenPositionParams memory _params
     )
@@ -202,7 +202,7 @@ library PerpV2 {
             _params
         );
 
-        bytes memory returnValue = _setToken.invoke(address(_clearingHouse), 0, openPositionCalldata);
+        bytes memory returnValue = _jasperVault.invoke(address(_clearingHouse), 0, openPositionCalldata);
         return abi.decode(returnValue, (uint256,uint256));
     }
 
@@ -240,7 +240,7 @@ library PerpV2 {
      *
      * Simulates a trade on the Perp exchange via the Perp periphery contract Quoter
      *
-     * @param _setToken             Address of the SetToken
+     * @param _jasperVault             Address of the JasperVault
      * @param _quoter               Address of the Quoter contract
      * @param _params               SwapParams struct. For details see definition
      *                              in contracts/interfaces/external/perp-v2/IQuoter.sol
@@ -249,7 +249,7 @@ library PerpV2 {
      *                              properties (equiv. to deltaQuote, deltaBase) returned from `openPostion`
      */
     function invokeSwap(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IQuoter _quoter,
         IQuoter.SwapParams memory _params
     )
@@ -261,7 +261,7 @@ library PerpV2 {
             _params
         );
 
-        bytes memory returnValue = _setToken.invoke(address(_quoter), 0, swapCalldata);
+        bytes memory returnValue = _jasperVault.invoke(address(_quoter), 0, swapCalldata);
         return abi.decode(returnValue, (IQuoter.SwapResponse));
     }
 }

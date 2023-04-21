@@ -19,7 +19,7 @@
 pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
 
-import { ISetToken } from "../interfaces/ISetToken.sol";
+import { IJasperVault } from "../interfaces/IJasperVault.sol";
 import { Position } from "../protocol/lib/Position.sol";
 
 
@@ -29,22 +29,22 @@ contract PositionMock {
         public
     {}
 
-    function initialize(ISetToken _setToken) external {
-        _setToken.initializeModule();
+    function initialize(IJasperVault _jasperVault) external {
+        _jasperVault.initializeModule();
     }
 
-    function testHasDefaultPosition(ISetToken _setToken, address _component) external view returns(bool) {
-        return Position.hasDefaultPosition(_setToken, _component);    
+    function testHasDefaultPosition(IJasperVault _jasperVault, address _component) external view returns(bool) {
+        return Position.hasDefaultPosition(_jasperVault, _component);
     }
 
-    function testHasExternalPosition(ISetToken _setToken, address _component) external view returns(bool) {
-        return Position.hasExternalPosition(_setToken, _component);
+    function testHasExternalPosition(IJasperVault _jasperVault, address _component) external view returns(bool) {
+        return Position.hasExternalPosition(_jasperVault, _component);
     }
-    function testHasSufficientDefaultUnits(ISetToken _setToken, address _component, uint256 _unit) external view returns(bool) {
-        return Position.hasSufficientDefaultUnits(_setToken, _component, _unit);    
+    function testHasSufficientDefaultUnits(IJasperVault _jasperVault, address _component, uint256 _unit) external view returns(bool) {
+        return Position.hasSufficientDefaultUnits(_jasperVault, _component, _unit);
     }
     function testHasSufficientExternalUnits(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _component,
         address _module,
         uint256 _unit
@@ -53,15 +53,15 @@ contract PositionMock {
         view
         returns(bool)
     {
-        return Position.hasSufficientExternalUnits(_setToken, _component, _module, _unit);    
+        return Position.hasSufficientExternalUnits(_jasperVault, _component, _module, _unit);
     }
 
-    function testEditDefaultPosition(ISetToken _setToken, address _component, uint256 _newUnit) external {
-        return Position.editDefaultPosition(_setToken, _component, _newUnit);   
+    function testEditDefaultPosition(IJasperVault _jasperVault, address _component, uint256 _newUnit) external {
+        return Position.editDefaultPosition(_jasperVault, _component, _newUnit);
     }
 
     function testEditExternalPosition(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _component,
         address _module,
         int256 _newUnit,
@@ -69,7 +69,7 @@ contract PositionMock {
     )
         external
     {
-        Position.editExternalPosition(_setToken, _component, _module, _newUnit, _data);
+        Position.editExternalPosition(_jasperVault, _component, _module, _newUnit, _data);
     }
 
     function testGetDefaultTotalNotional(
@@ -94,16 +94,16 @@ contract PositionMock {
         return Position.getDefaultPositionUnit(_setTokenSupply, _totalNotional);
     }
 
-    function testGetDefaultTrackedBalance(ISetToken _setToken, address _component)
+    function testGetDefaultTrackedBalance(IJasperVault _jasperVault, address _component)
         external
         view
         returns (uint256)
     {
-        return Position.getDefaultTrackedBalance(_setToken, _component);
+        return Position.getDefaultTrackedBalance(_jasperVault, _component);
     }
 
     function testCalculateAndEditDefaultPosition(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _component,
         uint256 _setTotalSupply,
         uint256 _componentPreviousBalance
@@ -112,7 +112,7 @@ contract PositionMock {
         returns (uint256, uint256, uint256)
     {
         return Position.calculateAndEditDefaultPosition(
-            _setToken,
+            _jasperVault,
             _component,
             _setTotalSupply,
             _componentPreviousBalance

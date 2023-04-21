@@ -5021,17 +5021,8 @@ normalize-url@^6.0.1:
   resolved "https://registry.yarnpkg.com/normalize-url/-/normalize-url-6.1.0.tgz#40d0885b535deffe3f3147bec877d05fe4c5668a"
   integrity sha512-DlL+XwOy3NxAQ8xuC0okPgK46iuVNAK01YN7RueYBqqFeGsBjV9XmCAzAdgt+667bCl5kPh9EqKKDwnaPG1I7A==
 
-"notional-solidity-sdk@git+https://github.com/ckoopmann/notional-solidity-sdk.git#77aa2f8fd8a72b8f5865e561f2d39d4606c3740c":
-  version "1.0.0"
-  resolved "git+https://github.com/ckoopmann/notional-solidity-sdk.git#77aa2f8fd8a72b8f5865e561f2d39d4606c3740c"
-  dependencies:
-    "@openzeppelin/contracts-upgradeable" "^4.5.2"
-    dotenv "^10.0.0"
-    openzeppelin-contracts-V4 "npm:@openzeppelin/contracts@4.5"
-
 "notional-solidity-sdk@https://github.com/ckoopmann/notional-solidity-sdk.git#77aa2f8fd8a72b8f5865e561f2d39d4606c3740c":
   version "1.0.0"
-  uid "77aa2f8fd8a72b8f5865e561f2d39d4606c3740c"
   resolved "https://github.com/ckoopmann/notional-solidity-sdk.git#77aa2f8fd8a72b8f5865e561f2d39d4606c3740c"
   dependencies:
     "@openzeppelin/contracts-upgradeable" "^4.5.2"
@@ -7380,15 +7371,8 @@ wrap-ansi@^7.0.0:
     string-width "^4.1.0"
     strip-ansi "^6.0.0"
 
-"wrapped-fcash@git+https://github.com/ckoopmann/wrapped-fcash.git#6b7d870c9b750aa343f0405f3543c9bbb0e3cdfc":
-  version "1.0.0"
-  resolved "git+https://github.com/ckoopmann/wrapped-fcash.git#6b7d870c9b750aa343f0405f3543c9bbb0e3cdfc"
-  dependencies:
-    dotenv "^10.0.0"
-
 "wrapped-fcash@https://github.com/ckoopmann/wrapped-fcash.git#6b7d870c9b750aa343f0405f3543c9bbb0e3cdfc":
   version "1.0.0"
-  uid "6b7d870c9b750aa343f0405f3543c9bbb0e3cdfc"
   resolved "https://github.com/ckoopmann/wrapped-fcash.git#6b7d870c9b750aa343f0405f3543c9bbb0e3cdfc"
   dependencies:
     dotenv "^10.0.0"

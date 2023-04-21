@@ -64,14 +64,14 @@ contract UniswapV2AmmAdapter is IAmmAdapter {
     /**
      * Return calldata for the add liquidity call
      *
-     * @param  _setToken                Address of the SetToken
+     * @param  _jasperVault                Address of the JasperVault
      * @param  _pool                    Address of liquidity token
      * @param  _components              Address array required to add liquidity
      * @param  _maxTokensIn             AmountsIn desired to add liquidity
      * @param  _minLiquidity            Min liquidity amount to add
      */
     function getProvideLiquidityCalldata(
-        address _setToken,
+        address _jasperVault,
         address _pool,
         address[] calldata _components,
         uint256[] calldata _maxTokensIn,
@@ -82,7 +82,7 @@ contract UniswapV2AmmAdapter is IAmmAdapter {
         override
         returns (address target, uint256 value, bytes memory data)
     {
-        address setToken = _setToken;
+        address jasperVault = _jasperVault;
         address[] memory components = _components;
         uint256[] memory maxTokensIn = _maxTokensIn;
         uint256 minLiquidity = _minLiquidity;
@@ -134,7 +134,7 @@ contract UniswapV2AmmAdapter is IAmmAdapter {
             maxTokensIn[1],
             amountAMin,
             amountBMin,
-            setToken,
+            jasperVault,
             block.timestamp // solhint-disable-line not-rely-on-time
         );
     }
@@ -143,7 +143,7 @@ contract UniswapV2AmmAdapter is IAmmAdapter {
      * Return calldata for the add liquidity call for a single asset
      */
     function getProvideLiquiditySingleAssetCalldata(
-        address /*_setToken*/,
+        address /*_jasperVault*/,
         address /*_pool*/,
         address /*_component*/,
         uint256 /*_maxTokenIn*/,
@@ -160,14 +160,14 @@ contract UniswapV2AmmAdapter is IAmmAdapter {
     /**
      * Return calldata for the remove liquidity call
      *
-     * @param  _setToken                Address of the SetToken
+     * @param  _jasperVault                Address of the JasperVault
      * @param  _pool                    Address of liquidity token
      * @param  _components              Address array required to remove liquidity
      * @param  _minTokensOut            AmountsOut minimum to remove liquidity
      * @param  _liquidity               Liquidity amount to remove
      */
     function getRemoveLiquidityCalldata(
-        address _setToken,
+        address _jasperVault,
         address _pool,
         address[] calldata _components,
         uint256[] calldata _minTokensOut,
@@ -178,14 +178,14 @@ contract UniswapV2AmmAdapter is IAmmAdapter {
         override
         returns (address target, uint256 value, bytes memory data)
     {
-        address setToken = _setToken;
+        address jasperVault = _jasperVault;
         address[] memory components = _components;
         uint256[] memory minTokensOut = _minTokensOut;
         uint256 liquidity = _liquidity;
         IUniswapV2Pair pair = IUniswapV2Pair(_pool);
 
         // Make sure that only up the amount of liquidity tokens owned by the Set Token are redeemed
-        uint256 setTokenLiquidityBalance = pair.balanceOf(setToken);
+        uint256 setTokenLiquidityBalance = pair.balanceOf(jasperVault);
         require(_liquidity <= setTokenLiquidityBalance, "_liquidity must be <= to current balance");
 
         { // scope for reserveA, reserveB, totalSupply, reservesOwnedByLiquidityA, and reservesOwnedByLiquidityB, avoids stack too deep errors
@@ -217,7 +217,7 @@ contract UniswapV2AmmAdapter is IAmmAdapter {
             liquidity,
             minTokensOut[0],
             minTokensOut[1],
-            setToken,
+            jasperVault,
             block.timestamp // solhint-disable-line not-rely-on-time
         );
     }
@@ -226,7 +226,7 @@ contract UniswapV2AmmAdapter is IAmmAdapter {
      * Return calldata for the remove liquidity single asset call
      */
     function getRemoveLiquiditySingleAssetCalldata(
-        address /* _setToken */,
+        address /* _jasperVault */,
         address /*_pool*/,
         address /*_component*/,
         uint256 /*_minTokenOut*/,

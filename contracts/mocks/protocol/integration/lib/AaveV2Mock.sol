@@ -20,7 +20,7 @@ pragma solidity 0.6.10;
 
 import { AaveV2 } from "../../../../protocol/integration/lib/AaveV2.sol";
 import { ILendingPool } from "../../../../interfaces/external/aave-v2/ILendingPool.sol";
-import { ISetToken } from "../../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../../interfaces/IJasperVault.sol";
 
 /**
  * @title AaveV2Mock
@@ -32,10 +32,10 @@ import { ISetToken } from "../../../../interfaces/ISetToken.sol";
 contract AaveV2Mock {
 
     /* ============ External ============ */
-    
+
     function testGetDepositCalldata(
         ILendingPool _lendingPool,
-        address _asset, 
+        address _asset,
         uint256 _amountNotional,
         address _onBehalfOf,
         uint16 _referralCode
@@ -46,21 +46,21 @@ contract AaveV2Mock {
     {
         return AaveV2.getDepositCalldata(_lendingPool, _asset, _amountNotional, _onBehalfOf, _referralCode);
     }
-    
+
     function testInvokeDeposit(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         ILendingPool _lendingPool,
         address _asset,
         uint256 _amountNotional
     )
         external
     {
-        return AaveV2.invokeDeposit(_setToken, _lendingPool, _asset, _amountNotional);
+        return AaveV2.invokeDeposit(_jasperVault, _lendingPool, _asset, _amountNotional);
     }
-    
+
     function testGetWithdrawCalldata(
         ILendingPool _lendingPool,
-        address _asset, 
+        address _asset,
         uint256 _amountNotional,
         address _receiver
     )
@@ -70,9 +70,9 @@ contract AaveV2Mock {
     {
         return AaveV2.getWithdrawCalldata(_lendingPool, _asset, _amountNotional, _receiver);
     }
-    
+
     function testInvokeWithdraw(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         ILendingPool _lendingPool,
         address _asset,
         uint256 _amountNotional
@@ -80,12 +80,12 @@ contract AaveV2Mock {
         external
         returns (uint256)
     {
-        return AaveV2.invokeWithdraw(_setToken, _lendingPool, _asset, _amountNotional);
+        return AaveV2.invokeWithdraw(_jasperVault, _lendingPool, _asset, _amountNotional);
     }
-    
+
     function testGetBorrowCalldata(
         ILendingPool _lendingPool,
-        address _asset, 
+        address _asset,
         uint256 _amountNotional,
         uint256 _interestRateMode,
         uint16 _referralCode,
@@ -97,9 +97,9 @@ contract AaveV2Mock {
     {
         return AaveV2.getBorrowCalldata(_lendingPool, _asset, _amountNotional, _interestRateMode, _referralCode, _onBehalfOf);
     }
-    
+
     function testInvokeBorrow(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         ILendingPool _lendingPool,
         address _asset,
         uint256 _amountNotional,
@@ -107,14 +107,14 @@ contract AaveV2Mock {
     )
         external
     {
-        return AaveV2.invokeBorrow(_setToken, _lendingPool, _asset, _amountNotional, _interestRateMode);
+        return AaveV2.invokeBorrow(_jasperVault, _lendingPool, _asset, _amountNotional, _interestRateMode);
     }
 
     function testGetRepayCalldata(
         ILendingPool _lendingPool,
-        address _asset, 
+        address _asset,
         uint256 _amountNotional,
-        uint256 _interestRateMode,        
+        uint256 _interestRateMode,
         address _onBehalfOf
     )
         public
@@ -123,9 +123,9 @@ contract AaveV2Mock {
     {
         return AaveV2.getRepayCalldata(_lendingPool, _asset, _amountNotional, _interestRateMode, _onBehalfOf);
     }
-    
+
     function testInvokeRepay(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         ILendingPool _lendingPool,
         address _asset,
         uint256 _amountNotional,
@@ -134,7 +134,7 @@ contract AaveV2Mock {
         external
         returns (uint256)
     {
-        return AaveV2.invokeRepay(_setToken, _lendingPool, _asset, _amountNotional, _interestRateMode);
+        return AaveV2.invokeRepay(_jasperVault, _lendingPool, _asset, _amountNotional, _interestRateMode);
     }
 
     function testGetSetUserUseReserveAsCollateralCalldata(
@@ -150,14 +150,14 @@ contract AaveV2Mock {
     }
 
     function testInvokeSetUserUseReserveAsCollateral(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         ILendingPool _lendingPool,
         address _asset,
         bool _useAsCollateral
     )
         external
     {
-        return AaveV2.invokeSetUserUseReserveAsCollateral(_setToken, _lendingPool, _asset, _useAsCollateral);
+        return AaveV2.invokeSetUserUseReserveAsCollateral(_jasperVault, _lendingPool, _asset, _useAsCollateral);
     }
 
     function testGetSwapBorrowRateModeCalldata(
@@ -173,19 +173,19 @@ contract AaveV2Mock {
     }
 
     function testInvokeSwapBorrowRateMode(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         ILendingPool _lendingPool,
         address _asset,
         uint256 _rateMode
     )
         external
     {
-        return AaveV2.invokeSwapBorrowRateMode(_setToken, _lendingPool, _asset, _rateMode);
+        return AaveV2.invokeSwapBorrowRateMode(_jasperVault, _lendingPool, _asset, _rateMode);
     }
 
     /* ============ Helper Functions ============ */
 
-    function initializeModuleOnSet(ISetToken _setToken) external {
-        _setToken.initializeModule();
+    function initializeModuleOnSet(IJasperVault _jasperVault) external {
+        _jasperVault.initializeModule();
     }
 }

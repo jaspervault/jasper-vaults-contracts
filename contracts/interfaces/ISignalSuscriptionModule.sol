@@ -16,15 +16,26 @@
     SPDX-License-Identifier: Apache License, Version 2.0
 */
 pragma solidity 0.6.10;
-import {ISetToken} from "@setprotocol/set-protocol-v2/contracts/interfaces/ISetToken.sol";
+import {IJasperVault} from "./IJasperVault.sol";
 
 interface ISignalSuscriptionModule {
-    function subscribe(ISetToken _setToken, address target) external;
+    function subscribe(IJasperVault _jasperVault, address target) external;
 
-    function unsubscribe(ISetToken _setToken, address target) external;
+    function unsubscribe(IJasperVault _jasperVault, address target) external;
+
+    function exectueFollowStart(address _jasperVault) external;
+    function exectueFollowEnd(address _jasperVault) external;
+    
+    function isExectueFollow(address _jasperVault) external view returns (bool);
+  
+    function warnLine() external view returns(uint256);
+
+    function unsubscribeLine() external view returns(uint256);
+
+    function handleFee(IJasperVault _jasperVault) external;
 
     function udpate_allowedCopytrading(
-        ISetToken _setToken,
+        IJasperVault _jasperVault, 
         bool can_copy_trading
     ) external;
 
@@ -33,8 +44,10 @@ interface ISignalSuscriptionModule {
         view
         returns (address[] memory);
 
-    function get_signal_provider(ISetToken _setToken)
+    function get_signal_provider(IJasperVault _jasperVault)
         external
         view
         returns (address);
 }
+
+

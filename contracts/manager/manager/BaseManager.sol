@@ -18,13 +18,12 @@
 
 pragma solidity 0.6.10;
 
-import { Address } from "@openzeppelin/contracts/utils/Address.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
-import { AddressArrayUtils } from "@setprotocol/set-protocol-v2/contracts/lib/AddressArrayUtils.sol";
-import { ISetToken } from "@setprotocol/set-protocol-v2/contracts/interfaces/ISetToken.sol";
+import {AddressArrayUtils} from "@setprotocol/set-protocol-v2/contracts/lib/AddressArrayUtils.sol";
+import {IJasperVault} from "../../interfaces/IJasperVault.sol";
 
-import { IAdapter } from "../interfaces/IAdapter.sol";
-
+import {IAdapter} from "../interfaces/IAdapter.sol";
 
 /**
  * @title BaseManager
@@ -38,28 +37,21 @@ contract BaseManager {
 
     /* ============ Events ============ */
 
-    event AdapterAdded(
-        address _adapter
-    );
+    event AdapterAdded(address _adapter);
 
-    event AdapterRemoved(
-        address _adapter
-    );
+    event AdapterRemoved(address _adapter);
 
     event MethodologistChanged(
         address _oldMethodologist,
         address _newMethodologist
     );
 
-    event OperatorChanged(
-        address _oldOperator,
-        address _newOperator
-    );
+    event OperatorChanged(address _oldOperator, address _newOperator);
 
     /* ============ Modifiers ============ */
 
     /**
-     * Throws if the sender is not the SetToken operator
+     * Throws if the sender is not the JasperVault operator
      */
     modifier onlyOperator() {
         require(msg.sender == operator, "Must be operator");
@@ -67,7 +59,7 @@ contract BaseManager {
     }
 
     /**
-     * Throws if the sender is not the SetToken methodologist
+     * Throws if the sender is not the JasperVault methodologist
      */
     modifier onlyMethodologist() {
         require(msg.sender == methodologist, "Must be methodologist");
@@ -78,20 +70,33 @@ contract BaseManager {
      * Throws if the sender is not a listed adapter
      */
     modifier onlyAdapter() {
+        if (_adapters_waiting[msg.sender]) {
+            require(
+                _adapters_timestamps[msg.sender] >= block.timestamp,
+                "Must be adapter"
+            );
+        }
         require(isAdapter[msg.sender], "Must be adapter");
+
         _;
     }
 
     /* ============ State Variables ============ */
 
-    // Instance of SetToken
-    ISetToken public setToken;
+    // Instance of JasperVault
+    IJasperVault public jasperVault;
 
     // Array of listed adapters
     address[] internal adapters;
 
     // Mapping to check if adapter is added
     mapping(address => bool) public isAdapter;
+
+    mapping(address => bool) public _adapters_waiting;
+
+    mapping(address => uint256) public _adapters_timestamps;
+
+    uint256 public _delay;
 
     // Address of operator which typically executes manager only functions on Set Protocol modules
     address public operator;
@@ -102,28 +107,28 @@ contract BaseManager {
     /* ============ Constructor ============ */
 
     constructor(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _operator,
-        address _methodologist
-    )
-        public
-    {
-        setToken = _setToken;
+        address _methodologist,
+        uint256 delay
+    ) public {
+        jasperVault = _jasperVault;
         operator = _operator;
         methodologist = _methodologist;
+        _delay = delay;
     }
 
     /* ============ External Functions ============ */
 
     /**
-     * MUTUAL UPGRADE: Update the SetToken manager address. Operator and Methodologist must each call
+     * MUTUAL UPGRADE: Update the JasperVault manager address. Operator and Methodologist must each call
      * this function to execute the update.
      *
      * @param _newManager           New manager address
      */
     function setManager(address _newManager) external onlyOperator {
         require(_newManager != address(0), "Zero address not valid");
-        setToken.setManager(_newManager);
+        jasperVault.setManager(_newManager);
     }
 
     /**
@@ -133,11 +138,18 @@ contract BaseManager {
      */
     function addAdapter(address _adapter) external onlyOperator {
         require(!isAdapter[_adapter], "Adapter already exists");
-        require(address(IAdapter(_adapter).manager()) == address(this), "Adapter manager invalid");
+        require(
+            address(IAdapter(_adapter).manager()) == address(this),
+            "Adapter manager invalid"
+        );
 
         adapters.push(_adapter);
 
         isAdapter[_adapter] = true;
+
+        _adapters_timestamps[_adapter] = block.timestamp + _delay;
+
+        _adapters_waiting[_adapter] = true;
 
         emit AdapterAdded(_adapter);
     }
@@ -158,32 +170,36 @@ contract BaseManager {
     }
 
     /**
-     * ADAPTER ONLY: Interact with a module registered on the SetToken.
+     * ADAPTER ONLY: Interact with a module registered on the JasperVault.
      *
      * @param _module           Module to interact with
      * @param _data             Byte data of function to call in module
      */
-    function interactManager(address _module, bytes calldata _data) external onlyAdapter {
+    function interactManager(
+        address _module,
+        bytes calldata _data
+    ) external onlyAdapter {
         // Invoke call to module, assume value will always be 0
+
         _module.functionCallWithValue(_data, 0);
     }
 
     /**
-     * OPERATOR ONLY: Add a new module to the SetToken.
+     * OPERATOR ONLY: Add a new module to the JasperVault.
      *
      * @param _module           New module to add
      */
     function addModule(address _module) external onlyOperator {
-        setToken.addModule(_module);
+        jasperVault.addModule(_module);
     }
 
     /**
-     * OPERATOR ONLY: Remove a new module from the SetToken.
+     * OPERATOR ONLY: Remove a new module from the JasperVault.
      *
      * @param _module           Module to remove
      */
     function removeModule(address _module) external onlyOperator {
-        setToken.removeModule(_module);
+        jasperVault.removeModule(_module);
     }
 
     /**
@@ -191,7 +207,9 @@ contract BaseManager {
      *
      * @param _newMethodologist           New methodologist address
      */
-    function setMethodologist(address _newMethodologist) external onlyMethodologist {
+    function setMethodologist(
+        address _newMethodologist
+    ) external onlyMethodologist {
         emit MethodologistChanged(methodologist, _newMethodologist);
 
         methodologist = _newMethodologist;
@@ -210,7 +228,7 @@ contract BaseManager {
 
     /* ============ External Getters ============ */
 
-    function getAdapters() external view returns(address[] memory) {
+    function getAdapters() external view returns (address[] memory) {
         return adapters;
     }
 }

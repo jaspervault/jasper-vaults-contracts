@@ -17,11 +17,11 @@
 */
 pragma solidity 0.6.10;
 
-import { ISetToken } from "./ISetToken.sol";
+import { IJasperVault } from "./IJasperVault.sol";
 
 interface IBasicIssuanceModule {
     function getRequiredComponentUnitsForIssue(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _quantity
     ) external returns(address[] memory, uint256[] memory);
 }

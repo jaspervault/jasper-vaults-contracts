@@ -28,7 +28,7 @@ import { SafeMath } from "@openzeppelin/contracts/math/SafeMath.sol";
 import { AddressArrayUtils } from "../../../lib/AddressArrayUtils.sol";
 import { IController } from "../../../interfaces/IController.sol";
 import { Invoke } from "../../lib/Invoke.sol";
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
 import { IWETH } from "../../../interfaces/external/IWETH.sol";
 import { ModuleBase } from "../../lib/ModuleBase.sol";
 import { Position } from "../../lib/Position.sol";
@@ -54,8 +54,8 @@ contract SingleIndexModule is ModuleBase, ReentrancyGuard {
     using SafeMath for uint256;
     using Position for uint256;
     using Math for uint256;
-    using Position for ISetToken;
-    using Invoke for ISetToken;
+    using Position for IJasperVault;
+    using Invoke for IJasperVault;
     using AddressArrayUtils for address[];
     using Uint256ArrayUtils for uint256[];
 
@@ -113,7 +113,7 @@ contract SingleIndexModule is ModuleBase, ReentrancyGuard {
     uint256 public positionMultiplier;                      // Position multiplier when current rebalance units were devised
     mapping(address => bool) public tradeAllowList;         // Mapping of addresses allowed to call trade()
     bool public anyoneTrade;                                // Toggles on or off skipping the tradeAllowList
-    ISetToken public index;                                 // Index being managed with contract
+    IJasperVault public index;                                 // Index being managed with contract
     IWETH public weth;                                      // Weth contract address
     address public uniswapRouter;                           // Uniswap router address
     address public sushiswapRouter;                         // Sushiswap router address
@@ -362,17 +362,17 @@ contract SingleIndexModule is ModuleBase, ReentrancyGuard {
      *
      * @param _index            Address of index being used for this Set
      */
-    function initialize(ISetToken _index)
+    function initialize(IJasperVault _index)
         external
         onlySetManager(_index, msg.sender)
         onlyValidAndPendingSet(_index)
     {
         require(address(index) == address(0), "Module already in use");
 
-        ISetToken.Position[] memory positions = _index.getPositions();
+        IJasperVault.Position[] memory positions = _index.getPositions();
 
         for (uint256 i = 0; i < positions.length; i++) {
-            ISetToken.Position memory position = positions[i];
+            IJasperVault.Position memory position = positions[i];
             assetInfo[position.component].targetUnit = position.unit.toUint256();
             assetInfo[position.component].lastTradeTimestamp = 0;
         }

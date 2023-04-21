@@ -27,7 +27,7 @@ import { SignedSafeMath } from "@openzeppelin/contracts/math/SignedSafeMath.sol"
 import { Invoke } from "../../../protocol/lib/Invoke.sol";
 import { IController } from "../../../interfaces/IController.sol";
 import { IDebtIssuanceModule } from "../../../interfaces/IDebtIssuanceModule.sol";
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
 import { ModuleBase } from "../../../protocol/lib/ModuleBase.sol";
 import { Position } from "../../../protocol/lib/Position.sol";
 
@@ -38,8 +38,8 @@ contract DebtModuleMock is ModuleBase {
     using Position for uint256;
     using SafeCast for int256;
     using SignedSafeMath for int256;
-    using Position for ISetToken;
-    using Invoke for ISetToken;
+    using Position for IJasperVault;
+    using Invoke for IJasperVault;
 
     address public module;
     bool public moduleIssueHookCalled;
@@ -49,8 +49,8 @@ contract DebtModuleMock is ModuleBase {
 
     constructor(IController _controller) public ModuleBase(_controller) {}
 
-    function addDebt(ISetToken _setToken, address _token, uint256 _amount) external {
-        _setToken.editExternalPosition(_token, address(this), _amount.toInt256().mul(-1), "");
+    function addDebt(IJasperVault _jasperVault, address _token, uint256 _amount) external {
+        _jasperVault.editExternalPosition(_token, address(this), _amount.toInt256().mul(-1), "");
     }
 
     function addEquityIssuanceAdjustment(address _token, int256 _amount) external {
@@ -61,45 +61,45 @@ contract DebtModuleMock is ModuleBase {
         debtIssuanceAdjustment[_token] = _amount;
     }
 
-    function moduleIssueHook(ISetToken /*_setToken*/, uint256 /*_setTokenQuantity*/) external { moduleIssueHookCalled = true; }
-    function moduleRedeemHook(ISetToken /*_setToken*/, uint256 /*_setTokenQuantity*/) external { moduleRedeemHookCalled = true; }
+    function moduleIssueHook(IJasperVault /*_jasperVault*/, uint256 /*_setTokenQuantity*/) external { moduleIssueHookCalled = true; }
+    function moduleRedeemHook(IJasperVault /*_jasperVault*/, uint256 /*_setTokenQuantity*/) external { moduleRedeemHookCalled = true; }
 
     function componentIssueHook(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _setTokenQuantity,
         address _component,
         bool /* _isEquity */
     )
         external
     {
-        uint256 unitAmount = _setToken.getExternalPositionRealUnit(_component, address(this)).mul(-1).toUint256();
+        uint256 unitAmount = _jasperVault.getExternalPositionRealUnit(_component, address(this)).mul(-1).toUint256();
         uint256 notionalAmount = _setTokenQuantity.getDefaultTotalNotional(unitAmount);
-        IERC20(_component).transfer(address(_setToken), notionalAmount);
+        IERC20(_component).transfer(address(_jasperVault), notionalAmount);
     }
 
     function componentRedeemHook(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _setTokenQuantity,
         address _component,
         bool /* _isEquity */
     )
         external
     {
-        uint256 unitAmount = _setToken.getExternalPositionRealUnit(_component, address(this)).mul(-1).toUint256();
+        uint256 unitAmount = _jasperVault.getExternalPositionRealUnit(_component, address(this)).mul(-1).toUint256();
         uint256 notionalAmount = _setTokenQuantity.getDefaultTotalNotional(unitAmount);
-        _setToken.invokeTransfer(_component, address(this), notionalAmount);
+        _jasperVault.invokeTransfer(_component, address(this), notionalAmount);
     }
 
 
     function getIssuanceAdjustments(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 /* _setTokenQuantity */
     )
         external
         view
         returns (int256[] memory, int256[] memory)
     {
-        address[] memory components = _setToken.getComponents();
+        address[] memory components = _jasperVault.getComponents();
         int256[] memory equityAdjustments = new int256[](components.length);
         int256[] memory debtAdjustments = new int256[](components.length);
         for(uint256 i = 0; i < components.length; i++) {
@@ -111,14 +111,14 @@ contract DebtModuleMock is ModuleBase {
     }
 
     function getRedemptionAdjustments(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 /* _setTokenQuantity */
     )
         external
         view
         returns (int256[] memory, int256[] memory)
     {
-        address[] memory components = _setToken.getComponents();
+        address[] memory components = _jasperVault.getComponents();
         int256[] memory equityAdjustments = new int256[](components.length);
         int256[] memory debtAdjustments = new int256[](components.length);
         for(uint256 i = 0; i < components.length; i++) {
@@ -129,13 +129,13 @@ contract DebtModuleMock is ModuleBase {
         return (equityAdjustments, debtAdjustments);
     }
 
-    function initialize(ISetToken _setToken, address _module) external {
-        _setToken.initializeModule();
+    function initialize(IJasperVault _jasperVault, address _module) external {
+        _jasperVault.initializeModule();
         module = _module;
-        IDebtIssuanceModule(module).registerToIssuanceModule(_setToken);
+        IDebtIssuanceModule(module).registerToIssuanceModule(_jasperVault);
     }
 
     function removeModule() external override {
-        IDebtIssuanceModule(module).unregisterFromIssuanceModule(ISetToken(msg.sender));
+        IDebtIssuanceModule(module).unregisterFromIssuanceModule(IJasperVault(msg.sender));
     }
 }

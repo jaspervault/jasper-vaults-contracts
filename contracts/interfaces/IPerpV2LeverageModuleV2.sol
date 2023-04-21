@@ -20,7 +20,7 @@ pragma experimental "ABIEncoderV2";
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import { ISetToken } from "./ISetToken.sol";
+import { IJasperVault } from "./IJasperVault.sol";
 import { IDebtIssuanceModule } from "./IDebtIssuanceModule.sol";
 import { IAccountBalance } from "./external/perp-v2/IAccountBalance.sol";
 import { IClearingHouse } from "./external/perp-v2/IClearingHouse.sol";
@@ -56,7 +56,7 @@ interface IPerpV2LeverageModuleV2 {
 
     /**
      * @dev Emitted on trade
-     * @param _setToken         Instance of SetToken
+     * @param _jasperVault         Instance of SetToken
      * @param _baseToken        Virtual token minted by the Perp protocol
      * @param _deltaBase        Change in baseToken position size resulting from trade
      * @param _deltaQuote       Change in vUSDC position size resulting from trade
@@ -64,7 +64,7 @@ interface IPerpV2LeverageModuleV2 {
      * @param _isBuy            True when baseToken is being bought, false when being sold
      */
     event PerpTraded(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         address indexed _baseToken,
         uint256 _deltaBase,
         uint256 _deltaQuote,
@@ -74,24 +74,24 @@ interface IPerpV2LeverageModuleV2 {
 
     /**
      * @dev Emitted on deposit (not issue or redeem)
-     * @param _setToken             Instance of SetToken
+     * @param _jasperVault             Instance of SetToken
      * @param _collateralToken      Token being deposited as collateral (USDC)
      * @param _amountDeposited      Amount of collateral being deposited into Perp
      */
     event CollateralDeposited(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         IERC20 _collateralToken,
         uint256 _amountDeposited
     );
 
     /**
      * @dev Emitted on withdraw (not issue or redeem)
-     * @param _setToken             Instance of SetToken
+     * @param _jasperVault             Instance of SetToken
      * @param _collateralToken      Token being withdrawn as collateral (USDC)
      * @param _amountWithdrawn      Amount of collateral being withdrawn from Perp
      */
     event CollateralWithdrawn(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         IERC20 _collateralToken,
         uint256 _amountWithdrawn
     );
@@ -128,9 +128,9 @@ interface IPerpV2LeverageModuleV2 {
      * @dev MANAGER ONLY: Initializes this module to the SetToken. Either the SetToken needs to be on the
      * allowed list or anySetAllowed needs to be true.
      *
-     * @param _setToken             Instance of the SetToken to initialize
+     * @param _jasperVault             Instance of the SetToken to initialize
      */
-    function initialize(ISetToken _setToken) external;
+    function initialize(IJasperVault _jasperVault) external;
 
     /**
      * @dev MANAGER ONLY: Allows manager to buy or sell perps to change exposure to the underlying baseToken.
@@ -157,13 +157,13 @@ interface IPerpV2LeverageModuleV2 {
      * | Short | Buy     | pay least amt. of vQuote  | lower bound of output quote | positive            |
      * | ----------------------------------------------------------------------------------------------- |
      *
-     * @param _setToken                     Instance of the SetToken
+     * @param _jasperVault                     Instance of the SetToken
      * @param _baseToken                    Address virtual token being traded
      * @param _baseQuantityUnits            Quantity of virtual token to trade in position units
      * @param _quoteBoundQuantityUnits      Max/min of vQuote asset to pay/receive when buying or selling
      */
     function trade(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _baseToken,
         int256 _baseQuantityUnits,
         uint256 _quoteBoundQuantityUnits
@@ -177,10 +177,10 @@ interface IPerpV2LeverageModuleV2 {
      * 100 units of USDC and execute a lever trade for ~200 vUSDC worth of vToken with the difference
      * between these made up as automatically "issued" margin debt in the PerpV2 system.
      *
-     * @param  _setToken                    Instance of the SetToken
+     * @param  _jasperVault                    Instance of the SetToken
      * @param  _collateralQuantityUnits     Quantity of collateral to deposit in position units
      */
-    function deposit(ISetToken _setToken, uint256 _collateralQuantityUnits) external;
+    function deposit(IJasperVault _jasperVault, uint256 _collateralQuantityUnits) external;
 
 
     /**
@@ -191,10 +191,10 @@ interface IPerpV2LeverageModuleV2 {
      * NOTE: Within PerpV2, `withdraw` settles `owedRealizedPnl` and any pending funding payments
      * to the Perp vault prior to transfer.
      *
-     * @param  _setToken                    Instance of the SetToken
+     * @param  _jasperVault                    Instance of the SetToken
      * @param  _collateralQuantityUnits     Quantity of collateral to withdraw in position units
      */
-    function withdraw(ISetToken _setToken, uint256 _collateralQuantityUnits) external;
+    function withdraw(IJasperVault _jasperVault, uint256 _collateralQuantityUnits) external;
 
 
     /* ============ External Getter Functions ============ */
@@ -205,12 +205,12 @@ interface IPerpV2LeverageModuleV2 {
      * be transferred in per SetToken. Values in the returned arrays map to the same index in the
      * SetToken's components array
      *
-     * @param _setToken             Instance of SetToken
+     * @param _jasperVault             Instance of SetToken
      * @param _setTokenQuantity     Number of sets to issue
      *
      * @return equityAdjustments array containing a single element and an empty debtAdjustments array
      */
-    function getIssuanceAdjustments(ISetToken _setToken, uint256 _setTokenQuantity)
+    function getIssuanceAdjustments(IJasperVault _jasperVault, uint256 _setTokenQuantity)
         external
         returns (int256[] memory, int256[] memory);
 
@@ -220,19 +220,19 @@ interface IPerpV2LeverageModuleV2 {
      * redeeming a quantity of SetToken representing the amount of collateral returned per SetToken.
      * Values in the returned arrays map to the same index in the SetToken's components array.
      *
-     * @param _setToken             Instance of SetToken
+     * @param _jasperVault             Instance of SetToken
      * @param _setTokenQuantity     Number of sets to issue
      *
      * @return equityAdjustments array containing a single element and an empty debtAdjustments array
      */
-    function getRedemptionAdjustments(ISetToken _setToken, uint256 _setTokenQuantity)
+    function getRedemptionAdjustments(IJasperVault _jasperVault, uint256 _setTokenQuantity)
         external
         returns (int256[] memory, int256[] memory);
 
     /**
      * @dev Returns a PositionUnitNotionalInfo array representing all positions open for the SetToken.
      *
-     * @param _setToken         Instance of SetToken
+     * @param _jasperVault         Instance of SetToken
      *
      * @return PositionUnitInfo array, in which each element has properties:
      *
@@ -240,12 +240,12 @@ interface IPerpV2LeverageModuleV2 {
      *         + baseBalance:  baseToken balance as notional quantity (10**18)
      *         + quoteBalance: USDC quote asset balance as notional quantity (10**18)
      */
-    function getPositionNotionalInfo(ISetToken _setToken) external view returns (PerpV2Positions.PositionNotionalInfo[] memory);
+    function getPositionNotionalInfo(IJasperVault _jasperVault) external view returns (PerpV2Positions.PositionNotionalInfo[] memory);
 
     /**
      * @dev Returns a PositionUnitInfo array representing all positions open for the SetToken.
      *
-     * @param _setToken         Instance of SetToken
+     * @param _jasperVault         Instance of SetToken
      *
      * @return PositionUnitInfo array, in which each element has properties:
      *
@@ -253,13 +253,13 @@ interface IPerpV2LeverageModuleV2 {
      *         + baseUnit:  baseToken balance as position unit (10**18)
      *         + quoteUnit: USDC quote asset balance as position unit (10**18)
      */
-    function getPositionUnitInfo(ISetToken _setToken) external view returns (PerpV2Positions.PositionUnitInfo[] memory);
+    function getPositionUnitInfo(IJasperVault _jasperVault) external view returns (PerpV2Positions.PositionUnitInfo[] memory);
 
     /**
      * @dev Gets Perp account info for SetToken. Returns an AccountInfo struct containing account wide
      * (rather than position specific) balance info
      *
-     * @param  _setToken            Instance of the SetToken
+     * @param  _jasperVault            Instance of the SetToken
      *
      * @return accountInfo          struct with properties for:
      *
@@ -268,5 +268,5 @@ interface IPerpV2LeverageModuleV2 {
      *         + pending funding payments (10**18)
      *         + net quote balance (10**18)
      */
-    function getAccountInfo(ISetToken _setToken) external view returns (AccountInfo memory accountInfo);
+    function getAccountInfo(IJasperVault _jasperVault) external view returns (AccountInfo memory accountInfo);
 }

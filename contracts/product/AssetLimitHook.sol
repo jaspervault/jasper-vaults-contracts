@@ -23,7 +23,7 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 import { AddressArrayUtils } from "../lib/AddressArrayUtils.sol";
 import { INAVIssuanceHook } from "../interfaces/INAVIssuanceHook.sol";
-import { ISetToken } from "../interfaces/ISetToken.sol";
+import { IJasperVault } from "../interfaces/IJasperVault.sol";
 
 /**
  * @title AssetLimitHook
@@ -44,7 +44,7 @@ contract AssetLimitHook is INAVIssuanceHook, Ownable {
     constructor(address[] memory _assets, uint256[] memory _limits) public {
         require(_assets.length == _limits.length, "Arrays must be equal");
         require(_assets.length != 0, "Array must not be empty");
-        
+
         for (uint256 i = 0; i < _assets.length; i++) {
             address asset = _assets[i];
             require(assetLimits[asset] == 0, "Asset already added");
@@ -57,7 +57,7 @@ contract AssetLimitHook is INAVIssuanceHook, Ownable {
     /* ============ External Functions ============ */
 
     function invokePreIssueHook(
-        ISetToken /*_setToken*/,
+        IJasperVault /*_jasperVault*/,
         address _reserveAsset,
         uint256 _reserveAssetQuantity,
         address /*_sender*/,
@@ -73,7 +73,7 @@ contract AssetLimitHook is INAVIssuanceHook, Ownable {
     }
 
     function invokePreRedeemHook(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _redeemQuantity,
         address /*_sender*/,
         address /*_to*/
@@ -82,7 +82,7 @@ contract AssetLimitHook is INAVIssuanceHook, Ownable {
         override
     {
         require(
-            _redeemQuantity <= assetLimits[address(_setToken)],
+            _redeemQuantity <= assetLimits[address(_jasperVault)],
             "Redeem size exceeds asset limit"
         );
     }
@@ -105,6 +105,6 @@ contract AssetLimitHook is INAVIssuanceHook, Ownable {
     }
 
     /* ============ Getters ============ */
-    
+
     function getAssets() external view returns(address[] memory) { return assets; }
 }

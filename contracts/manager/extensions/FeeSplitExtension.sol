@@ -22,10 +22,10 @@ pragma experimental ABIEncoderV2;
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { SafeMath } from "@openzeppelin/contracts/math/SafeMath.sol";
 
-import { ISetToken } from "@setprotocol/set-protocol-v2/contracts/interfaces/ISetToken.sol";
+import { IJasperVault } from "../../interfaces/IJasperVault.sol";
 import { PreciseUnitMath } from "@setprotocol/set-protocol-v2/contracts/lib/PreciseUnitMath.sol";
 import { IIssuanceModule } from "@setprotocol/set-protocol-v2/contracts/interfaces/IIssuanceModule.sol";
-import { IStreamingFeeModule } from "@setprotocol/set-protocol-v2/contracts/interfaces/IStreamingFeeModule.sol";
+import { IStreamingFeeModule } from "../../interfaces/IStreamingFeeModule.sol";
 
 import { BaseExtension } from "../lib/BaseExtension.sol";
 import { IBaseManager } from "../interfaces/IBaseManager.sol";
@@ -54,7 +54,7 @@ contract FeeSplitExtension is BaseExtension, TimeLockUpgrade {
 
     /* ============ State Variables ============ */
 
-    ISetToken public setToken;
+    IJasperVault public jasperVault;
     IStreamingFeeModule public streamingFeeModule;
     IIssuanceModule public issuanceModule;
 
@@ -80,7 +80,7 @@ contract FeeSplitExtension is BaseExtension, TimeLockUpgrade {
         issuanceModule = _issuanceModule;
         operatorFeeSplit = _operatorFeeSplit;
         operatorFeeRecipient = _operatorFeeRecipient;
-        setToken = manager.setToken();
+        jasperVault = manager.jasperVault();
     }
 
     /* ============ External Functions ============ */
@@ -88,14 +88,14 @@ contract FeeSplitExtension is BaseExtension, TimeLockUpgrade {
     /**
      * ANYONE CALLABLE: Accrues fees from streaming fee module. Gets resulting balance after fee accrual, calculates fees for
      * operator and methodologist, and sends to operator fee recipient and methodologist respectively. NOTE: mint/redeem fees
-     * will automatically be sent to this address so reading the balance of the SetToken in the contract after accrual is
+     * will automatically be sent to this address so reading the balance of the JasperVault in the contract after accrual is
      * sufficient for accounting for all collected fees.
      */
     function accrueFeesAndDistribute() public {
         // Emits a FeeActualized event
-        streamingFeeModule.accrueFee(setToken);
+        streamingFeeModule.accrueFee(jasperVault);
 
-        uint256 totalFees = setToken.balanceOf(address(this));
+        uint256 totalFees = jasperVault.balanceOf(address(this));
 
         address methodologist = manager.methodologist();
 
@@ -103,11 +103,11 @@ contract FeeSplitExtension is BaseExtension, TimeLockUpgrade {
         uint256 methodologistTake = totalFees.sub(operatorTake);
 
         if (operatorTake > 0) {
-            setToken.transfer(operatorFeeRecipient, operatorTake);
+            jasperVault.transfer(operatorFeeRecipient, operatorTake);
         }
 
         if (methodologistTake > 0) {
-            setToken.transfer(methodologist, methodologistTake);
+            jasperVault.transfer(methodologist, methodologistTake);
         }
 
         emit FeesDistributed(operatorFeeRecipient, methodologist, operatorTake, methodologistTake);
@@ -129,7 +129,7 @@ contract FeeSplitExtension is BaseExtension, TimeLockUpgrade {
         onlyOperator
         timeLockUpgrade
     {
-        bytes memory callData = abi.encodeWithSignature("updateStreamingFee(address,uint256)", manager.setToken(), _newFee);
+        bytes memory callData = abi.encodeWithSignature("updateStreamingFee(address,uint256)", manager.jasperVault(), _newFee);
         invokeManager(address(streamingFeeModule), callData);
     }
 
@@ -147,7 +147,7 @@ contract FeeSplitExtension is BaseExtension, TimeLockUpgrade {
         onlyOperator
         timeLockUpgrade
     {
-        bytes memory callData = abi.encodeWithSignature("updateIssueFee(address,uint256)", manager.setToken(), _newFee);
+        bytes memory callData = abi.encodeWithSignature("updateIssueFee(address,uint256)", manager.jasperVault(), _newFee);
         invokeManager(address(issuanceModule), callData);
     }
 
@@ -165,7 +165,7 @@ contract FeeSplitExtension is BaseExtension, TimeLockUpgrade {
         onlyOperator
         timeLockUpgrade
     {
-        bytes memory callData = abi.encodeWithSignature("updateRedeemFee(address,uint256)", manager.setToken(), _newFee);
+        bytes memory callData = abi.encodeWithSignature("updateRedeemFee(address,uint256)", manager.jasperVault(), _newFee);
         invokeManager(address(issuanceModule), callData);
     }
 
@@ -178,7 +178,7 @@ contract FeeSplitExtension is BaseExtension, TimeLockUpgrade {
         external
         onlyOperator
     {
-        bytes memory callData = abi.encodeWithSignature("updateFeeRecipient(address,address)", manager.setToken(), _newFeeRecipient);
+        bytes memory callData = abi.encodeWithSignature("updateFeeRecipient(address,address)", manager.jasperVault(), _newFeeRecipient);
         invokeManager(address(streamingFeeModule), callData);
         invokeManager(address(issuanceModule), callData);
     }

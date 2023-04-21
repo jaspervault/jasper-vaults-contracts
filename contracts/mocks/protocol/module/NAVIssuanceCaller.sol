@@ -22,7 +22,7 @@ pragma experimental "ABIEncoderV2";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import { INAVIssuanceModule } from "../../../interfaces/INAVIssuanceModule.sol";
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
 
 
 contract NAVIssuanceCaller {
@@ -31,17 +31,17 @@ contract NAVIssuanceCaller {
     constructor(INAVIssuanceModule _navIssuance) public { navIssuance = _navIssuance; }
 
     function issue(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _reserveAsset,
         uint256 _reserveAssetQuantity,
         uint256 _minSetTokenReceiveQuantity,
         address _to
-    ) 
+    )
         external
     {
         IERC20(_reserveAsset).approve(address(navIssuance), _reserveAssetQuantity);
         navIssuance.issue(
-            _setToken,
+            _jasperVault,
             _reserveAsset,
             _reserveAssetQuantity,
             _minSetTokenReceiveQuantity,
@@ -50,16 +50,16 @@ contract NAVIssuanceCaller {
     }
 
     function redeem(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _reserveAsset,
         uint256 _setTokenQuantity,
         uint256 _minReserveReceiveQuantity,
         address _to
-    ) 
+    )
         external
     {
         navIssuance.redeem(
-            _setToken,
+            _jasperVault,
             _reserveAsset,
             _setTokenQuantity,
             _minReserveReceiveQuantity,

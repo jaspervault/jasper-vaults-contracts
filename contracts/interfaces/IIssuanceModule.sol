@@ -17,7 +17,7 @@
 */
 pragma solidity 0.6.10;
 
-import { ISetToken } from "./ISetToken.sol";
+import { IJasperVault } from "./IJasperVault.sol";
 
 /**
  * @title IIssuanceModule
@@ -26,12 +26,12 @@ import { ISetToken } from "./ISetToken.sol";
  * Interface for interacting with Issuance module interface.
  */
 interface IIssuanceModule {
-    function updateIssueFee(ISetToken _setToken, uint256 _newIssueFee) external;
-    function updateRedeemFee(ISetToken _setToken, uint256 _newRedeemFee) external;
-    function updateFeeRecipient(ISetToken _setToken, address _newRedeemFee) external;
+    function updateIssueFee(IJasperVault _jasperVault, uint256 _newIssueFee) external;
+    function updateRedeemFee(IJasperVault _jasperVault, uint256 _newRedeemFee) external;
+    function updateFeeRecipient(IJasperVault _jasperVault, address _newRedeemFee) external;
 
     function initialize(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _maxManagerFee,
         uint256 _managerIssueFee,
         uint256 _managerRedeemFee,

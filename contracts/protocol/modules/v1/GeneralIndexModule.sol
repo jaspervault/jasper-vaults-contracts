@@ -29,7 +29,7 @@ import { AddressArrayUtils } from "../../../lib/AddressArrayUtils.sol";
 import { IController } from "../../../interfaces/IController.sol";
 import { IIndexExchangeAdapter } from "../../../interfaces/IIndexExchangeAdapter.sol";
 import { Invoke } from "../../lib/Invoke.sol";
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
 import { IWETH } from "../../../interfaces/external/IWETH.sol";
 import { ModuleBase } from "../../lib/ModuleBase.sol";
 import { Position } from "../../lib/Position.sol";
@@ -60,8 +60,8 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
     using SafeMath for uint256;
     using Position for uint256;
     using Math for uint256;
-    using Position for ISetToken;
-    using Invoke for ISetToken;
+    using Position for IJasperVault;
+    using Invoke for IJasperVault;
     using AddressArrayUtils for address[];
     using AddressArrayUtils for IERC20[];
     using Uint256ArrayUtils for uint256[];
@@ -90,7 +90,7 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
     }
 
     struct TradeInfo {
-        ISetToken setToken;                         // Instance of SetToken
+        IJasperVault jasperVault;                         // Instance of JasperVault
         IIndexExchangeAdapter exchangeAdapter;      // Instance of Exchange Adapter
         address sendToken;                          // Address of token being sold
         address receiveToken;                       // Address of token being bought
@@ -106,18 +106,18 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
 
     /* ============ Events ============ */
 
-    event TradeMaximumUpdated(ISetToken indexed _setToken, address indexed _component, uint256 _newMaximum);
-    event AssetExchangeUpdated(ISetToken indexed _setToken, address indexed _component, string _newExchangeName);
-    event CoolOffPeriodUpdated(ISetToken indexed _setToken, address indexed _component, uint256 _newCoolOffPeriod);
-    event ExchangeDataUpdated(ISetToken indexed _setToken, address indexed _component, bytes _newExchangeData);
-    event RaiseTargetPercentageUpdated(ISetToken indexed _setToken, uint256 indexed _raiseTargetPercentage);
-    event AssetTargetsRaised(ISetToken indexed _setToken, uint256 indexed positionMultiplier);
+    event TradeMaximumUpdated(IJasperVault indexed _jasperVault, address indexed _component, uint256 _newMaximum);
+    event AssetExchangeUpdated(IJasperVault indexed _jasperVault, address indexed _component, string _newExchangeName);
+    event CoolOffPeriodUpdated(IJasperVault indexed _jasperVault, address indexed _component, uint256 _newCoolOffPeriod);
+    event ExchangeDataUpdated(IJasperVault indexed _jasperVault, address indexed _component, bytes _newExchangeData);
+    event RaiseTargetPercentageUpdated(IJasperVault indexed _jasperVault, uint256 indexed _raiseTargetPercentage);
+    event AssetTargetsRaised(IJasperVault indexed _jasperVault, uint256 indexed positionMultiplier);
 
-    event AnyoneTradeUpdated(ISetToken indexed _setToken, bool indexed _status);
-    event TraderStatusUpdated(ISetToken indexed _setToken, address indexed _trader, bool _status);
+    event AnyoneTradeUpdated(IJasperVault indexed _jasperVault, bool indexed _status);
+    event TraderStatusUpdated(IJasperVault indexed _jasperVault, address indexed _trader, bool _status);
 
     event TradeExecuted(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         address indexed _sellComponent,
         address indexed _buyComponent,
         IIndexExchangeAdapter _exchangeAdapter,
@@ -128,7 +128,7 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
     );
 
     event RebalanceStarted(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         address[] aggregateComponents,
         uint256[] aggregateTargetUnits,
         uint256 indexed positionMultiplier
@@ -140,20 +140,20 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
 
     /* ============ State Variables ============ */
 
-    mapping(ISetToken => mapping(IERC20 => TradeExecutionParams)) public executionInfo;     // Mapping of SetToken to execution parameters of each asset on SetToken
-    mapping(ISetToken => TradePermissionInfo) public permissionInfo;                        // Mapping of SetToken to trading permissions
-    mapping(ISetToken => RebalanceInfo) public rebalanceInfo;                               // Mapping of SetToken to relevant data for current rebalance
+    mapping(IJasperVault => mapping(IERC20 => TradeExecutionParams)) public executionInfo;     // Mapping of JasperVault to execution parameters of each asset on JasperVault
+    mapping(IJasperVault => TradePermissionInfo) public permissionInfo;                        // Mapping of JasperVault to trading permissions
+    mapping(IJasperVault => RebalanceInfo) public rebalanceInfo;                               // Mapping of JasperVault to relevant data for current rebalance
     IWETH public immutable weth;                                                            // Weth contract address
 
     /* ============ Modifiers ============ */
 
-    modifier onlyAllowedTrader(ISetToken _setToken) {
-        _validateOnlyAllowedTrader(_setToken);
+    modifier onlyAllowedTrader(IJasperVault _jasperVault) {
+        _validateOnlyAllowedTrader(_jasperVault);
         _;
     }
 
-    modifier onlyEOAIfUnrestricted(ISetToken _setToken) {
-        _validateOnlyEOAIfUnrestricted(_setToken);
+    modifier onlyEOAIfUnrestricted(IJasperVault _jasperVault) {
+        _validateOnlyEOAIfUnrestricted(_jasperVault);
         _;
     }
 
@@ -168,45 +168,45 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
     /**
      * MANAGER ONLY: Changes the target allocation of the Set, opening it up for trading by the Sets designated traders. The manager
      * must pass in any new components and their target units (units defined by the amount of that component the manager wants in 10**18
-     * units of a SetToken). Old component target units must be passed in, in the current order of the components array on the
-     * SetToken. If a component is being removed it's index in the _oldComponentsTargetUnits should be set to 0. Additionally, the
+     * units of a JasperVault). Old component target units must be passed in, in the current order of the components array on the
+     * JasperVault. If a component is being removed it's index in the _oldComponentsTargetUnits should be set to 0. Additionally, the
      * positionMultiplier is passed in, in order to adjust the target units in the event fees are accrued or some other activity occurs
      * that changes the positionMultiplier of the Set. This guarantees the same relative allocation between all the components.
      *
-     * @param _setToken                         Address of the SetToken to be rebalanced
+     * @param _jasperVault                         Address of the JasperVault to be rebalanced
      * @param _newComponents                    Array of new components to add to allocation
      * @param _newComponentsTargetUnits         Array of target units at end of rebalance for new components, maps to same index of _newComponents array
      * @param _oldComponentsTargetUnits         Array of target units at end of rebalance for old component, maps to same index of
-     *                                               _setToken.getComponents() array, if component being removed set to 0.
+     *                                               _jasperVault.getComponents() array, if component being removed set to 0.
      * @param _positionMultiplier               Position multiplier when target units were calculated, needed in order to adjust target units
      *                                               if fees accrued
      */
     function startRebalance(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address[] calldata _newComponents,
         uint256[] calldata _newComponentsTargetUnits,
         uint256[] calldata _oldComponentsTargetUnits,
         uint256 _positionMultiplier
     )
         external
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
         ( address[] memory aggregateComponents, uint256[] memory aggregateTargetUnits ) = _getAggregateComponentsAndUnits(
-            _setToken.getComponents(),
+            _jasperVault.getComponents(),
             _newComponents,
             _newComponentsTargetUnits,
             _oldComponentsTargetUnits
         );
 
         for (uint256 i = 0; i < aggregateComponents.length; i++) {
-            require(!_setToken.hasExternalPosition(aggregateComponents[i]), "External positions not allowed");
-            executionInfo[_setToken][IERC20(aggregateComponents[i])].targetUnit = aggregateTargetUnits[i];
+            require(!_jasperVault.hasExternalPosition(aggregateComponents[i]), "External positions not allowed");
+            executionInfo[_jasperVault][IERC20(aggregateComponents[i])].targetUnit = aggregateTargetUnits[i];
         }
 
-        rebalanceInfo[_setToken].rebalanceComponents = aggregateComponents;
-        rebalanceInfo[_setToken].positionMultiplier = _positionMultiplier;
+        rebalanceInfo[_jasperVault].rebalanceComponents = aggregateComponents;
+        rebalanceInfo[_jasperVault].positionMultiplier = _positionMultiplier;
 
-        emit RebalanceStarted(_setToken, aggregateComponents, aggregateTargetUnits, _positionMultiplier);
+        emit RebalanceStarted(_jasperVault, aggregateComponents, aggregateTargetUnits, _positionMultiplier);
     }
 
     /**
@@ -219,24 +219,24 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
      * to max trade size unless the max trade size would exceed the target, then an amount that would match the target unit is traded. Protocol fees,
      * if enabled, are collected in the token received in a trade.
      *
-     * @param _setToken             Address of the SetToken
-     * @param _component            Address of SetToken component to trade
+     * @param _jasperVault             Address of the JasperVault
+     * @param _component            Address of JasperVault component to trade
      * @param _ethQuantityLimit     Max/min amount of ETH spent/received during trade
      */
     function trade(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IERC20 _component,
         uint256 _ethQuantityLimit
     )
         external
         nonReentrant
-        onlyAllowedTrader(_setToken)
-        onlyEOAIfUnrestricted(_setToken)
+        onlyAllowedTrader(_jasperVault)
+        onlyEOAIfUnrestricted(_jasperVault)
         virtual
     {
-        _validateTradeParameters(_setToken, _component);
+        _validateTradeParameters(_jasperVault, _component);
 
-        TradeInfo memory tradeInfo = _createTradeInfo(_setToken, _component, _ethQuantityLimit);
+        TradeInfo memory tradeInfo = _createTradeInfo(_jasperVault, _component, _ethQuantityLimit);
 
         _executeTrade(tradeInfo);
 
@@ -245,7 +245,7 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
         (uint256 netSendAmount, uint256 netReceiveAmount) = _updatePositionStateAndTimestamp(tradeInfo, _component);
 
         emit TradeExecuted(
-            tradeInfo.setToken,
+            tradeInfo.jasperVault,
             tradeInfo.sendToken,
             tradeInfo.receiveToken,
             tradeInfo.exchangeAdapter,
@@ -265,30 +265,30 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
      * can be called at anytime but will revert if the passed component's target unit is met or cool off period hasn't passed. Like with trade()
      * a minimum component receive amount can be set.
      *
-     * @param _setToken                     Address of the SetToken
-     * @param _component                    Address of the SetToken component to trade
+     * @param _jasperVault                     Address of the JasperVault
+     * @param _component                    Address of the JasperVault component to trade
      * @param _minComponentReceived        Min amount of component received during trade
      */
     function tradeRemainingWETH(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IERC20 _component,
         uint256 _minComponentReceived
     )
         external
         nonReentrant
-        onlyAllowedTrader(_setToken)
-        onlyEOAIfUnrestricted(_setToken)
+        onlyAllowedTrader(_jasperVault)
+        onlyEOAIfUnrestricted(_jasperVault)
         virtual
     {
-        require(_noTokensToSell(_setToken), "Sell other set components first");
+        require(_noTokensToSell(_jasperVault), "Sell other set components first");
         require(
-            executionInfo[_setToken][weth].targetUnit < _getDefaultPositionRealUnit(_setToken, weth),
+            executionInfo[_jasperVault][weth].targetUnit < _getDefaultPositionRealUnit(_jasperVault, weth),
             "WETH is below target unit"
         );
 
-        _validateTradeParameters(_setToken, _component);
+        _validateTradeParameters(_jasperVault, _component);
 
-        TradeInfo memory tradeInfo = _createTradeRemainingInfo(_setToken, _component, _minComponentReceived);
+        TradeInfo memory tradeInfo = _createTradeRemainingInfo(_jasperVault, _component, _minComponentReceived);
 
         _executeTrade(tradeInfo);
 
@@ -296,14 +296,14 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
         (uint256 netSendAmount, uint256 netReceiveAmount) = _updatePositionStateAndTimestamp(tradeInfo, _component);
 
         require(
-            netReceiveAmount.add(protocolFee) < executionInfo[_setToken][_component].maxSize,
+            netReceiveAmount.add(protocolFee) < executionInfo[_jasperVault][_component].maxSize,
             "Trade amount > max trade size"
         );
 
-        _validateComponentPositionUnit(_setToken, _component);
+        _validateComponentPositionUnit(_jasperVault, _component);
 
         emit TradeExecuted(
-            tradeInfo.setToken,
+            tradeInfo.jasperVault,
             tradeInfo.sendToken,
             tradeInfo.receiveToken,
             tradeInfo.exchangeAdapter,
@@ -322,62 +322,62 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
      * that need to be bought. Raising the targets too much could result in vastly under allocating to WETH as more WETH than necessary is
      * spent buying the components to meet their new target.
      *
-     * @param _setToken             Address of the SetToken
+     * @param _jasperVault             Address of the JasperVault
      */
-    function raiseAssetTargets(ISetToken _setToken) external onlyAllowedTrader(_setToken) virtual {
+    function raiseAssetTargets(IJasperVault _jasperVault) external onlyAllowedTrader(_jasperVault) virtual {
         require(
-            _allTargetsMet(_setToken)
-            && _getDefaultPositionRealUnit(_setToken, weth) > _getNormalizedTargetUnit(_setToken, weth),
+            _allTargetsMet(_jasperVault)
+            && _getDefaultPositionRealUnit(_jasperVault, weth) > _getNormalizedTargetUnit(_jasperVault, weth),
             "Targets not met or ETH =~ 0"
         );
 
         // positionMultiplier / (10^18 + raiseTargetPercentage)
         // ex: (10 ** 18) / ((10 ** 18) + ether(.0025)) => 997506234413965087
-        rebalanceInfo[_setToken].positionMultiplier = rebalanceInfo[_setToken].positionMultiplier.preciseDiv(
-            PreciseUnitMath.preciseUnit().add(rebalanceInfo[_setToken].raiseTargetPercentage)
+        rebalanceInfo[_jasperVault].positionMultiplier = rebalanceInfo[_jasperVault].positionMultiplier.preciseDiv(
+            PreciseUnitMath.preciseUnit().add(rebalanceInfo[_jasperVault].raiseTargetPercentage)
         );
-        emit AssetTargetsRaised(_setToken, rebalanceInfo[_setToken].positionMultiplier);
+        emit AssetTargetsRaised(_jasperVault, rebalanceInfo[_jasperVault].positionMultiplier);
     }
 
     /**
-     * MANAGER ONLY: Set trade maximums for passed components of the SetToken. Can be called at anytime.
+     * MANAGER ONLY: Set trade maximums for passed components of the JasperVault. Can be called at anytime.
      * Note: Trade maximums must be set before rebalance can begin properly - they are zero by
      * default and trades will not execute if a component's trade size is greater than the maximum.
      *
-     * @param _setToken             Address of the SetToken
+     * @param _jasperVault             Address of the JasperVault
      * @param _components           Array of components
      * @param _tradeMaximums        Array of trade maximums mapping to correct component
      */
     function setTradeMaximums(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address[] memory _components,
         uint256[] memory _tradeMaximums
     )
         external
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
         _components.validatePairsWithArray(_tradeMaximums);
 
         for (uint256 i = 0; i < _components.length; i++) {
-            executionInfo[_setToken][IERC20(_components[i])].maxSize = _tradeMaximums[i];
-            emit TradeMaximumUpdated(_setToken, _components[i], _tradeMaximums[i]);
+            executionInfo[_jasperVault][IERC20(_components[i])].maxSize = _tradeMaximums[i];
+            emit TradeMaximumUpdated(_jasperVault, _components[i], _tradeMaximums[i]);
         }
     }
 
     /**
-     * MANAGER ONLY: Set exchange for passed components of the SetToken. Can be called at anytime.
+     * MANAGER ONLY: Set exchange for passed components of the JasperVault. Can be called at anytime.
      *
-     * @param _setToken             Address of the SetToken
+     * @param _jasperVault             Address of the JasperVault
      * @param _components           Array of components
      * @param _exchangeNames        Array of exchange names mapping to correct component
      */
     function setExchanges(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address[] memory _components,
         string[] memory _exchangeNames
     )
         external
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
         _components.validatePairsWithArray(_exchangeNames);
 
@@ -389,32 +389,32 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
                     "Unrecognized exchange name"
                 );
 
-                executionInfo[_setToken][IERC20(_components[i])].exchangeName = _exchangeNames[i];
-                emit AssetExchangeUpdated(_setToken, _components[i], _exchangeNames[i]);
+                executionInfo[_jasperVault][IERC20(_components[i])].exchangeName = _exchangeNames[i];
+                emit AssetExchangeUpdated(_jasperVault, _components[i], _exchangeNames[i]);
             }
         }
     }
 
     /**
-     * MANAGER ONLY: Set cool off periods for passed components of the SetToken. Can be called at any time.
+     * MANAGER ONLY: Set cool off periods for passed components of the JasperVault. Can be called at any time.
      *
-     * @param _setToken             Address of the SetToken
+     * @param _jasperVault             Address of the SetToken
      * @param _components           Array of components
      * @param _coolOffPeriods       Array of cool off periods to correct component
      */
     function setCoolOffPeriods(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address[] memory _components,
         uint256[] memory _coolOffPeriods
     )
         external
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
         _components.validatePairsWithArray(_coolOffPeriods);
 
         for (uint256 i = 0; i < _components.length; i++) {
-            executionInfo[_setToken][IERC20(_components[i])].coolOffPeriod = _coolOffPeriods[i];
-            emit CoolOffPeriodUpdated(_setToken, _components[i], _coolOffPeriods[i]);
+            executionInfo[_jasperVault][IERC20(_components[i])].coolOffPeriod = _coolOffPeriods[i];
+            emit CoolOffPeriodUpdated(_jasperVault, _components[i], _coolOffPeriods[i]);
         }
     }
 
@@ -422,77 +422,77 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
      * MANAGER ONLY: Set arbitrary byte data on a per asset basis that can be used to pass exchange specific settings (i.e. specifying
      * fee tiers) or exchange specific features (enabling multi-hop trades). Can be called at any time.
      *
-     * @param _setToken             Address of the SetToken
+     * @param _jasperVault             Address of the SetToken
      * @param _components           Array of components
      * @param _exchangeData         Array of exchange specific arbitrary bytes data
      */
     function setExchangeData(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address[] memory _components,
         bytes[] memory _exchangeData
     )
         external
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
         _components.validatePairsWithArray(_exchangeData);
 
         for (uint256 i = 0; i < _components.length; i++) {
-            executionInfo[_setToken][IERC20(_components[i])].exchangeData = _exchangeData[i];
-            emit ExchangeDataUpdated(_setToken, _components[i], _exchangeData[i]);
+            executionInfo[_jasperVault][IERC20(_components[i])].exchangeData = _exchangeData[i];
+            emit ExchangeDataUpdated(_jasperVault, _components[i], _exchangeData[i]);
         }
     }
 
     /**
      * MANAGER ONLY: Set amount by which all component's targets units would be raised. Can be called at any time.
      *
-     * @param _setToken                     Address of the SetToken
+     * @param _jasperVault                     Address of the SetToken
      * @param _raiseTargetPercentage        Amount to raise all component's unit targets by (in precise units)
      */
     function setRaiseTargetPercentage(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _raiseTargetPercentage
     )
         external
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
         require(_raiseTargetPercentage > 0, "Target percentage must be > 0");
-        rebalanceInfo[_setToken].raiseTargetPercentage = _raiseTargetPercentage;
-        emit RaiseTargetPercentageUpdated(_setToken, _raiseTargetPercentage);
+        rebalanceInfo[_jasperVault].raiseTargetPercentage = _raiseTargetPercentage;
+        emit RaiseTargetPercentageUpdated(_jasperVault, _raiseTargetPercentage);
     }
 
     /**
      * MANAGER ONLY: Toggles ability for passed addresses to call trade() or tradeRemainingWETH(). Can be called at any time.
      *
-     * @param _setToken          Address of the SetToken
+     * @param _jasperVault          Address of the SetToken
      * @param _traders           Array trader addresses to toggle status
      * @param _statuses          Booleans indicating if matching trader can trade
      */
     function setTraderStatus(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address[] memory _traders,
         bool[] memory _statuses
     )
         external
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
         _traders.validatePairsWithArray(_statuses);
 
         for (uint256 i = 0; i < _traders.length; i++) {
-            _updateTradersHistory(_setToken, _traders[i], _statuses[i]);
-            permissionInfo[_setToken].tradeAllowList[_traders[i]] = _statuses[i];
-            emit TraderStatusUpdated(_setToken, _traders[i], _statuses[i]);
+            _updateTradersHistory(_jasperVault, _traders[i], _statuses[i]);
+            permissionInfo[_jasperVault].tradeAllowList[_traders[i]] = _statuses[i];
+            emit TraderStatusUpdated(_jasperVault, _traders[i], _statuses[i]);
         }
     }
 
     /**
      * MANAGER ONLY: Toggle whether anyone can trade, if true bypasses the traderAllowList. Can be called at anytime.
      *
-     * @param _setToken         Address of the SetToken
+     * @param _jasperVault         Address of the SetToken
      * @param _status           Boolean indicating if anyone can trade
      */
-    function setAnyoneTrade(ISetToken _setToken, bool _status) external onlyManagerAndValidSet(_setToken) {
-        permissionInfo[_setToken].anyoneTrade = _status;
-        emit AnyoneTradeUpdated(_setToken, _status);
+    function setAnyoneTrade(IJasperVault _jasperVault, bool _status) external onlyManagerAndValidSet(_jasperVault) {
+        permissionInfo[_jasperVault].anyoneTrade = _status;
+        emit AnyoneTradeUpdated(_jasperVault, _status);
     }
 
     /**
@@ -501,24 +501,24 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
      * trading until startRebalance() is explicitly called. Position multiplier is also logged in order to make sure any
      * position multiplier changes don't unintentionally open the Set for rebalancing.
      *
-     * @param _setToken         Address of the Set Token
+     * @param _jasperVault         Address of the Set Token
      */
-    function initialize(ISetToken _setToken)
+    function initialize(IJasperVault _jasperVault)
         external
-        onlySetManager(_setToken, msg.sender)
-        onlyValidAndPendingSet(_setToken)
+        onlySetManager(_jasperVault, msg.sender)
+        onlyValidAndPendingSet(_jasperVault)
     {
-        ISetToken.Position[] memory positions = _setToken.getPositions();
+        IJasperVault.Position[] memory positions = _jasperVault.getPositions();
 
         for (uint256 i = 0; i < positions.length; i++) {
-            ISetToken.Position memory position = positions[i];
+            IJasperVault.Position memory position = positions[i];
             require(position.positionState == 0, "External positions not allowed");
-            executionInfo[_setToken][IERC20(position.component)].targetUnit = position.unit.toUint256();
-            executionInfo[_setToken][IERC20(position.component)].lastTradeTimestamp = 0;
+            executionInfo[_jasperVault][IERC20(position.component)].targetUnit = position.unit.toUint256();
+            executionInfo[_jasperVault][IERC20(position.component)].lastTradeTimestamp = 0;
         }
 
-        rebalanceInfo[_setToken].positionMultiplier = _setToken.positionMultiplier().toUint256();
-        _setToken.initializeModule();
+        rebalanceInfo[_jasperVault].positionMultiplier = _jasperVault.positionMultiplier().toUint256();
+        _jasperVault.initializeModule();
     }
 
     /**
@@ -529,14 +529,14 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
      * initialize execution settings appropriately.
      */
     function removeModule() external override {
-        TradePermissionInfo storage tokenPermissionInfo = permissionInfo[ISetToken(msg.sender)];
+        TradePermissionInfo storage tokenPermissionInfo = permissionInfo[IJasperVault(msg.sender)];
 
         for (uint i = 0; i < tokenPermissionInfo.tradersHistory.length; i++) {
             tokenPermissionInfo.tradeAllowList[tokenPermissionInfo.tradersHistory[i]] = false;
         }
 
-        delete rebalanceInfo[ISetToken(msg.sender)];
-        delete permissionInfo[ISetToken(msg.sender)];
+        delete rebalanceInfo[IJasperVault(msg.sender)];
+        delete permissionInfo[IJasperVault(msg.sender)];
     }
 
     /* ============ External View Functions ============ */
@@ -544,78 +544,78 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
     /**
      * Get the array of SetToken components involved in rebalance.
      *
-     * @param _setToken         Address of the SetToken
+     * @param _jasperVault         Address of the SetToken
      *
-     * @return address[]        Array of _setToken components involved in rebalance
+     * @return address[]        Array of _jasperVault components involved in rebalance
      */
-    function getRebalanceComponents(ISetToken _setToken)
+    function getRebalanceComponents(IJasperVault _jasperVault)
         external
         view
-        onlyValidAndInitializedSet(_setToken)
+        onlyValidAndInitializedSet(_jasperVault)
         returns (address[] memory)
     {
-        return rebalanceInfo[_setToken].rebalanceComponents;
+        return rebalanceInfo[_jasperVault].rebalanceComponents;
     }
 
     /**
      * Calculates the amount of a component that is going to be traded and whether the component is being bought
      * or sold. If currentUnit and targetUnit are the same, function will revert.
      *
-     * @param _setToken                 Instance of the SetToken to rebalance
+     * @param _jasperVault                 Instance of the SetToken to rebalance
      * @param _component                IERC20 component to trade
      *
      * @return isSendTokenFixed         Boolean indicating fixed asset is send token
      * @return componentQuantity        Amount of component being traded
      */
     function getComponentTradeQuantityAndDirection(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IERC20 _component
     )
         external
         view
-        onlyValidAndInitializedSet(_setToken)
+        onlyValidAndInitializedSet(_jasperVault)
         returns (bool, uint256)
     {
         require(
-            rebalanceInfo[_setToken].rebalanceComponents.contains(address(_component)),
+            rebalanceInfo[_jasperVault].rebalanceComponents.contains(address(_component)),
             "Component not recognized"
         );
-        uint256 totalSupply = _setToken.totalSupply();
-        return _calculateTradeSizeAndDirection(_setToken, _component, totalSupply);
+        uint256 totalSupply = _jasperVault.totalSupply();
+        return _calculateTradeSizeAndDirection(_jasperVault, _component, totalSupply);
     }
 
 
     /**
      * Get if a given address is an allowed trader.
      *
-     * @param _setToken         Address of the SetToken
+     * @param _jasperVault         Address of the SetToken
      * @param _trader           Address of the trader
      *
      * @return bool             True if _trader is allowed to trade, else false
      */
-    function getIsAllowedTrader(ISetToken _setToken, address _trader)
+    function getIsAllowedTrader(IJasperVault _jasperVault, address _trader)
         external
         view
-        onlyValidAndInitializedSet(_setToken)
+        onlyValidAndInitializedSet(_jasperVault)
         returns (bool)
     {
-        return _isAllowedTrader(_setToken, _trader);
+        return _isAllowedTrader(_jasperVault, _trader);
     }
 
     /**
      * Get the list of traders who are allowed to call trade(), tradeRemainingWeth(), and raiseAssetTarget()
      *
-     * @param _setToken         Address of the SetToken
+     * @param _jasperVault         Address of the SetToken
      *
      * @return address[]
      */
-    function getAllowedTraders(ISetToken _setToken)
+    function getAllowedTraders(IJasperVault _jasperVault)
         external
         view
-        onlyValidAndInitializedSet(_setToken)
+        onlyValidAndInitializedSet(_jasperVault)
         returns (address[] memory)
     {
-        return permissionInfo[_setToken].tradersHistory;
+        return permissionInfo[_jasperVault].tradersHistory;
     }
 
     /* ============ Internal Functions ============ */
@@ -672,14 +672,14 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
      * WETH into a component, sell the lesser of: the user's WETH limit OR the SetToken's
      * remaining WETH balance and expect to receive a fixed component quantity.
      *
-     * @param _setToken             Instance of the SetToken to rebalance
+     * @param _jasperVault             Instance of the SetToken to rebalance
      * @param _component            IERC20 component to trade
      * @param _ethQuantityLimit     Max/min amount of weth spent/received during trade
      *
      * @return tradeInfo            Struct containing data for trade
      */
     function _createTradeInfo(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IERC20 _component,
         uint256 _ethQuantityLimit
     )
@@ -688,7 +688,7 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
         virtual
         returns (TradeInfo memory tradeInfo)
     {
-        tradeInfo = _getDefaultTradeInfo(_setToken, _component, true);
+        tradeInfo = _getDefaultTradeInfo(_jasperVault, _component, true);
 
         if (tradeInfo.isSendTokenFixed){
             tradeInfo.sendQuantity = tradeInfo.totalFixedQuantity;
@@ -702,14 +702,14 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
     /**
      * Create and return TradeInfo struct. This function does NOT check if the WETH target has been met.
      *
-     * @param _setToken                     Instance of the SetToken to rebalance
+     * @param _jasperVault                     Instance of the SetToken to rebalance
      * @param _component                    IERC20 component to trade
      * @param _minComponentReceived         Min amount of component received during trade
      *
      * @return tradeInfo                    Struct containing data for tradeRemaining info
      */
     function _createTradeRemainingInfo(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IERC20 _component,
         uint256 _minComponentReceived
     )
@@ -717,12 +717,12 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
         view
         returns (TradeInfo memory tradeInfo)
     {
-        tradeInfo = _getDefaultTradeInfo(_setToken, _component, false);
+        tradeInfo = _getDefaultTradeInfo(_jasperVault, _component, false);
 
         (,,
             uint256 currentNotional,
             uint256 targetNotional
-        ) = _getUnitsAndNotionalAmounts(_setToken, weth, tradeInfo.setTotalSupply);
+        ) = _getUnitsAndNotionalAmounts(_jasperVault, weth, tradeInfo.setTotalSupply);
 
         tradeInfo.sendQuantity =  currentNotional.sub(targetNotional);
         tradeInfo.floatingQuantityLimit = _minComponentReceived;
@@ -736,27 +736,27 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
      * calculated, whereas `tradeRemaining` automatically sets WETH as the sendToken and _component
      * as receiveToken.
      *
-     * @param _setToken                     Instance of the SetToken to rebalance
+     * @param _jasperVault                     Instance of the SetToken to rebalance
      * @param _component                    IERC20 component to trade
      * @param  calculateTradeDirection      Indicates whether method should calculate trade size and direction
      *
      * @return tradeInfo                    Struct containing partial data for trade
      */
-    function _getDefaultTradeInfo(ISetToken _setToken, IERC20 _component, bool calculateTradeDirection)
+    function _getDefaultTradeInfo(IJasperVault _jasperVault, IERC20 _component, bool calculateTradeDirection)
         internal
         view
         returns (TradeInfo memory tradeInfo)
     {
-        tradeInfo.setToken = _setToken;
-        tradeInfo.setTotalSupply = _setToken.totalSupply();
-        tradeInfo.exchangeAdapter = _getExchangeAdapter(_setToken, _component);
-        tradeInfo.exchangeData = executionInfo[_setToken][_component].exchangeData;
+        tradeInfo.jasperVault = _jasperVault;
+        tradeInfo.setTotalSupply = _jasperVault.totalSupply();
+        tradeInfo.exchangeAdapter = _getExchangeAdapter(_jasperVault, _component);
+        tradeInfo.exchangeData = executionInfo[_jasperVault][_component].exchangeData;
 
         if(calculateTradeDirection){
             (
                 tradeInfo.isSendTokenFixed,
                 tradeInfo.totalFixedQuantity
-            ) = _calculateTradeSizeAndDirection(_setToken, _component, tradeInfo.setTotalSupply);
+            ) = _calculateTradeSizeAndDirection(_jasperVault, _component, tradeInfo.setTotalSupply);
         }
 
         if (tradeInfo.isSendTokenFixed){
@@ -767,8 +767,8 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
             tradeInfo.receiveToken = address(_component);
         }
 
-        tradeInfo.preTradeSendTokenBalance = IERC20(tradeInfo.sendToken).balanceOf(address(_setToken));
-        tradeInfo.preTradeReceiveTokenBalance = IERC20(tradeInfo.receiveToken).balanceOf(address(_setToken));
+        tradeInfo.preTradeSendTokenBalance = IERC20(tradeInfo.sendToken).balanceOf(address(_jasperVault));
+        tradeInfo.preTradeReceiveTokenBalance = IERC20(tradeInfo.receiveToken).balanceOf(address(_jasperVault));
     }
 
     /**
@@ -780,7 +780,7 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
      * @param _tradeInfo            Struct containing trade information used in internal functions
      */
     function _executeTrade(TradeInfo memory _tradeInfo) internal virtual {
-        _tradeInfo.setToken.invokeApprove(
+        _tradeInfo.jasperVault.invokeApprove(
             _tradeInfo.sendToken,
             _tradeInfo.exchangeAdapter.getSpender(),
             _tradeInfo.sendQuantity
@@ -793,14 +793,14 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
         ) = _tradeInfo.exchangeAdapter.getTradeCalldata(
             _tradeInfo.sendToken,
             _tradeInfo.receiveToken,
-            address(_tradeInfo.setToken),
+            address(_tradeInfo.jasperVault),
             _tradeInfo.isSendTokenFixed,
             _tradeInfo.sendQuantity,
             _tradeInfo.floatingQuantityLimit,
             _tradeInfo.exchangeData
         );
 
-        _tradeInfo.setToken.invoke(targetExchange, callValue, methodData);
+        _tradeInfo.jasperVault.invoke(targetExchange, callValue, methodData);
     }
 
     /**
@@ -813,11 +813,11 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
      */
     function _accrueProtocolFee(TradeInfo memory _tradeInfo) internal returns (uint256 protocolFee) {
         uint256 exchangedQuantity =  IERC20(_tradeInfo.receiveToken)
-            .balanceOf(address(_tradeInfo.setToken))
+            .balanceOf(address(_tradeInfo.jasperVault))
             .sub(_tradeInfo.preTradeReceiveTokenBalance);
 
         protocolFee = getModuleFee(GENERAL_INDEX_MODULE_PROTOCOL_FEE_INDEX, exchangedQuantity);
-        payProtocolFeeFromSetToken(_tradeInfo.setToken, _tradeInfo.receiveToken, protocolFee);
+        payProtocolFeeFromSetToken(_tradeInfo.jasperVault, _tradeInfo.receiveToken, protocolFee);
     }
 
     /**
@@ -834,12 +834,12 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
         internal
         returns (uint256 netSendAmount, uint256 netReceiveAmount)
     {
-        (uint256 postTradeSendTokenBalance,,) = _tradeInfo.setToken.calculateAndEditDefaultPosition(
+        (uint256 postTradeSendTokenBalance,,) = _tradeInfo.jasperVault.calculateAndEditDefaultPosition(
             _tradeInfo.sendToken,
             _tradeInfo.setTotalSupply,
             _tradeInfo.preTradeSendTokenBalance
         );
-        (uint256 postTradeReceiveTokenBalance,,) = _tradeInfo.setToken.calculateAndEditDefaultPosition(
+        (uint256 postTradeReceiveTokenBalance,,) = _tradeInfo.jasperVault.calculateAndEditDefaultPosition(
             _tradeInfo.receiveToken,
             _tradeInfo.setTotalSupply,
             _tradeInfo.preTradeReceiveTokenBalance
@@ -848,7 +848,7 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
         netSendAmount = _tradeInfo.preTradeSendTokenBalance.sub(postTradeSendTokenBalance);
         netReceiveAmount = postTradeReceiveTokenBalance.sub(_tradeInfo.preTradeReceiveTokenBalance);
 
-        executionInfo[_tradeInfo.setToken][_component].lastTradeTimestamp = block.timestamp;
+        executionInfo[_tradeInfo.jasperVault][_component].lastTradeTimestamp = block.timestamp;
     }
 
     /**
@@ -857,16 +857,16 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
      * throw when attempting to remove a non-element and it's possible someone can set a new
      * trader's status to false.
      *
-     * @param _setToken                         Instance of the SetToken
+     * @param _jasperVault                         Instance of the SetToken
      * @param _trader                           Trader whose permission is being set
      * @param _status                           Boolean permission being set
 
      */
-    function _updateTradersHistory(ISetToken _setToken, address _trader, bool _status) internal {
-        if (_status && !permissionInfo[_setToken].tradersHistory.contains(_trader)) {
-            permissionInfo[_setToken].tradersHistory.push(_trader);
-        } else if(!_status && permissionInfo[_setToken].tradersHistory.contains(_trader)) {
-            permissionInfo[_setToken].tradersHistory.removeStorage(_trader);
+    function _updateTradersHistory(IJasperVault _jasperVault, address _trader, bool _status) internal {
+        if (_status && !permissionInfo[_jasperVault].tradersHistory.contains(_trader)) {
+            permissionInfo[_jasperVault].tradersHistory.push(_trader);
+        } else if(!_status && permissionInfo[_jasperVault].tradersHistory.contains(_trader)) {
+            permissionInfo[_jasperVault].tradersHistory.removeStorage(_trader);
         }
     }
 
@@ -874,15 +874,15 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
      * Calculates the amount of a component is going to be traded and whether the component is being bought or sold.
      * If currentUnit and targetUnit are the same, function will revert.
      *
-     * @param _setToken                 Instance of the SetToken to rebalance
+     * @param _jasperVault                 Instance of the SetToken to rebalance
      * @param _component                IERC20 component to trade
-     * @param _totalSupply              Total supply of _setToken
+     * @param _totalSupply              Total supply of _jasperVault
      *
      * @return isSendTokenFixed         Boolean indicating fixed asset is send token
      * @return totalFixedQuantity       Amount of fixed token to send or receive
      */
     function _calculateTradeSizeAndDirection(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IERC20 _component,
         uint256 _totalSupply
     )
@@ -891,14 +891,14 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
         returns (bool isSendTokenFixed, uint256 totalFixedQuantity)
     {
         uint256 protocolFee = controller.getModuleFee(address(this), GENERAL_INDEX_MODULE_PROTOCOL_FEE_INDEX);
-        uint256 componentMaxSize = executionInfo[_setToken][_component].maxSize;
+        uint256 componentMaxSize = executionInfo[_jasperVault][_component].maxSize;
 
         (
             uint256 currentUnit,
             uint256 targetUnit,
             uint256 currentNotional,
             uint256 targetNotional
-        ) = _getUnitsAndNotionalAmounts(_setToken, _component, _totalSupply);
+        ) = _getUnitsAndNotionalAmounts(_jasperVault, _component, _totalSupply);
 
         require(currentUnit != targetUnit, "Target already met");
 
@@ -918,15 +918,15 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
     /**
      * Check if all targets are met.
      *
-     * @param _setToken             Instance of the SetToken to be rebalanced
+     * @param _jasperVault             Instance of the SetToken to be rebalanced
      *
      * @return bool                 True if all component's target units have been met, otherwise false
      */
-    function _allTargetsMet(ISetToken _setToken) internal view returns (bool) {
-        address[] memory rebalanceComponents = rebalanceInfo[_setToken].rebalanceComponents;
+    function _allTargetsMet(IJasperVault _jasperVault) internal view returns (bool) {
+        address[] memory rebalanceComponents = rebalanceInfo[_jasperVault].rebalanceComponents;
 
         for (uint256 i = 0; i < rebalanceComponents.length; i++) {
-            if (_targetUnmet(_setToken, rebalanceComponents[i])) { return false; }
+            if (_targetUnmet(_jasperVault, rebalanceComponents[i])) { return false; }
         }
         return true;
     }
@@ -935,13 +935,13 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
      * Determine if passed address is allowed to call trade for the SetToken. If anyoneTrade set to true anyone can call otherwise
      * needs to be approved.
      *
-     * @param _setToken             Instance of SetToken to be rebalanced
+     * @param _jasperVault             Instance of SetToken to be rebalanced
      * @param  _trader              Address of the trader who called contract function
      *
      * @return bool                 True if trader is an approved trader for the SetToken
      */
-    function _isAllowedTrader(ISetToken _setToken, address _trader) internal view returns (bool) {
-        TradePermissionInfo storage permissions = permissionInfo[_setToken];
+    function _isAllowedTrader(IJasperVault _jasperVault, address _trader) internal view returns (bool) {
+        TradePermissionInfo storage permissions = permissionInfo[_jasperVault];
         return permissions.anyoneTrade || permissions.tradeAllowList[_trader];
     }
 
@@ -949,17 +949,17 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
      * Checks if sell conditions are met. The component cannot be WETH and its normalized target
      * unit must be less than its default position real unit
      *
-     * @param _setToken                         Instance of the SetToken to be rebalanced
+     * @param _jasperVault                         Instance of the SetToken to be rebalanced
      * @param _component                        Component evaluated for sale
      *
      * @return bool                             True if sell allowed, false otherwise
      */
-    function _canSell(ISetToken _setToken, address _component) internal view returns(bool) {
+    function _canSell(IJasperVault _jasperVault, address _component) internal view returns(bool) {
         return (
             _component != address(weth) &&
             (
-                _getNormalizedTargetUnit(_setToken, IERC20(_component)) <
-                _getDefaultPositionRealUnit(_setToken,IERC20(_component))
+                _getNormalizedTargetUnit(_jasperVault, IERC20(_component)) <
+                _getDefaultPositionRealUnit(_jasperVault,IERC20(_component))
             )
         );
     }
@@ -967,15 +967,15 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
     /**
      * Check if there are any more tokens to sell. Since we allow WETH to float around it's target during rebalances it is not checked.
      *
-     * @param _setToken             Instance of the SetToken to be rebalanced
+     * @param _jasperVault             Instance of the SetToken to be rebalanced
      *
      * @return bool                 True if there is not any component that can be sold, otherwise false
      */
-    function _noTokensToSell(ISetToken _setToken) internal view returns (bool) {
-        address[] memory rebalanceComponents = rebalanceInfo[_setToken].rebalanceComponents;
+    function _noTokensToSell(IJasperVault _jasperVault) internal view returns (bool) {
+        address[] memory rebalanceComponents = rebalanceInfo[_jasperVault].rebalanceComponents;
 
         for (uint256 i = 0; i < rebalanceComponents.length; i++) {
-            if (_canSell(_setToken, rebalanceComponents[i]) ) { return false; }
+            if (_canSell(_jasperVault, rebalanceComponents[i]) ) { return false; }
         }
         return true;
     }
@@ -986,16 +986,16 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
      * avoid subtraction overflow errors targetUnits of zero check for an exact amount. WETH is not
      * checked as it is allowed to float around its target.
      *
-     * @param _setToken                         Instance of the SetToken to be rebalanced
+     * @param _jasperVault                         Instance of the SetToken to be rebalanced
      * @param _component                        Component whose target is evaluated
      *
      * @return bool                             True if component's target units are met, false otherwise
      */
-    function _targetUnmet(ISetToken _setToken, address _component) internal view returns(bool) {
+    function _targetUnmet(IJasperVault _jasperVault, address _component) internal view returns(bool) {
         if (_component == address(weth)) return false;
 
-        uint256 normalizedTargetUnit = _getNormalizedTargetUnit(_setToken, IERC20(_component));
-        uint256 currentUnit = _getDefaultPositionRealUnit(_setToken, IERC20(_component));
+        uint256 normalizedTargetUnit = _getNormalizedTargetUnit(_jasperVault, IERC20(_component));
+        uint256 currentUnit = _getDefaultPositionRealUnit(_jasperVault, IERC20(_component));
 
         return (normalizedTargetUnit > 0)
             ? !(normalizedTargetUnit.approximatelyEquals(currentUnit, 1))
@@ -1006,12 +1006,12 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
      * Validate component position unit has not exceeded it's target unit. This is used during tradeRemainingWETH() to make sure
      * the amount of component bought does not exceed the targetUnit.
      *
-     * @param _setToken         Instance of the SetToken
+     * @param _jasperVault         Instance of the SetToken
      * @param _component        IERC20 component whose position units are to be validated
      */
-    function _validateComponentPositionUnit(ISetToken _setToken, IERC20 _component) internal view {
-        uint256 currentUnit = _getDefaultPositionRealUnit(_setToken, _component);
-        uint256 targetUnit = _getNormalizedTargetUnit(_setToken, _component);
+    function _validateComponentPositionUnit(IJasperVault _jasperVault, IERC20 _component) internal view {
+        uint256 currentUnit = _getDefaultPositionRealUnit(_jasperVault, _component);
+        uint256 targetUnit = _getNormalizedTargetUnit(_jasperVault, _component);
         require(currentUnit <= targetUnit, "Can not exceed target unit");
     }
 
@@ -1019,23 +1019,23 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
      * Validate that component is a valid component and enough time has elapsed since component's last trade. Traders
      * cannot explicitly trade WETH, it may only implicitly be traded by being the quote asset for other component trades.
      *
-     * @param _setToken         Instance of the SetToken
+     * @param _jasperVault         Instance of the SetToken
      * @param _component        IERC20 component to be validated
      */
-    function _validateTradeParameters(ISetToken _setToken, IERC20 _component) internal view virtual {
+    function _validateTradeParameters(IJasperVault _jasperVault, IERC20 _component) internal view virtual {
         require(address(_component) != address(weth), "Can not explicitly trade WETH");
         require(
-            rebalanceInfo[_setToken].rebalanceComponents.contains(address(_component)),
+            rebalanceInfo[_jasperVault].rebalanceComponents.contains(address(_component)),
             "Component not part of rebalance"
         );
 
-        TradeExecutionParams memory componentInfo = executionInfo[_setToken][_component];
+        TradeExecutionParams memory componentInfo = executionInfo[_jasperVault][_component];
         require(
             componentInfo.lastTradeTimestamp.add(componentInfo.coolOffPeriod) <= block.timestamp,
             "Component cool off in progress"
         );
 
-        require(!_setToken.hasExternalPosition(address(_component)), "External positions not allowed");
+        require(!_jasperVault.hasExternalPosition(address(_component)), "External positions not allowed");
     }
 
     /**
@@ -1048,7 +1048,7 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
      * @param _newComponents                    Array of new components to add to allocation
      * @param _newComponentsTargetUnits         Array of target units at end of rebalance for new components, maps to same index of _newComponents array
      * @param _oldComponentsTargetUnits         Array of target units at end of rebalance for old component, maps to same index of
-     *                                               _setToken.getComponents() array, if component being removed set to 0.
+     *                                               _jasperVault.getComponents() array, if component being removed set to 0.
      *
      * @return aggregateComponents              Array of current components extended by new components, without duplicates
      * @return aggregateTargetUnits             Array of old component target units extended by new target units, without duplicates
@@ -1076,13 +1076,13 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
     /**
      * Get the SetToken's default position as uint256
      *
-     * @param _setToken         Instance of the SetToken
+     * @param _jasperVault         Instance of the SetToken
      * @param _component        IERC20 component to fetch the default position for
      *
      * return uint256           Real unit position
      */
-    function _getDefaultPositionRealUnit(ISetToken _setToken, IERC20 _component) internal view returns (uint256) {
-        return _setToken.getDefaultPositionRealUnit(address(_component)).toUint256();
+    function _getDefaultPositionRealUnit(IJasperVault _jasperVault, IERC20 _component) internal view returns (uint256) {
+        return _jasperVault.getDefaultPositionRealUnit(address(_component)).toUint256();
     }
 
     /**
@@ -1090,29 +1090,29 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
      * IntegrationRegistry. This method is called during a trade and must validate the adapter
      * because its state may have changed since it was set in a separate transaction.
      *
-     * @param _setToken                         Instance of the SetToken to be rebalanced
+     * @param _jasperVault                         Instance of the SetToken to be rebalanced
      * @param _component                        IERC20 component whose exchange adapter is fetched
      *
      * @return IExchangeAdapter                 Adapter address
      */
-    function _getExchangeAdapter(ISetToken _setToken, IERC20 _component) internal view returns(IIndexExchangeAdapter) {
-        return IIndexExchangeAdapter(getAndValidateAdapter(executionInfo[_setToken][_component].exchangeName));
+    function _getExchangeAdapter(IJasperVault _jasperVault, IERC20 _component) internal view returns(IIndexExchangeAdapter) {
+        return IIndexExchangeAdapter(getAndValidateAdapter(executionInfo[_jasperVault][_component].exchangeName));
     }
 
     /**
      * Calculates and returns the normalized target unit value.
      *
-     * @param _setToken             Instance of the SetToken to be rebalanced
+     * @param _jasperVault             Instance of the SetToken to be rebalanced
      * @param _component            IERC20 component whose normalized target unit is required
      *
      * @return uint256                          Normalized target unit of the component
      */
-    function _getNormalizedTargetUnit(ISetToken _setToken, IERC20 _component) internal view returns(uint256) {
+    function _getNormalizedTargetUnit(IJasperVault _jasperVault, IERC20 _component) internal view returns(uint256) {
         // (targetUnit * current position multiplier) / position multiplier when rebalance started
-        return executionInfo[_setToken][_component]
+        return executionInfo[_jasperVault][_component]
             .targetUnit
-            .mul(_setToken.positionMultiplier().toUint256())
-            .div(rebalanceInfo[_setToken].positionMultiplier);
+            .mul(_jasperVault.positionMultiplier().toUint256())
+            .div(rebalanceInfo[_jasperVault].positionMultiplier);
     }
 
     /**
@@ -1120,7 +1120,7 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
      * to calculate the trade size and direction for regular trades and the `sendQuantity` for
      * remainingWEth trades.
      *
-     * @param _setToken                 Instance of the SetToken to rebalance
+     * @param _jasperVault                 Instance of the SetToken to rebalance
      * @param _component                IERC20 component to calculate notional amounts for
      * @param _totalSupply              SetToken total supply
      *
@@ -1129,13 +1129,13 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
      * @return uint256              Current notional amount: total notional amount of SetToken default position
      * @return uint256              Target notional amount: Total SetToken supply * targetUnit
      */
-    function _getUnitsAndNotionalAmounts(ISetToken _setToken, IERC20 _component, uint256 _totalSupply)
+    function _getUnitsAndNotionalAmounts(IJasperVault _jasperVault, IERC20 _component, uint256 _totalSupply)
         internal
         view
         returns (uint256, uint256, uint256, uint256)
     {
-        uint256 currentUnit = _getDefaultPositionRealUnit(_setToken, _component);
-        uint256 targetUnit = _getNormalizedTargetUnit(_setToken, _component);
+        uint256 currentUnit = _getDefaultPositionRealUnit(_jasperVault, _component);
+        uint256 targetUnit = _getNormalizedTargetUnit(_jasperVault, _component);
 
         return (
             currentUnit,
@@ -1152,15 +1152,15 @@ contract GeneralIndexModule is ModuleBase, ReentrancyGuard {
     /*
      * Trader must be permissioned for SetToken
      */
-    function _validateOnlyAllowedTrader(ISetToken _setToken) internal view {
-        require(_isAllowedTrader(_setToken, msg.sender), "Address not permitted to trade");
+    function _validateOnlyAllowedTrader(IJasperVault _jasperVault) internal view {
+        require(_isAllowedTrader(_jasperVault, msg.sender), "Address not permitted to trade");
     }
 
     /*
      * Trade must be an EOA if `anyoneTrade` has been enabled for SetToken on the module.
      */
-    function _validateOnlyEOAIfUnrestricted(ISetToken _setToken) internal view {
-        if(permissionInfo[_setToken].anyoneTrade) {
+    function _validateOnlyEOAIfUnrestricted(IJasperVault _jasperVault) internal view {
+        if(permissionInfo[_jasperVault].anyoneTrade) {
             require(msg.sender == tx.origin, "Caller must be EOA Address");
         }
     }

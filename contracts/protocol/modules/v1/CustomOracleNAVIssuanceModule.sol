@@ -31,7 +31,7 @@ import { IController } from "../../../interfaces/IController.sol";
 import { ISetValuer } from "../../../interfaces/ISetValuer.sol";
 import { INAVIssuanceHook } from "../../../interfaces/INAVIssuanceHook.sol";
 import { Invoke } from "../../lib/Invoke.sol";
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
 import { IWETH } from "../../../interfaces/external/IWETH.sol";
 import { ModuleBase } from "../../lib/ModuleBase.sol";
 import { Position } from "../../lib/Position.sol";
@@ -49,8 +49,8 @@ import { ResourceIdentifier } from "../../lib/ResourceIdentifier.sol";
  */
 contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
     using AddressArrayUtils for address[];
-    using Invoke for ISetToken;
-    using Position for ISetToken;
+    using Invoke for IJasperVault;
+    using Position for IJasperVault;
     using PreciseUnitMath for uint256;
     using PreciseUnitMath for int256;
     using ResourceIdentifier for IController;
@@ -62,7 +62,7 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
     /* ============ Events ============ */
 
     event SetTokenNAVIssued(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         address _issuer,
         address _to,
         address _reserveAsset,
@@ -73,7 +73,7 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
     );
 
     event SetTokenNAVRedeemed(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         address _redeemer,
         address _to,
         address _reserveAsset,
@@ -84,28 +84,28 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
     );
 
     event ReserveAssetAdded(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         address _newReserveAsset
     );
 
     event ReserveAssetRemoved(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         address _removedReserveAsset
     );
 
     event PremiumEdited(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         uint256 _newPremium
     );
 
     event ManagerFeeEdited(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         uint256 _newManagerFee,
         uint256 _index
     );
 
     event FeeRecipientEdited(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         address _feeRecipient
     );
 
@@ -120,10 +120,10 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
         uint256[2] managerFees;                        // Manager fees. 0 index is issue and 1 index is redeem fee (0.01% = 1e14, 1% = 1e16)
         uint256 maxManagerFee;                         // Maximum fee manager is allowed to set for issue and redeem
         uint256 premiumPercentage;                     // Premium percentage (0.01% = 1e14, 1% = 1e16). This premium is a buffer around oracle
-                                                       // prices paid by user to the SetToken, which prevents arbitrage and oracle front running
+                                                       // prices paid by user to the JasperVault, which prevents arbitrage and oracle front running
         uint256 maxPremiumPercentage;                  // Maximum premium percentage manager is allowed to set (configured by manager)
-        uint256 minSetTokenSupply;                     // Minimum SetToken supply required for issuance and redemption
-                                                       // to prevent dramatic inflationary changes to the SetToken's position multiplier
+        uint256 minSetTokenSupply;                     // Minimum JasperVault supply required for issuance and redemption
+                                                       // to prevent dramatic inflationary changes to the JasperVault's position multiplier
     }
 
     struct ActionInfo {
@@ -131,14 +131,14 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
                                                        // During redeem, represents post-premium value
         uint256 protocolFees;                          // Total protocol fees (direct + manager revenue share)
         uint256 managerFee;                            // Total manager fee paid in reserve asset
-        uint256 netFlowQuantity;                       // When issuing, quantity of reserve asset sent to SetToken
+        uint256 netFlowQuantity;                       // When issuing, quantity of reserve asset sent to JasperVault
                                                        // When redeeming, quantity of reserve asset sent to redeemer
         uint256 setTokenQuantity;                      // When issuing, quantity of SetTokens minted to mintee
-                                                       // When redeeming, quantity of SetToken redeemed
-        uint256 previousSetTokenSupply;                // SetToken supply prior to issue/redeem action
-        uint256 newSetTokenSupply;                     // SetToken supply after issue/redeem action
-        int256 newPositionMultiplier;                  // SetToken position multiplier after issue/redeem
-        uint256 newReservePositionUnit;                // SetToken reserve asset position unit after issue/redeem
+                                                       // When redeeming, quantity of JasperVault redeemed
+        uint256 previousSetTokenSupply;                // JasperVault supply prior to issue/redeem action
+        uint256 newSetTokenSupply;                     // JasperVault supply after issue/redeem action
+        int256 newPositionMultiplier;                  // JasperVault position multiplier after issue/redeem
+        uint256 newReservePositionUnit;                // JasperVault reserve asset position unit after issue/redeem
     }
 
     /* ============ State Variables ============ */
@@ -146,12 +146,12 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
     // Wrapped ETH address
     IWETH public immutable weth;
 
-    // Mapping of SetToken to NAV issuance settings struct
-    mapping(ISetToken => NAVIssuanceSettings) public navIssuanceSettings;
+    // Mapping of JasperVault to NAV issuance settings struct
+    mapping(IJasperVault => NAVIssuanceSettings) public navIssuanceSettings;
 
-    // Mapping to efficiently check a SetToken's reserve asset validity
-    // SetToken => reserveAsset => isReserveAsset
-    mapping(ISetToken => mapping(address => bool)) public isReserveAsset;
+    // Mapping to efficiently check a JasperVault's reserve asset validity
+    // JasperVault => reserveAsset => isReserveAsset
+    mapping(IJasperVault => mapping(address => bool)) public isReserveAsset;
 
     /* ============ Constants ============ */
 
@@ -186,17 +186,17 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
     /* ============ External Functions ============ */
 
     /**
-     * Deposits the allowed reserve asset into the SetToken and mints the appropriate % of Net Asset Value of the SetToken
+     * Deposits the allowed reserve asset into the JasperVault and mints the appropriate % of Net Asset Value of the JasperVault
      * to the specified _to address.
      *
-     * @param _setToken                     Instance of the SetToken contract
+     * @param _jasperVault                     Instance of the JasperVault contract
      * @param _reserveAsset                 Address of the reserve asset to issue with
      * @param _reserveAssetQuantity         Quantity of the reserve asset to issue with
-     * @param _minSetTokenReceiveQuantity   Min quantity of SetToken to receive after issuance
-     * @param _to                           Address to mint SetToken to
+     * @param _minSetTokenReceiveQuantity   Min quantity of JasperVault to receive after issuance
+     * @param _to                           Address to mint JasperVault to
      */
     function issue(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _reserveAsset,
         uint256 _reserveAssetQuantity,
         uint256 _minSetTokenReceiveQuantity,
@@ -204,66 +204,66 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
     )
         external
         nonReentrant
-        onlyValidAndInitializedSet(_setToken)
+        onlyValidAndInitializedSet(_jasperVault)
     {
-        _validateCommon(_setToken, _reserveAsset, _reserveAssetQuantity);
+        _validateCommon(_jasperVault, _reserveAsset, _reserveAssetQuantity);
 
-        _callPreIssueHooks(_setToken, _reserveAsset, _reserveAssetQuantity, msg.sender, _to);
+        _callPreIssueHooks(_jasperVault, _reserveAsset, _reserveAssetQuantity, msg.sender, _to);
 
-        ActionInfo memory issueInfo = _createIssuanceInfo(_setToken, _reserveAsset, _reserveAssetQuantity);
+        ActionInfo memory issueInfo = _createIssuanceInfo(_jasperVault, _reserveAsset, _reserveAssetQuantity);
 
-        _validateIssuanceInfo(_setToken, _minSetTokenReceiveQuantity, issueInfo);
+        _validateIssuanceInfo(_jasperVault, _minSetTokenReceiveQuantity, issueInfo);
 
-        _transferCollateralAndHandleFees(_setToken, IERC20(_reserveAsset), issueInfo);
+        _transferCollateralAndHandleFees(_jasperVault, IERC20(_reserveAsset), issueInfo);
 
-        _handleIssueStateUpdates(_setToken, _reserveAsset, _to, issueInfo);
+        _handleIssueStateUpdates(_jasperVault, _reserveAsset, _to, issueInfo);
     }
 
     /**
-     * Wraps ETH and deposits WETH if allowed into the SetToken and mints the appropriate % of Net Asset Value of the SetToken
+     * Wraps ETH and deposits WETH if allowed into the JasperVault and mints the appropriate % of Net Asset Value of the JasperVault
      * to the specified _to address.
      *
-     * @param _setToken                     Instance of the SetToken contract
-     * @param _minSetTokenReceiveQuantity   Min quantity of SetToken to receive after issuance
-     * @param _to                           Address to mint SetToken to
+     * @param _jasperVault                     Instance of the JasperVault contract
+     * @param _minSetTokenReceiveQuantity   Min quantity of JasperVault to receive after issuance
+     * @param _to                           Address to mint JasperVault to
      */
     function issueWithEther(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _minSetTokenReceiveQuantity,
         address _to
     )
         external
         payable
         nonReentrant
-        onlyValidAndInitializedSet(_setToken)
+        onlyValidAndInitializedSet(_jasperVault)
     {
         weth.deposit{ value: msg.value }();
 
-        _validateCommon(_setToken, address(weth), msg.value);
+        _validateCommon(_jasperVault, address(weth), msg.value);
 
-        _callPreIssueHooks(_setToken, address(weth), msg.value, msg.sender, _to);
+        _callPreIssueHooks(_jasperVault, address(weth), msg.value, msg.sender, _to);
 
-        ActionInfo memory issueInfo = _createIssuanceInfo(_setToken, address(weth), msg.value);
+        ActionInfo memory issueInfo = _createIssuanceInfo(_jasperVault, address(weth), msg.value);
 
-        _validateIssuanceInfo(_setToken, _minSetTokenReceiveQuantity, issueInfo);
+        _validateIssuanceInfo(_jasperVault, _minSetTokenReceiveQuantity, issueInfo);
 
-        _transferWETHAndHandleFees(_setToken, issueInfo);
+        _transferWETHAndHandleFees(_jasperVault, issueInfo);
 
-        _handleIssueStateUpdates(_setToken, address(weth), _to, issueInfo);
+        _handleIssueStateUpdates(_jasperVault, address(weth), _to, issueInfo);
     }
 
     /**
-     * Redeems a SetToken into a valid reserve asset representing the appropriate % of Net Asset Value of the SetToken
-     * to the specified _to address. Only valid if there are available reserve units on the SetToken.
+     * Redeems a JasperVault into a valid reserve asset representing the appropriate % of Net Asset Value of the JasperVault
+     * to the specified _to address. Only valid if there are available reserve units on the JasperVault.
      *
-     * @param _setToken                     Instance of the SetToken contract
+     * @param _jasperVault                     Instance of the JasperVault contract
      * @param _reserveAsset                 Address of the reserve asset to redeem with
      * @param _setTokenQuantity             Quantity of SetTokens to redeem
      * @param _minReserveReceiveQuantity    Min quantity of reserve asset to receive
      * @param _to                           Address to redeem reserve asset to
      */
     function redeem(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _reserveAsset,
         uint256 _setTokenQuantity,
         uint256 _minReserveReceiveQuantity,
@@ -271,61 +271,61 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
     )
         external
         nonReentrant
-        onlyValidAndInitializedSet(_setToken)
+        onlyValidAndInitializedSet(_jasperVault)
     {
-        _validateCommon(_setToken, _reserveAsset, _setTokenQuantity);
+        _validateCommon(_jasperVault, _reserveAsset, _setTokenQuantity);
 
-        _callPreRedeemHooks(_setToken, _setTokenQuantity, msg.sender, _to);
+        _callPreRedeemHooks(_jasperVault, _setTokenQuantity, msg.sender, _to);
 
-        ActionInfo memory redeemInfo = _createRedemptionInfo(_setToken, _reserveAsset, _setTokenQuantity);
+        ActionInfo memory redeemInfo = _createRedemptionInfo(_jasperVault, _reserveAsset, _setTokenQuantity);
 
-        _validateRedemptionInfo(_setToken, _minReserveReceiveQuantity, redeemInfo);
+        _validateRedemptionInfo(_jasperVault, _minReserveReceiveQuantity, redeemInfo);
 
-        _setToken.burn(msg.sender, _setTokenQuantity);
+        _jasperVault.burn(msg.sender, _setTokenQuantity);
 
-        // Instruct the SetToken to transfer the reserve asset back to the user
-        _setToken.strictInvokeTransfer(
+        // Instruct the JasperVault to transfer the reserve asset back to the user
+        _jasperVault.strictInvokeTransfer(
             _reserveAsset,
             _to,
             redeemInfo.netFlowQuantity
         );
 
-        _handleRedemptionFees(_setToken, _reserveAsset, redeemInfo);
+        _handleRedemptionFees(_jasperVault, _reserveAsset, redeemInfo);
 
-        _handleRedeemStateUpdates(_setToken, _reserveAsset, _to, redeemInfo);
+        _handleRedeemStateUpdates(_jasperVault, _reserveAsset, _to, redeemInfo);
     }
 
     /**
-     * Redeems a SetToken into Ether (if WETH is valid) representing the appropriate % of Net Asset Value of the SetToken
-     * to the specified _to address. Only valid if there are available WETH units on the SetToken.
+     * Redeems a JasperVault into Ether (if WETH is valid) representing the appropriate % of Net Asset Value of the JasperVault
+     * to the specified _to address. Only valid if there are available WETH units on the JasperVault.
      *
-     * @param _setToken                     Instance of the SetToken contract
+     * @param _jasperVault                     Instance of the JasperVault contract
      * @param _setTokenQuantity             Quantity of SetTokens to redeem
      * @param _minReserveReceiveQuantity    Min quantity of reserve asset to receive
      * @param _to                           Address to redeem reserve asset to
      */
     function redeemIntoEther(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _setTokenQuantity,
         uint256 _minReserveReceiveQuantity,
         address payable _to
     )
         external
         nonReentrant
-        onlyValidAndInitializedSet(_setToken)
+        onlyValidAndInitializedSet(_jasperVault)
     {
-        _validateCommon(_setToken, address(weth), _setTokenQuantity);
+        _validateCommon(_jasperVault, address(weth), _setTokenQuantity);
 
-        _callPreRedeemHooks(_setToken, _setTokenQuantity, msg.sender, _to);
+        _callPreRedeemHooks(_jasperVault, _setTokenQuantity, msg.sender, _to);
 
-        ActionInfo memory redeemInfo = _createRedemptionInfo(_setToken, address(weth), _setTokenQuantity);
+        ActionInfo memory redeemInfo = _createRedemptionInfo(_jasperVault, address(weth), _setTokenQuantity);
 
-        _validateRedemptionInfo(_setToken, _minReserveReceiveQuantity, redeemInfo);
+        _validateRedemptionInfo(_jasperVault, _minReserveReceiveQuantity, redeemInfo);
 
-        _setToken.burn(msg.sender, _setTokenQuantity);
+        _jasperVault.burn(msg.sender, _setTokenQuantity);
 
-        // Instruct the SetToken to transfer WETH from SetToken to module
-        _setToken.strictInvokeTransfer(
+        // Instruct the JasperVault to transfer WETH from JasperVault to module
+        _jasperVault.strictInvokeTransfer(
             address(weth),
             address(this),
             redeemInfo.netFlowQuantity
@@ -335,106 +335,106 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
 
         _to.transfer(redeemInfo.netFlowQuantity);
 
-        _handleRedemptionFees(_setToken, address(weth), redeemInfo);
+        _handleRedemptionFees(_jasperVault, address(weth), redeemInfo);
 
-        _handleRedeemStateUpdates(_setToken, address(weth), _to, redeemInfo);
+        _handleRedeemStateUpdates(_jasperVault, address(weth), _to, redeemInfo);
     }
 
     /**
      * SET MANAGER ONLY. Add an allowed reserve asset
      *
-     * @param _setToken                     Instance of the SetToken
+     * @param _jasperVault                     Instance of the JasperVault
      * @param _reserveAsset                 Address of the reserve asset to add
      */
-    function addReserveAsset(ISetToken _setToken, address _reserveAsset) external onlyManagerAndValidSet(_setToken) {
-        require(!isReserveAsset[_setToken][_reserveAsset], "Reserve asset already exists");
+    function addReserveAsset(IJasperVault _jasperVault, address _reserveAsset) external onlyManagerAndValidSet(_jasperVault) {
+        require(!isReserveAsset[_jasperVault][_reserveAsset], "Reserve asset already exists");
 
-        navIssuanceSettings[_setToken].reserveAssets.push(_reserveAsset);
-        isReserveAsset[_setToken][_reserveAsset] = true;
+        navIssuanceSettings[_jasperVault].reserveAssets.push(_reserveAsset);
+        isReserveAsset[_jasperVault][_reserveAsset] = true;
 
-        emit ReserveAssetAdded(_setToken, _reserveAsset);
+        emit ReserveAssetAdded(_jasperVault, _reserveAsset);
     }
 
     /**
      * SET MANAGER ONLY. Remove a reserve asset
      *
-     * @param _setToken                     Instance of the SetToken
+     * @param _jasperVault                     Instance of the JasperVault
      * @param _reserveAsset                 Address of the reserve asset to remove
      */
-    function removeReserveAsset(ISetToken _setToken, address _reserveAsset) external onlyManagerAndValidSet(_setToken) {
-        require(isReserveAsset[_setToken][_reserveAsset], "Reserve asset does not exist");
+    function removeReserveAsset(IJasperVault _jasperVault, address _reserveAsset) external onlyManagerAndValidSet(_jasperVault) {
+        require(isReserveAsset[_jasperVault][_reserveAsset], "Reserve asset does not exist");
 
-        navIssuanceSettings[_setToken].reserveAssets = navIssuanceSettings[_setToken].reserveAssets.remove(_reserveAsset);
-        delete isReserveAsset[_setToken][_reserveAsset];
+        navIssuanceSettings[_jasperVault].reserveAssets = navIssuanceSettings[_jasperVault].reserveAssets.remove(_reserveAsset);
+        delete isReserveAsset[_jasperVault][_reserveAsset];
 
-        emit ReserveAssetRemoved(_setToken, _reserveAsset);
+        emit ReserveAssetRemoved(_jasperVault, _reserveAsset);
     }
 
     /**
      * SET MANAGER ONLY. Edit the premium percentage
      *
-     * @param _setToken                     Instance of the SetToken
+     * @param _jasperVault                     Instance of the JasperVault
      * @param _premiumPercentage            Premium percentage in 10e16 (e.g. 10e16 = 1%)
      */
-    function editPremium(ISetToken _setToken, uint256 _premiumPercentage) external onlyManagerAndValidSet(_setToken) {
-        require(_premiumPercentage <= navIssuanceSettings[_setToken].maxPremiumPercentage, "Premium must be less than maximum allowed");
+    function editPremium(IJasperVault _jasperVault, uint256 _premiumPercentage) external onlyManagerAndValidSet(_jasperVault) {
+        require(_premiumPercentage <= navIssuanceSettings[_jasperVault].maxPremiumPercentage, "Premium must be less than maximum allowed");
 
-        navIssuanceSettings[_setToken].premiumPercentage = _premiumPercentage;
+        navIssuanceSettings[_jasperVault].premiumPercentage = _premiumPercentage;
 
-        emit PremiumEdited(_setToken, _premiumPercentage);
+        emit PremiumEdited(_jasperVault, _premiumPercentage);
     }
 
     /**
      * SET MANAGER ONLY. Edit manager fee
      *
-     * @param _setToken                     Instance of the SetToken
+     * @param _jasperVault                     Instance of the JasperVault
      * @param _managerFeePercentage         Manager fee percentage in 10e16 (e.g. 10e16 = 1%)
      * @param _managerFeeIndex              Manager fee index. 0 index is issue fee, 1 index is redeem fee
      */
     function editManagerFee(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _managerFeePercentage,
         uint256 _managerFeeIndex
     )
         external
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
-        require(_managerFeePercentage <= navIssuanceSettings[_setToken].maxManagerFee, "Manager fee must be less than maximum allowed");
+        require(_managerFeePercentage <= navIssuanceSettings[_jasperVault].maxManagerFee, "Manager fee must be less than maximum allowed");
 
-        navIssuanceSettings[_setToken].managerFees[_managerFeeIndex] = _managerFeePercentage;
+        navIssuanceSettings[_jasperVault].managerFees[_managerFeeIndex] = _managerFeePercentage;
 
-        emit ManagerFeeEdited(_setToken, _managerFeePercentage, _managerFeeIndex);
+        emit ManagerFeeEdited(_jasperVault, _managerFeePercentage, _managerFeeIndex);
     }
 
     /**
      * SET MANAGER ONLY. Edit the manager fee recipient
      *
-     * @param _setToken                     Instance of the SetToken
+     * @param _jasperVault                     Instance of the JasperVault
      * @param _managerFeeRecipient          Manager fee recipient
      */
-    function editFeeRecipient(ISetToken _setToken, address _managerFeeRecipient) external onlyManagerAndValidSet(_setToken) {
+    function editFeeRecipient(IJasperVault _jasperVault, address _managerFeeRecipient) external onlyManagerAndValidSet(_jasperVault) {
         require(_managerFeeRecipient != address(0), "Fee recipient must not be 0 address");
 
-        navIssuanceSettings[_setToken].feeRecipient = _managerFeeRecipient;
+        navIssuanceSettings[_jasperVault].feeRecipient = _managerFeeRecipient;
 
-        emit FeeRecipientEdited(_setToken, _managerFeeRecipient);
+        emit FeeRecipientEdited(_jasperVault, _managerFeeRecipient);
     }
 
     /**
-     * SET MANAGER ONLY. Initializes this module to the SetToken with hooks, allowed reserve assets,
-     * fees and issuance premium. Only callable by the SetToken's manager. Hook addresses are optional.
+     * SET MANAGER ONLY. Initializes this module to the JasperVault with hooks, allowed reserve assets,
+     * fees and issuance premium. Only callable by the JasperVault's manager. Hook addresses are optional.
      * Address(0) means that no hook will be called.
      *
-     * @param _setToken                     Instance of the SetToken to issue
+     * @param _jasperVault                     Instance of the JasperVault to issue
      * @param _navIssuanceSettings          NAVIssuanceSettings struct defining parameters
      */
     function initialize(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         NAVIssuanceSettings memory _navIssuanceSettings
     )
         external
-        onlySetManager(_setToken, msg.sender)
-        onlyValidAndPendingSet(_setToken)
+        onlySetManager(_jasperVault, msg.sender)
+        onlyValidAndPendingSet(_jasperVault)
     {
         require(_navIssuanceSettings.reserveAssets.length > 0, "Reserve assets must be greater than 0");
         require(_navIssuanceSettings.maxManagerFee < PreciseUnitMath.preciseUnit(), "Max manager fee must be less than 100%");
@@ -444,41 +444,41 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
         require(_navIssuanceSettings.premiumPercentage <= _navIssuanceSettings.maxPremiumPercentage, "Premium must be less than max");
         require(_navIssuanceSettings.feeRecipient != address(0), "Fee Recipient must be non-zero address.");
         // Initial mint of Set cannot use NAVIssuance since minSetTokenSupply must be > 0
-        require(_navIssuanceSettings.minSetTokenSupply > 0, "Min SetToken supply must be greater than 0");
+        require(_navIssuanceSettings.minSetTokenSupply > 0, "Min JasperVault supply must be greater than 0");
 
         for (uint256 i = 0; i < _navIssuanceSettings.reserveAssets.length; i++) {
-            require(!isReserveAsset[_setToken][_navIssuanceSettings.reserveAssets[i]], "Reserve assets must be unique");
-            isReserveAsset[_setToken][_navIssuanceSettings.reserveAssets[i]] = true;
+            require(!isReserveAsset[_jasperVault][_navIssuanceSettings.reserveAssets[i]], "Reserve assets must be unique");
+            isReserveAsset[_jasperVault][_navIssuanceSettings.reserveAssets[i]] = true;
         }
 
-        navIssuanceSettings[_setToken] = _navIssuanceSettings;
+        navIssuanceSettings[_jasperVault] = _navIssuanceSettings;
 
-        _setToken.initializeModule();
+        _jasperVault.initializeModule();
     }
 
     /**
-     * Removes this module from the SetToken, via call by the SetToken. Issuance settings and
+     * Removes this module from the JasperVault, via call by the JasperVault. Issuance settings and
      * reserve asset states are deleted.
      */
     function removeModule() external override {
-        ISetToken setToken = ISetToken(msg.sender);
-        for (uint256 i = 0; i < navIssuanceSettings[setToken].reserveAssets.length; i++) {
-            delete isReserveAsset[setToken][navIssuanceSettings[setToken].reserveAssets[i]];
+        IJasperVault jasperVault = IJasperVault(msg.sender);
+        for (uint256 i = 0; i < navIssuanceSettings[jasperVault].reserveAssets.length; i++) {
+            delete isReserveAsset[jasperVault][navIssuanceSettings[jasperVault].reserveAssets[i]];
         }
 
-        delete navIssuanceSettings[setToken];
+        delete navIssuanceSettings[jasperVault];
     }
 
     receive() external payable {}
 
     /* ============ External Getter Functions ============ */
 
-    function getReserveAssets(ISetToken _setToken) external view returns (address[] memory) {
-        return navIssuanceSettings[_setToken].reserveAssets;
+    function getReserveAssets(IJasperVault _jasperVault) external view returns (address[] memory) {
+        return navIssuanceSettings[_jasperVault].reserveAssets;
     }
 
     function getIssuePremium(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _reserveAsset,
         uint256 _reserveAssetQuantity
     )
@@ -486,11 +486,11 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
         view
         returns (uint256)
     {
-        return _getIssuePremium(_setToken, _reserveAsset, _reserveAssetQuantity);
+        return _getIssuePremium(_jasperVault, _reserveAsset, _reserveAssetQuantity);
     }
 
     function getRedeemPremium(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _reserveAsset,
         uint256 _setTokenQuantity
     )
@@ -498,24 +498,24 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
         view
         returns (uint256)
     {
-        return _getRedeemPremium(_setToken, _reserveAsset, _setTokenQuantity);
+        return _getRedeemPremium(_jasperVault, _reserveAsset, _setTokenQuantity);
     }
 
-    function getManagerFee(ISetToken _setToken, uint256 _managerFeeIndex) external view returns (uint256) {
-        return navIssuanceSettings[_setToken].managerFees[_managerFeeIndex];
+    function getManagerFee(IJasperVault _jasperVault, uint256 _managerFeeIndex) external view returns (uint256) {
+        return navIssuanceSettings[_jasperVault].managerFees[_managerFeeIndex];
     }
 
     /**
      * Get the expected SetTokens minted to recipient on issuance
      *
-     * @param _setToken                     Instance of the SetToken
+     * @param _jasperVault                     Instance of the JasperVault
      * @param _reserveAsset                 Address of the reserve asset
      * @param _reserveAssetQuantity         Quantity of the reserve asset to issue with
      *
      * @return  uint256                     Expected SetTokens to be minted to recipient
      */
     function getExpectedSetTokenIssueQuantity(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _reserveAsset,
         uint256 _reserveAssetQuantity
     )
@@ -524,17 +524,17 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
         returns (uint256)
     {
         (,, uint256 netReserveFlow) = _getFees(
-            _setToken,
+            _jasperVault,
             _reserveAssetQuantity,
             PROTOCOL_ISSUE_MANAGER_REVENUE_SHARE_FEE_INDEX,
             PROTOCOL_ISSUE_DIRECT_FEE_INDEX,
             MANAGER_ISSUE_FEE_INDEX
         );
 
-        uint256 setTotalSupply = _setToken.totalSupply();
+        uint256 setTotalSupply = _jasperVault.totalSupply();
 
         return _getSetTokenMintQuantity(
-            _setToken,
+            _jasperVault,
             _reserveAsset,
             netReserveFlow,
             setTotalSupply
@@ -544,14 +544,14 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
     /**
      * Get the expected reserve asset to be redeemed
      *
-     * @param _setToken                     Instance of the SetToken
+     * @param _jasperVault                     Instance of the JasperVault
      * @param _reserveAsset                 Address of the reserve asset
      * @param _setTokenQuantity             Quantity of SetTokens to redeem
      *
      * @return  uint256                     Expected reserve asset quantity redeemed
      */
     function getExpectedReserveRedeemQuantity(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _reserveAsset,
         uint256 _setTokenQuantity
     )
@@ -559,10 +559,10 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
         view
         returns (uint256)
     {
-        uint256 preFeeReserveQuantity = _getRedeemReserveQuantity(_setToken, _reserveAsset, _setTokenQuantity);
+        uint256 preFeeReserveQuantity = _getRedeemReserveQuantity(_jasperVault, _reserveAsset, _setTokenQuantity);
 
         (,, uint256 netReserveFlows) = _getFees(
-            _setToken,
+            _jasperVault,
             preFeeReserveQuantity,
             PROTOCOL_REDEEM_MANAGER_REVENUE_SHARE_FEE_INDEX,
             PROTOCOL_REDEEM_DIRECT_FEE_INDEX,
@@ -575,14 +575,14 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
     /**
      * Checks if issue is valid
      *
-     * @param _setToken                     Instance of the SetToken
+     * @param _jasperVault                     Instance of the JasperVault
      * @param _reserveAsset                 Address of the reserve asset
      * @param _reserveAssetQuantity         Quantity of the reserve asset to issue with
      *
      * @return  bool                        Returns true if issue is valid
      */
     function isIssueValid(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _reserveAsset,
         uint256 _reserveAssetQuantity
     )
@@ -590,24 +590,24 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
         view
         returns (bool)
     {
-        uint256 setTotalSupply = _setToken.totalSupply();
+        uint256 setTotalSupply = _jasperVault.totalSupply();
 
     return _reserveAssetQuantity != 0
-            && isReserveAsset[_setToken][_reserveAsset]
-            && setTotalSupply >= navIssuanceSettings[_setToken].minSetTokenSupply;
+            && isReserveAsset[_jasperVault][_reserveAsset]
+            && setTotalSupply >= navIssuanceSettings[_jasperVault].minSetTokenSupply;
     }
 
     /**
      * Checks if redeem is valid
      *
-     * @param _setToken                     Instance of the SetToken
+     * @param _jasperVault                     Instance of the JasperVault
      * @param _reserveAsset                 Address of the reserve asset
      * @param _setTokenQuantity             Quantity of SetTokens to redeem
      *
      * @return  bool                        Returns true if redeem is valid
      */
     function isRedeemValid(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _reserveAsset,
         uint256 _setTokenQuantity
     )
@@ -615,26 +615,26 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
         view
         returns (bool)
     {
-        uint256 setTotalSupply = _setToken.totalSupply();
+        uint256 setTotalSupply = _jasperVault.totalSupply();
 
         if (
             _setTokenQuantity == 0
-            || !isReserveAsset[_setToken][_reserveAsset]
-            || setTotalSupply < navIssuanceSettings[_setToken].minSetTokenSupply.add(_setTokenQuantity)
+            || !isReserveAsset[_jasperVault][_reserveAsset]
+            || setTotalSupply < navIssuanceSettings[_jasperVault].minSetTokenSupply.add(_setTokenQuantity)
         ) {
             return false;
         } else {
-            uint256 totalRedeemValue =_getRedeemReserveQuantity(_setToken, _reserveAsset, _setTokenQuantity);
+            uint256 totalRedeemValue =_getRedeemReserveQuantity(_jasperVault, _reserveAsset, _setTokenQuantity);
 
             (,, uint256 expectedRedeemQuantity) = _getFees(
-                _setToken,
+                _jasperVault,
                 totalRedeemValue,
                 PROTOCOL_REDEEM_MANAGER_REVENUE_SHARE_FEE_INDEX,
                 PROTOCOL_REDEEM_DIRECT_FEE_INDEX,
                 MANAGER_REDEEM_FEE_INDEX
             );
 
-            uint256 existingUnit = _setToken.getDefaultPositionRealUnit(_reserveAsset).toUint256();
+            uint256 existingUnit = _jasperVault.getDefaultPositionRealUnit(_reserveAsset).toUint256();
 
             return existingUnit.preciseMul(setTotalSupply) >= expectedRedeemQuantity;
         }
@@ -642,24 +642,24 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
 
     /* ============ Internal Functions ============ */
 
-    function _validateCommon(ISetToken _setToken, address _reserveAsset, uint256 _quantity) internal view {
+    function _validateCommon(IJasperVault _jasperVault, address _reserveAsset, uint256 _quantity) internal view {
         require(_quantity > 0, "Quantity must be > 0");
-        require(isReserveAsset[_setToken][_reserveAsset], "Must be valid reserve asset");
+        require(isReserveAsset[_jasperVault][_reserveAsset], "Must be valid reserve asset");
     }
 
-    function _validateIssuanceInfo(ISetToken _setToken, uint256 _minSetTokenReceiveQuantity, ActionInfo memory _issueInfo) internal view {
+    function _validateIssuanceInfo(IJasperVault _jasperVault, uint256 _minSetTokenReceiveQuantity, ActionInfo memory _issueInfo) internal view {
         // Check that total supply is greater than min supply needed for issuance
-        // Note: A min supply amount is needed to avoid division by 0 when SetToken supply is 0
+        // Note: A min supply amount is needed to avoid division by 0 when JasperVault supply is 0
         require(
-            _issueInfo.previousSetTokenSupply >= navIssuanceSettings[_setToken].minSetTokenSupply,
+            _issueInfo.previousSetTokenSupply >= navIssuanceSettings[_jasperVault].minSetTokenSupply,
             "Supply must be greater than minimum to enable issuance"
         );
 
-        require(_issueInfo.setTokenQuantity >= _minSetTokenReceiveQuantity, "Must be greater than min SetToken");
+        require(_issueInfo.setTokenQuantity >= _minSetTokenReceiveQuantity, "Must be greater than min JasperVault");
     }
 
     function _validateRedemptionInfo(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _minReserveReceiveQuantity,
         ActionInfo memory _redeemInfo
     )
@@ -667,9 +667,9 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
         view
     {
         // Check that new supply is more than min supply needed for redemption
-        // Note: A min supply amount is needed to avoid division by 0 when redeeming SetToken to 0
+        // Note: A min supply amount is needed to avoid division by 0 when redeeming JasperVault to 0
         require(
-            _redeemInfo.newSetTokenSupply >= navIssuanceSettings[_setToken].minSetTokenSupply,
+            _redeemInfo.newSetTokenSupply >= navIssuanceSettings[_jasperVault].minSetTokenSupply,
             "Supply must be greater than minimum to enable redemption"
         );
 
@@ -677,7 +677,7 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
     }
 
     function _createIssuanceInfo(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _reserveAsset,
         uint256 _reserveAssetQuantity
     )
@@ -687,12 +687,12 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
     {
         ActionInfo memory issueInfo;
 
-        issueInfo.previousSetTokenSupply = _setToken.totalSupply();
+        issueInfo.previousSetTokenSupply = _jasperVault.totalSupply();
 
         issueInfo.preFeeReserveQuantity = _reserveAssetQuantity;
 
         (issueInfo.protocolFees, issueInfo.managerFee, issueInfo.netFlowQuantity) = _getFees(
-            _setToken,
+            _jasperVault,
             issueInfo.preFeeReserveQuantity,
             PROTOCOL_ISSUE_MANAGER_REVENUE_SHARE_FEE_INDEX,
             PROTOCOL_ISSUE_DIRECT_FEE_INDEX,
@@ -700,21 +700,21 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
         );
 
         issueInfo.setTokenQuantity = _getSetTokenMintQuantity(
-            _setToken,
+            _jasperVault,
             _reserveAsset,
             issueInfo.netFlowQuantity,
             issueInfo.previousSetTokenSupply
         );
 
-        (issueInfo.newSetTokenSupply, issueInfo.newPositionMultiplier) = _getIssuePositionMultiplier(_setToken, issueInfo);
+        (issueInfo.newSetTokenSupply, issueInfo.newPositionMultiplier) = _getIssuePositionMultiplier(_jasperVault, issueInfo);
 
-        issueInfo.newReservePositionUnit = _getIssuePositionUnit(_setToken, _reserveAsset, issueInfo);
+        issueInfo.newReservePositionUnit = _getIssuePositionUnit(_jasperVault, _reserveAsset, issueInfo);
 
         return issueInfo;
     }
 
     function _createRedemptionInfo(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _reserveAsset,
         uint256 _setTokenQuantity
     )
@@ -726,76 +726,76 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
 
         redeemInfo.setTokenQuantity = _setTokenQuantity;
 
-        redeemInfo.preFeeReserveQuantity =_getRedeemReserveQuantity(_setToken, _reserveAsset, _setTokenQuantity);
+        redeemInfo.preFeeReserveQuantity =_getRedeemReserveQuantity(_jasperVault, _reserveAsset, _setTokenQuantity);
 
         (redeemInfo.protocolFees, redeemInfo.managerFee, redeemInfo.netFlowQuantity) = _getFees(
-            _setToken,
+            _jasperVault,
             redeemInfo.preFeeReserveQuantity,
             PROTOCOL_REDEEM_MANAGER_REVENUE_SHARE_FEE_INDEX,
             PROTOCOL_REDEEM_DIRECT_FEE_INDEX,
             MANAGER_REDEEM_FEE_INDEX
         );
 
-        redeemInfo.previousSetTokenSupply = _setToken.totalSupply();
+        redeemInfo.previousSetTokenSupply = _jasperVault.totalSupply();
 
-        (redeemInfo.newSetTokenSupply, redeemInfo.newPositionMultiplier) = _getRedeemPositionMultiplier(_setToken, _setTokenQuantity, redeemInfo);
+        (redeemInfo.newSetTokenSupply, redeemInfo.newPositionMultiplier) = _getRedeemPositionMultiplier(_jasperVault, _setTokenQuantity, redeemInfo);
 
-        redeemInfo.newReservePositionUnit = _getRedeemPositionUnit(_setToken, _reserveAsset, redeemInfo);
+        redeemInfo.newReservePositionUnit = _getRedeemPositionUnit(_jasperVault, _reserveAsset, redeemInfo);
 
         return redeemInfo;
     }
 
     /**
-     * Transfer reserve asset from user to SetToken and fees from user to appropriate fee recipients
+     * Transfer reserve asset from user to JasperVault and fees from user to appropriate fee recipients
      */
-    function _transferCollateralAndHandleFees(ISetToken _setToken, IERC20 _reserveAsset, ActionInfo memory _issueInfo) internal {
-        transferFrom(_reserveAsset, msg.sender, address(_setToken), _issueInfo.netFlowQuantity);
+    function _transferCollateralAndHandleFees(IJasperVault _jasperVault, IERC20 _reserveAsset, ActionInfo memory _issueInfo) internal {
+        transferFrom(_reserveAsset, msg.sender, address(_jasperVault), _issueInfo.netFlowQuantity);
 
         if (_issueInfo.protocolFees > 0) {
             transferFrom(_reserveAsset, msg.sender, controller.feeRecipient(), _issueInfo.protocolFees);
         }
 
         if (_issueInfo.managerFee > 0) {
-            transferFrom(_reserveAsset, msg.sender, navIssuanceSettings[_setToken].feeRecipient, _issueInfo.managerFee);
+            transferFrom(_reserveAsset, msg.sender, navIssuanceSettings[_jasperVault].feeRecipient, _issueInfo.managerFee);
         }
     }
 
 
     /**
-      * Transfer WETH from module to SetToken and fees from module to appropriate fee recipients
+      * Transfer WETH from module to JasperVault and fees from module to appropriate fee recipients
      */
-    function _transferWETHAndHandleFees(ISetToken _setToken, ActionInfo memory _issueInfo) internal {
-        weth.transfer(address(_setToken), _issueInfo.netFlowQuantity);
+    function _transferWETHAndHandleFees(IJasperVault _jasperVault, ActionInfo memory _issueInfo) internal {
+        weth.transfer(address(_jasperVault), _issueInfo.netFlowQuantity);
 
         if (_issueInfo.protocolFees > 0) {
             weth.transfer(controller.feeRecipient(), _issueInfo.protocolFees);
         }
 
         if (_issueInfo.managerFee > 0) {
-            weth.transfer(navIssuanceSettings[_setToken].feeRecipient, _issueInfo.managerFee);
+            weth.transfer(navIssuanceSettings[_jasperVault].feeRecipient, _issueInfo.managerFee);
         }
     }
 
     function _handleIssueStateUpdates(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _reserveAsset,
         address _to,
         ActionInfo memory _issueInfo
     )
         internal
     {
-        _setToken.editPositionMultiplier(_issueInfo.newPositionMultiplier);
+        _jasperVault.editPositionMultiplier(_issueInfo.newPositionMultiplier);
 
-        _setToken.editDefaultPosition(_reserveAsset, _issueInfo.newReservePositionUnit);
+        _jasperVault.editDefaultPosition(_reserveAsset, _issueInfo.newReservePositionUnit);
 
-        _setToken.mint(_to, _issueInfo.setTokenQuantity);
+        _jasperVault.mint(_to, _issueInfo.setTokenQuantity);
 
         emit SetTokenNAVIssued(
-            _setToken,
+            _jasperVault,
             msg.sender,
             _to,
             _reserveAsset,
-            address(navIssuanceSettings[_setToken].managerIssuanceHook),
+            address(navIssuanceSettings[_jasperVault].managerIssuanceHook),
             _issueInfo.setTokenQuantity,
             _issueInfo.managerFee,
             _issueInfo.protocolFees
@@ -803,38 +803,38 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
     }
 
     function _handleRedeemStateUpdates(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _reserveAsset,
         address _to,
         ActionInfo memory _redeemInfo
     )
         internal
     {
-        _setToken.editPositionMultiplier(_redeemInfo.newPositionMultiplier);
+        _jasperVault.editPositionMultiplier(_redeemInfo.newPositionMultiplier);
 
-        _setToken.editDefaultPosition(_reserveAsset, _redeemInfo.newReservePositionUnit);
+        _jasperVault.editDefaultPosition(_reserveAsset, _redeemInfo.newReservePositionUnit);
 
         emit SetTokenNAVRedeemed(
-            _setToken,
+            _jasperVault,
             msg.sender,
             _to,
             _reserveAsset,
-            address(navIssuanceSettings[_setToken].managerRedemptionHook),
+            address(navIssuanceSettings[_jasperVault].managerRedemptionHook),
             _redeemInfo.setTokenQuantity,
             _redeemInfo.managerFee,
             _redeemInfo.protocolFees
         );
     }
 
-    function _handleRedemptionFees(ISetToken _setToken, address _reserveAsset, ActionInfo memory _redeemInfo) internal {
-        // Instruct the SetToken to transfer protocol fee to fee recipient if there is a fee
-        payProtocolFeeFromSetToken(_setToken, _reserveAsset, _redeemInfo.protocolFees);
+    function _handleRedemptionFees(IJasperVault _jasperVault, address _reserveAsset, ActionInfo memory _redeemInfo) internal {
+        // Instruct the JasperVault to transfer protocol fee to fee recipient if there is a fee
+        payProtocolFeeFromSetToken(_jasperVault, _reserveAsset, _redeemInfo.protocolFees);
 
-        // Instruct the SetToken to transfer manager fee to manager fee recipient if there is a fee
+        // Instruct the JasperVault to transfer manager fee to manager fee recipient if there is a fee
         if (_redeemInfo.managerFee > 0) {
-            _setToken.strictInvokeTransfer(
+            _jasperVault.strictInvokeTransfer(
                 _reserveAsset,
-                navIssuanceSettings[_setToken].feeRecipient,
+                navIssuanceSettings[_jasperVault].feeRecipient,
                 _redeemInfo.managerFee
             );
         }
@@ -845,7 +845,7 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
      * and can contain arbitrary logic to calculate the issuance premium.
      */
     function _getIssuePremium(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address /* _reserveAsset */,
         uint256 /* _reserveAssetQuantity */
     )
@@ -854,7 +854,7 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
         view
         returns (uint256)
     {
-        return navIssuanceSettings[_setToken].premiumPercentage;
+        return navIssuanceSettings[_jasperVault].premiumPercentage;
     }
 
     /**
@@ -862,7 +862,7 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
      * and can contain arbitrary logic to calculate the redemption premium.
      */
     function _getRedeemPremium(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address /* _reserveAsset */,
         uint256 /* _setTokenQuantity */
     )
@@ -871,7 +871,7 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
         view
         returns (uint256)
     {
-        return navIssuanceSettings[_setToken].premiumPercentage;
+        return navIssuanceSettings[_jasperVault].premiumPercentage;
     }
 
     /**
@@ -880,7 +880,7 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
      * ManagerFee = (manager fee % - % to protocol) * reserveAssetQuantity
      * Protocol Fee = (% manager fee share + direct fee %) * reserveAssetQuantity
      *
-     * @param _setToken                     Instance of the SetToken
+     * @param _jasperVault                     Instance of the JasperVault
      * @param _reserveAssetQuantity         Quantity of reserve asset to calculate fees from
      * @param _protocolManagerFeeIndex      Index to pull rev share NAV Issuance fee from the Controller
      * @param _protocolDirectFeeIndex       Index to pull direct NAV issuance fee from the Controller
@@ -891,7 +891,7 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
      * @return  uint256                     Net reserve to user net of fees
      */
     function _getFees(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _reserveAssetQuantity,
         uint256 _protocolManagerFeeIndex,
         uint256 _protocolDirectFeeIndex,
@@ -902,7 +902,7 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
         returns (uint256, uint256, uint256)
     {
         (uint256 protocolFeePercentage, uint256 managerFeePercentage) = _getProtocolAndManagerFeePercentages(
-            _setToken,
+            _jasperVault,
             _protocolManagerFeeIndex,
             _protocolDirectFeeIndex,
             _managerFeeIndex
@@ -918,7 +918,7 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
     }
 
     function _getProtocolAndManagerFeePercentages(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _protocolManagerFeeIndex,
         uint256 _protocolDirectFeeIndex,
         uint256 _managerFeeIndex
@@ -930,7 +930,7 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
         // Get protocol fee percentages
         uint256 protocolDirectFeePercent = controller.getModuleFee(address(this), _protocolDirectFeeIndex);
         uint256 protocolManagerShareFeePercent = controller.getModuleFee(address(this), _protocolManagerFeeIndex);
-        uint256 managerFeePercent = navIssuanceSettings[_setToken].managerFees[_managerFeeIndex];
+        uint256 managerFeePercent = navIssuanceSettings[_jasperVault].managerFees[_managerFeeIndex];
 
         // Calculate revenue share split percentage
         uint256 protocolRevenueSharePercentage = protocolManagerShareFeePercent.preciseMul(managerFeePercent);
@@ -941,7 +941,7 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
     }
 
     function _getSetTokenMintQuantity(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _reserveAsset,
         uint256 _netReserveFlows,            // Value of reserve asset net of fees
         uint256 _setTotalSupply
@@ -950,13 +950,13 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
         view
         returns (uint256)
     {
-        uint256 premiumPercentage = _getIssuePremium(_setToken, _reserveAsset, _netReserveFlows);
+        uint256 premiumPercentage = _getIssuePremium(_jasperVault, _reserveAsset, _netReserveFlows);
         uint256 premiumValue = _netReserveFlows.preciseMul(premiumPercentage);
 
         // If the set manager provided a custom valuer at initialization time, use it. Otherwise get it from the controller
-        // Get valuation of the SetToken with the quote asset as the reserve asset. Returns value in precise units (1e18)
+        // Get valuation of the JasperVault with the quote asset as the reserve asset. Returns value in precise units (1e18)
         // Reverts if price is not found
-        uint256 setTokenValuation = _getSetValuer(_setToken).calculateSetTokenValuation(_setToken, _reserveAsset);
+        uint256 setTokenValuation = _getSetValuer(_jasperVault).calculateSetTokenValuation(_jasperVault, _reserveAsset);
 
         // Get reserve asset decimals
         uint256 reserveAssetDecimals = ERC20(_reserveAsset).decimals();
@@ -969,7 +969,7 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
     }
 
     function _getRedeemReserveQuantity(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _reserveAsset,
         uint256 _setTokenQuantity
     )
@@ -977,16 +977,16 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
         view
         returns (uint256)
     {
-        // Get valuation of the SetToken with the quote asset as the reserve asset. Returns value in precise units (10e18)
+        // Get valuation of the JasperVault with the quote asset as the reserve asset. Returns value in precise units (10e18)
         // Reverts if price is not found
-        uint256 setTokenValuation = _getSetValuer(_setToken).calculateSetTokenValuation(_setToken, _reserveAsset);
+        uint256 setTokenValuation = _getSetValuer(_jasperVault).calculateSetTokenValuation(_jasperVault, _reserveAsset);
 
         uint256 totalRedeemValueInPreciseUnits = _setTokenQuantity.preciseMul(setTokenValuation);
         // Get reserve asset decimals
         uint256 reserveAssetDecimals = ERC20(_reserveAsset).decimals();
         uint256 prePremiumReserveQuantity = totalRedeemValueInPreciseUnits.preciseMul(10 ** reserveAssetDecimals);
 
-        uint256 premiumPercentage = _getRedeemPremium(_setToken, _reserveAsset, _setTokenQuantity);
+        uint256 premiumPercentage = _getRedeemPremium(_jasperVault, _reserveAsset, _setTokenQuantity);
         uint256 premiumQuantity = prePremiumReserveQuantity.preciseMulCeil(premiumPercentage);
 
         return prePremiumReserveQuantity.sub(premiumQuantity);
@@ -998,7 +998,7 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
      * newMultiplier = (1 - inflationPercentage) * positionMultiplier
      */
     function _getIssuePositionMultiplier(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         ActionInfo memory _issueInfo
     )
         internal
@@ -1007,7 +1007,7 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
     {
         // Calculate inflation and new position multiplier. Note: Round inflation up in order to round position multiplier down
         uint256 newTotalSupply = _issueInfo.setTokenQuantity.add(_issueInfo.previousSetTokenSupply);
-        int256 newPositionMultiplier = _setToken.positionMultiplier()
+        int256 newPositionMultiplier = _jasperVault.positionMultiplier()
             .mul(_issueInfo.previousSetTokenSupply.toInt256())
             .div(newTotalSupply.toInt256());
 
@@ -1022,7 +1022,7 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
      * newMultiplier = (1 + deflationPercentage) * positionMultiplier
      */
     function _getRedeemPositionMultiplier(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _setTokenQuantity,
         ActionInfo memory _redeemInfo
     )
@@ -1031,7 +1031,7 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
         returns (uint256, int256)
     {
         uint256 newTotalSupply = _redeemInfo.previousSetTokenSupply.sub(_setTokenQuantity);
-        int256 newPositionMultiplier = _setToken.positionMultiplier()
+        int256 newPositionMultiplier = _jasperVault.positionMultiplier()
             .mul(_redeemInfo.previousSetTokenSupply.toInt256())
             .div(newTotalSupply.toInt256());
 
@@ -1044,7 +1044,7 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
      * newUnit = totalReserve / newSetTokenSupply
      */
     function _getIssuePositionUnit(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _reserveAsset,
         ActionInfo memory _issueInfo
     )
@@ -1052,7 +1052,7 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
         view
         returns (uint256)
     {
-        uint256 existingUnit = _setToken.getDefaultPositionRealUnit(_reserveAsset).toUint256();
+        uint256 existingUnit = _jasperVault.getDefaultPositionRealUnit(_reserveAsset).toUint256();
         uint256 totalReserve = existingUnit
             .preciseMul(_issueInfo.previousSetTokenSupply)
             .add(_issueInfo.netFlowQuantity);
@@ -1066,7 +1066,7 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
      * newUnit = totalReserve / newSetTokenSupply
      */
     function _getRedeemPositionUnit(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _reserveAsset,
         ActionInfo memory _redeemInfo
     )
@@ -1074,7 +1074,7 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
         view
         returns (uint256)
     {
-        uint256 existingUnit = _setToken.getDefaultPositionRealUnit(_reserveAsset).toUint256();
+        uint256 existingUnit = _jasperVault.getDefaultPositionRealUnit(_reserveAsset).toUint256();
         uint256 totalExistingUnits = existingUnit.preciseMul(_redeemInfo.previousSetTokenSupply);
 
         uint256 outflow = _redeemInfo.netFlowQuantity.add(_redeemInfo.protocolFees).add(_redeemInfo.managerFee);
@@ -1090,7 +1090,7 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
      * can contain arbitrary logic including validations, external function calls, etc.
      */
     function _callPreIssueHooks(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _reserveAsset,
         uint256 _reserveAssetQuantity,
         address _caller,
@@ -1098,19 +1098,19 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
     )
         internal
     {
-        INAVIssuanceHook preIssueHook = navIssuanceSettings[_setToken].managerIssuanceHook;
+        INAVIssuanceHook preIssueHook = navIssuanceSettings[_jasperVault].managerIssuanceHook;
         if (address(preIssueHook) != address(0)) {
-            preIssueHook.invokePreIssueHook(_setToken, _reserveAsset, _reserveAssetQuantity, _caller, _to);
+            preIssueHook.invokePreIssueHook(_jasperVault, _reserveAsset, _reserveAssetQuantity, _caller, _to);
         }
     }
 
     /**
      * If a pre-redeem hook has been configured, call the external-protocol contract.
      */
-    function _callPreRedeemHooks(ISetToken _setToken, uint256 _setQuantity, address _caller, address _to) internal {
-        INAVIssuanceHook preRedeemHook = navIssuanceSettings[_setToken].managerRedemptionHook;
+    function _callPreRedeemHooks(IJasperVault _jasperVault, uint256 _setQuantity, address _caller, address _to) internal {
+        INAVIssuanceHook preRedeemHook = navIssuanceSettings[_jasperVault].managerRedemptionHook;
         if (address(preRedeemHook) != address(0)) {
-            preRedeemHook.invokePreRedeemHook(_setToken, _setQuantity, _caller, _to);
+            preRedeemHook.invokePreRedeemHook(_jasperVault, _setQuantity, _caller, _to);
         }
     }
 
@@ -1118,8 +1118,8 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
      * If a custom set valuer has been configured, use it. Otherwise fetch the default one form the
      * controller.
      */
-    function _getSetValuer(ISetToken _setToken) internal view returns (ISetValuer) {
-        ISetValuer customValuer =  navIssuanceSettings[_setToken].setValuer;
+    function _getSetValuer(IJasperVault _jasperVault) internal view returns (ISetValuer) {
+        ISetValuer customValuer =  navIssuanceSettings[_jasperVault].setValuer;
         return address(customValuer) == address(0) ? controller.getSetValuer() : customValuer;
     }
 }

@@ -24,7 +24,7 @@ import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.s
 import { IController } from "../../../interfaces/IController.sol";
 import { IGovernanceAdapter } from "../../../interfaces/IGovernanceAdapter.sol";
 import { Invoke } from "../../lib/Invoke.sol";
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
 import { ModuleBase } from "../../lib/ModuleBase.sol";
 
 
@@ -32,39 +32,39 @@ import { ModuleBase } from "../../lib/ModuleBase.sol";
  * @title GovernanceModule
  * @author Set Protocol
  *
- * A smart contract module that enables participating in governance of component tokens held in the SetToken.
+ * A smart contract module that enables participating in governance of component tokens held in the JasperVault.
  * Examples of intended protocols include Compound, Uniswap, and Maker governance.
  */
 contract GovernanceModule is ModuleBase, ReentrancyGuard {
-    using Invoke for ISetToken;
+    using Invoke for IJasperVault;
 
     /* ============ Events ============ */
     event ProposalVoted(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         IGovernanceAdapter indexed _governanceAdapter,
         uint256 indexed _proposalId,
         bool _support
     );
 
     event VoteDelegated(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         IGovernanceAdapter indexed _governanceAdapter,
         address _delegatee
     );
 
     event ProposalCreated(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         IGovernanceAdapter indexed _governanceAdapter,
         bytes _proposalData
     );
 
     event RegistrationSubmitted(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         IGovernanceAdapter indexed _governanceAdapter
     );
 
     event RegistrationRevoked(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         IGovernanceAdapter indexed _governanceAdapter
     );
 
@@ -78,18 +78,18 @@ contract GovernanceModule is ModuleBase, ReentrancyGuard {
      * SET MANAGER ONLY. Delegate voting power to an Ethereum address. Note: for some governance adapters, delegating to self is
      * equivalent to registering and delegating to zero address is revoking right to vote.
      *
-     * @param _setToken                 Address of SetToken
+     * @param _jasperVault                 Address of JasperVault
      * @param _governanceName           Human readable name of integration (e.g. COMPOUND) stored in the IntegrationRegistry
      * @param _delegatee                Address of delegatee
      */
     function delegate(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         string memory _governanceName,
         address _delegatee
     )
         external
         nonReentrant
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
         IGovernanceAdapter governanceAdapter = IGovernanceAdapter(getAndValidateAdapter(_governanceName));
 
@@ -99,26 +99,26 @@ contract GovernanceModule is ModuleBase, ReentrancyGuard {
             bytes memory methodData
         ) = governanceAdapter.getDelegateCalldata(_delegatee);
 
-        _setToken.invoke(targetExchange, callValue, methodData);
+        _jasperVault.invoke(targetExchange, callValue, methodData);
 
-        emit VoteDelegated(_setToken, governanceAdapter, _delegatee);
+        emit VoteDelegated(_jasperVault, governanceAdapter, _delegatee);
     }
 
     /**
      * SET MANAGER ONLY. Create a new proposal for a specified governance protocol.
      *
-     * @param _setToken                 Address of SetToken
+     * @param _jasperVault                 Address of JasperVault
      * @param _governanceName           Human readable name of integration (e.g. COMPOUND) stored in the IntegrationRegistry
      * @param _proposalData             Byte data of proposal to pass into governance adapter
      */
     function propose(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         string memory _governanceName,
         bytes memory _proposalData
     )
         external
         nonReentrant
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
         IGovernanceAdapter governanceAdapter = IGovernanceAdapter(getAndValidateAdapter(_governanceName));
 
@@ -128,24 +128,24 @@ contract GovernanceModule is ModuleBase, ReentrancyGuard {
             bytes memory methodData
         ) = governanceAdapter.getProposeCalldata(_proposalData);
 
-        _setToken.invoke(targetExchange, callValue, methodData);
+        _jasperVault.invoke(targetExchange, callValue, methodData);
 
-        emit ProposalCreated(_setToken, governanceAdapter, _proposalData);
+        emit ProposalCreated(_jasperVault, governanceAdapter, _proposalData);
     }
 
     /**
-     * SET MANAGER ONLY. Register for voting for the SetToken
+     * SET MANAGER ONLY. Register for voting for the JasperVault
      *
-     * @param _setToken                 Address of SetToken
+     * @param _jasperVault                 Address of JasperVault
      * @param _governanceName           Human readable name of integration (e.g. COMPOUND) stored in the IntegrationRegistry
      */
     function register(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         string memory _governanceName
     )
         external
         nonReentrant
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
         IGovernanceAdapter governanceAdapter = IGovernanceAdapter(getAndValidateAdapter(_governanceName));
 
@@ -153,26 +153,26 @@ contract GovernanceModule is ModuleBase, ReentrancyGuard {
             address targetExchange,
             uint256 callValue,
             bytes memory methodData
-        ) = governanceAdapter.getRegisterCalldata(address(_setToken));
+        ) = governanceAdapter.getRegisterCalldata(address(_jasperVault));
 
-        _setToken.invoke(targetExchange, callValue, methodData);
+        _jasperVault.invoke(targetExchange, callValue, methodData);
 
-        emit RegistrationSubmitted(_setToken, governanceAdapter);
+        emit RegistrationSubmitted(_jasperVault, governanceAdapter);
     }
 
     /**
-     * SET MANAGER ONLY. Revoke voting for the SetToken
+     * SET MANAGER ONLY. Revoke voting for the JasperVault
      *
-     * @param _setToken                 Address of SetToken
+     * @param _jasperVault                 Address of JasperVault
      * @param _governanceName           Human readable name of integration (e.g. COMPOUND) stored in the IntegrationRegistry
      */
     function revoke(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         string memory _governanceName
     )
         external
         nonReentrant
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
         IGovernanceAdapter governanceAdapter = IGovernanceAdapter(getAndValidateAdapter(_governanceName));
 
@@ -182,23 +182,23 @@ contract GovernanceModule is ModuleBase, ReentrancyGuard {
             bytes memory methodData
         ) = governanceAdapter.getRevokeCalldata();
 
-        _setToken.invoke(targetExchange, callValue, methodData);
+        _jasperVault.invoke(targetExchange, callValue, methodData);
 
-        emit RegistrationRevoked(_setToken, governanceAdapter);
+        emit RegistrationRevoked(_jasperVault, governanceAdapter);
     }
 
     /**
-     * SET MANAGER ONLY. Cast vote for a specific governance token held in the SetToken. Manager specifies whether to vote for or against
+     * SET MANAGER ONLY. Cast vote for a specific governance token held in the JasperVault. Manager specifies whether to vote for or against
      * a given proposal
      *
-     * @param _setToken                 Address of SetToken
+     * @param _jasperVault                 Address of JasperVault
      * @param _governanceName           Human readable name of integration (e.g. COMPOUND) stored in the IntegrationRegistry
      * @param _proposalId               ID of the proposal to vote on
      * @param _support                  Boolean indicating whether to support proposal
      * @param _data                     Arbitrary bytes to be used to construct vote call data
      */
     function vote(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         string memory _governanceName,
         uint256 _proposalId,
         bool _support,
@@ -206,7 +206,7 @@ contract GovernanceModule is ModuleBase, ReentrancyGuard {
     )
         external
         nonReentrant
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
         IGovernanceAdapter governanceAdapter = IGovernanceAdapter(getAndValidateAdapter(_governanceName));
 
@@ -220,22 +220,22 @@ contract GovernanceModule is ModuleBase, ReentrancyGuard {
             _data
         );
 
-        _setToken.invoke(targetExchange, callValue, methodData);
+        _jasperVault.invoke(targetExchange, callValue, methodData);
 
-        emit ProposalVoted(_setToken, governanceAdapter, _proposalId, _support);
+        emit ProposalVoted(_jasperVault, governanceAdapter, _proposalId, _support);
     }
 
     /**
-     * Initializes this module to the SetToken. Only callable by the SetToken's manager.
+     * Initializes this module to the JasperVault. Only callable by the JasperVault's manager.
      *
-     * @param _setToken             Instance of the SetToken to issue
+     * @param _jasperVault             Instance of the JasperVault to issue
      */
-    function initialize(ISetToken _setToken) external onlySetManager(_setToken, msg.sender) onlyValidAndPendingSet(_setToken) {
-        _setToken.initializeModule();
+    function initialize(IJasperVault _jasperVault) external onlySetManager(_jasperVault, msg.sender) onlyValidAndPendingSet(_jasperVault) {
+        _jasperVault.initializeModule();
     }
 
     /**
-     * Removes this module from the SetToken, via call by the SetToken.
+     * Removes this module from the JasperVault, via call by the JasperVault.
      */
     function removeModule() external override {}
 }

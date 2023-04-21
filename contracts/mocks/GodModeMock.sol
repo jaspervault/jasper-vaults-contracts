@@ -19,7 +19,7 @@
 pragma solidity 0.6.10;
 
 import { IController } from "../interfaces/IController.sol";
-import { ISetToken } from "../interfaces/ISetToken.sol";
+import { IJasperVault } from "../interfaces/IJasperVault.sol";
 import { ModuleBase } from "../protocol/lib/ModuleBase.sol";
 
 
@@ -28,17 +28,17 @@ contract GodModeMock is ModuleBase {
     constructor(IController _controller) public ModuleBase(_controller) {}
 
     function transferTokens(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _component,
         address _to,
         uint256 _amount
     )
         external
     {
-        _setToken.invokeTransfer(_component, _to, _amount);
+        _jasperVault.invokeTransfer(_component, _to, _amount);
     }
 
-    function initialize(ISetToken _setToken) external { _setToken.initializeModule(); }
+    function initialize(IJasperVault _jasperVault) external { _jasperVault.initializeModule(); }
 
     function removeModule() external override {}
 }

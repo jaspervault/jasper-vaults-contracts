@@ -19,28 +19,28 @@
 pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
 
-import { ISetToken } from "./ISetToken.sol";
+import { IJasperVault } from "./IJasperVault.sol";
 
 interface IClaimModule {
     function initialize(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         bool _anyoneClaim,
         address[] calldata _rewardPools,
         string[] calldata _integrationNames
     ) external;
 
-    function anyoneClaim(ISetToken _setToken) external view returns(bool);
-    function claim(ISetToken _setToken, address _rewardPool, string calldata _integrationName) external;
-    function batchClaim(ISetToken _setToken, address[] calldata _rewardPools, string[] calldata _integrationNames) external;
-    function updateAnyoneClaim(ISetToken _setToken, bool _anyoneClaim) external;
-    function addClaim(ISetToken _setToken, address _rewardPool, string calldata _integrationName) external;
-    function batchAddClaim(ISetToken _setToken, address[] calldata _rewardPools, string[] calldata _integrationNames) external;
-    function removeClaim(ISetToken _setToken, address _rewardPool, string calldata _integrationName) external;
-    function batchRemoveClaim(ISetToken _setToken, address[] calldata _rewardPools, string[] calldata _integrationNames) external;
+    function anyoneClaim(IJasperVault _jasperVault) external view returns(bool);
+    function claim(IJasperVault _jasperVault, address _rewardPool, string calldata _integrationName) external;
+    function batchClaim(IJasperVault _jasperVault, address[] calldata _rewardPools, string[] calldata _integrationNames) external;
+    function updateAnyoneClaim(IJasperVault _jasperVault, bool _anyoneClaim) external;
+    function addClaim(IJasperVault _jasperVault, address _rewardPool, string calldata _integrationName) external;
+    function batchAddClaim(IJasperVault _jasperVault, address[] calldata _rewardPools, string[] calldata _integrationNames) external;
+    function removeClaim(IJasperVault _jasperVault, address _rewardPool, string calldata _integrationName) external;
+    function batchRemoveClaim(IJasperVault _jasperVault, address[] calldata _rewardPools, string[] calldata _integrationNames) external;
     function removeModule() external;
-    function getRewardPools(ISetToken _setToken) external returns(address[] memory);
-    function isRewardPool(ISetToken _setToken, address _rewardPool) external returns(bool);
-    function getRewardPoolClaims(ISetToken _setToken, address _rewardPool) external returns(address[] memory);
-    function isRewardPoolClaim(ISetToken _setToken, address _rewardPool, string calldata _integrationName) external returns (bool);
-    function getRewards(ISetToken _setToken, address _rewardPool, string calldata _integrationName) external returns (uint256);
+    function getRewardPools(IJasperVault _jasperVault) external returns(address[] memory);
+    function isRewardPool(IJasperVault _jasperVault, address _rewardPool) external returns(bool);
+    function getRewardPoolClaims(IJasperVault _jasperVault, address _rewardPool) external returns(address[] memory);
+    function isRewardPoolClaim(IJasperVault _jasperVault, address _rewardPool, string calldata _integrationName) external returns (bool);
+    function getRewards(IJasperVault _jasperVault, address _rewardPool, string calldata _integrationName) external returns (uint256);
 }

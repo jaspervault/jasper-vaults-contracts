@@ -22,15 +22,15 @@ pragma experimental ABIEncoderV2;
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { SafeMath } from "@openzeppelin/contracts/math/SafeMath.sol";
 
-import { IManagerIssuanceHook } from "@setprotocol/set-protocol-v2/contracts/interfaces/IManagerIssuanceHook.sol";
-import { ISetToken } from "@setprotocol/set-protocol-v2/contracts/interfaces/ISetToken.sol";
+import { IManagerIssuanceHook } from "../../interfaces/IManagerIssuanceHook.sol";
+import { IJasperVault } from "../../interfaces/IJasperVault.sol";
 
 
 /**
  * @title SupplyCapIssuanceHook
  * @author Set Protocol
  *
- * Issuance hook that checks new issuances won't push SetToken totalSupply over supply cap.
+ * Issuance hook that checks new issuances won't push JasperVault totalSupply over supply cap.
  */
 contract SupplyCapIssuanceHook is Ownable, IManagerIssuanceHook {
     using SafeMath for uint256;
@@ -68,7 +68,7 @@ contract SupplyCapIssuanceHook is Ownable, IManagerIssuanceHook {
      * Adheres to IManagerIssuanceHook interface, and checks to make sure the current issue call won't push total supply over cap.
      */
     function invokePreIssueHook(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _issueQuantity,
         address /*_sender*/,
         address /*_to*/
@@ -76,7 +76,7 @@ contract SupplyCapIssuanceHook is Ownable, IManagerIssuanceHook {
         external
         override
     {
-        uint256 totalSupply = _setToken.totalSupply();
+        uint256 totalSupply = _jasperVault.totalSupply();
 
         require(totalSupply.add(_issueQuantity) <= supplyCap, "Supply cap exceeded");
     }
@@ -85,7 +85,7 @@ contract SupplyCapIssuanceHook is Ownable, IManagerIssuanceHook {
      * Adheres to IManagerIssuanceHook interface
      */
     function invokePreRedeemHook(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _redeemQuantity,
         address _sender,
         address _to

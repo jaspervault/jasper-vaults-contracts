@@ -71,13 +71,15 @@ contract AaveV2WrapV2Adapter {
         address _wrappedToken,
         uint256 _underlyingUnits,
         address _to,
-        bytes memory /* _wrapData */
+        bytes memory  _wrapData 
     )
         external
         view
         _onlyValidTokenPair(_underlyingToken, _wrappedToken)
         returns (address, uint256, bytes memory)
     {
+        (uint256 coinType)=abi.decode(_wrapData,(uint256));
+        require(coinType==1,"wrappedToken is not aToken");
         bytes memory callData = abi.encodeWithSignature(
             "deposit(address,uint256,address,uint16)",
             _underlyingToken,
@@ -106,13 +108,15 @@ contract AaveV2WrapV2Adapter {
         address _wrappedToken,
         uint256 _wrappedTokenUnits,
         address _to,
-        bytes memory /* _wrapData */
+        bytes memory _unwrapData 
     )
         external
         view
         _onlyValidTokenPair(_underlyingToken, _wrappedToken)
         returns (address, uint256, bytes memory)
     {
+        (uint256 coinType)=abi.decode(_unwrapData,(uint256));
+        require(coinType==1,"wrappedToken is not aToken");
         bytes memory callData = abi.encodeWithSignature(
             "withdraw(address,uint256,address)",
             _underlyingToken,

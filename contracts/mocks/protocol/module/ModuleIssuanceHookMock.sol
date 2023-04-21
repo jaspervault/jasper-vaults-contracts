@@ -20,51 +20,51 @@ pragma solidity 0.6.10;
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/SafeCast.sol";
 
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
 import { IModuleIssuanceHook } from "../../../interfaces/IModuleIssuanceHook.sol";
 import { Invoke } from "../../../protocol/lib/Invoke.sol";
 import { Position } from "../../../protocol/lib/Position.sol";
 import { PreciseUnitMath } from "../../../lib/PreciseUnitMath.sol";
 
 contract ModuleIssuanceHookMock is IModuleIssuanceHook {
-    using Invoke for ISetToken;
-    using Position for ISetToken;
+    using Invoke for IJasperVault;
+    using Position for IJasperVault;
     using SafeCast for int256;
     using PreciseUnitMath for uint256;
 
-    function initialize(ISetToken _setToken) external {
-        _setToken.initializeModule();
+    function initialize(IJasperVault _jasperVault) external {
+        _jasperVault.initializeModule();
     }
 
-    function addExternalPosition(ISetToken _setToken, address _component, int256 _quantity) external {
-        _setToken.editExternalPosition(_component, address(this), _quantity, "");
+    function addExternalPosition(IJasperVault _jasperVault, address _component, int256 _quantity) external {
+        _jasperVault.editExternalPosition(_component, address(this), _quantity, "");
     }
 
-    function moduleIssueHook(ISetToken _setToken, uint256 _setTokenQuantity) external override {}
-    function moduleRedeemHook(ISetToken _setToken, uint256 _setTokenQuantity) external override {}
+    function moduleIssueHook(IJasperVault _jasperVault, uint256 _setTokenQuantity) external override {}
+    function moduleRedeemHook(IJasperVault _jasperVault, uint256 _setTokenQuantity) external override {}
 
     function componentIssueHook(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _setTokenQuantity,
         IERC20 _component,
         bool /* _isEquity */
     ) external override {
-        int256 externalPositionUnit = _setToken.getExternalPositionRealUnit(address(_component), address(this));
+        int256 externalPositionUnit = _jasperVault.getExternalPositionRealUnit(address(_component), address(this));
         uint256 totalNotionalExternalModule = _setTokenQuantity.preciseMul(externalPositionUnit.toUint256());
 
-        // Invoke the SetToken to send the token of total notional to this address
-        _setToken.invokeTransfer(address(_component), address(this), totalNotionalExternalModule);
+        // Invoke the JasperVault to send the token of total notional to this address
+        _jasperVault.invokeTransfer(address(_component), address(this), totalNotionalExternalModule);
     }
 
     function componentRedeemHook(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _setTokenQuantity,
         IERC20 _component,
         bool /* _isEquity */
     ) external override {
         // Send the component to the settoken
-        int256 externalPositionUnit = _setToken.getExternalPositionRealUnit(address(_component), address(this));
+        int256 externalPositionUnit = _jasperVault.getExternalPositionRealUnit(address(_component), address(this));
         uint256 totalNotionalExternalModule = _setTokenQuantity.preciseMul(externalPositionUnit.toUint256());
-        _component.transfer(address(_setToken), totalNotionalExternalModule);
+        _component.transfer(address(_jasperVault), totalNotionalExternalModule);
     }
 }

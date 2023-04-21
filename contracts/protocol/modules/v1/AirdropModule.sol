@@ -26,7 +26,7 @@ import { SafeMath } from "@openzeppelin/contracts/math/SafeMath.sol";
 
 import { AddressArrayUtils } from "../../../lib/AddressArrayUtils.sol";
 import { IController } from "../../../interfaces/IController.sol";
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
 import { Invoke } from "../../lib/Invoke.sol";
 import { ModuleBase } from "../../lib/ModuleBase.sol";
 import { Position } from "../../lib/Position.sol";
@@ -37,7 +37,7 @@ import { PreciseUnitMath } from "../../../lib/PreciseUnitMath.sol";
  * @title AirdropModule
  * @author Set Protocol
  *
- * Module that enables managers to absorb tokens sent to the SetToken into the token's positions. With each SetToken,
+ * Module that enables managers to absorb tokens sent to the JasperVault into the token's positions. With each JasperVault,
  * managers are able to specify 1) the airdrops they want to include, 2) an airdrop fee recipient, 3) airdrop fee,
  * and 4) whether all users are allowed to trigger an airdrop.
  */
@@ -47,8 +47,8 @@ contract AirdropModule is ModuleBase, ReentrancyGuard {
     using Position for uint256;
     using SafeCast for int256;
     using AddressArrayUtils for address[];
-    using Invoke for ISetToken;
-    using Position for ISetToken;
+    using Invoke for IJasperVault;
+    using Position for IJasperVault;
 
     /* ============ Structs ============ */
 
@@ -62,26 +62,26 @@ contract AirdropModule is ModuleBase, ReentrancyGuard {
     /* ============ Events ============ */
 
     event ComponentAbsorbed(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         IERC20 indexed _absorbedToken,
         uint256 _absorbedQuantity,
         uint256 _managerFee,
         uint256 _protocolFee
     );
 
-    event AirdropComponentAdded(ISetToken indexed _setToken, IERC20 indexed _component);
-    event AirdropComponentRemoved(ISetToken indexed _setToken, IERC20 indexed _component);
-    event AnyoneAbsorbUpdated(ISetToken indexed _setToken, bool _anyoneAbsorb);
-    event AirdropFeeUpdated(ISetToken indexed _setToken, uint256 _newFee);
-    event FeeRecipientUpdated(ISetToken indexed _setToken, address _newFeeRecipient);
+    event AirdropComponentAdded(IJasperVault indexed _jasperVault, IERC20 indexed _component);
+    event AirdropComponentRemoved(IJasperVault indexed _jasperVault, IERC20 indexed _component);
+    event AnyoneAbsorbUpdated(IJasperVault indexed _jasperVault, bool _anyoneAbsorb);
+    event AirdropFeeUpdated(IJasperVault indexed _jasperVault, uint256 _newFee);
+    event FeeRecipientUpdated(IJasperVault indexed _jasperVault, address _newFeeRecipient);
 
     /* ============ Modifiers ============ */
 
     /**
      * Throws if claim is confined to the manager and caller is not the manager
      */
-    modifier onlyValidCaller(ISetToken _setToken) {
-        require(_isValidCaller(_setToken), "Must be valid caller");
+    modifier onlyValidCaller(IJasperVault _jasperVault) {
+        require(_isValidCaller(_jasperVault), "Must be valid caller");
         _;
     }
 
@@ -91,9 +91,9 @@ contract AirdropModule is ModuleBase, ReentrancyGuard {
 
     /* ============ State Variables ============ */
 
-    mapping(ISetToken => AirdropSettings) public airdropSettings;
+    mapping(IJasperVault => AirdropSettings) public airdropSettings;
     // Mapping indicating if token is an allowed airdrop
-    mapping(ISetToken => mapping(IERC20 => bool)) public isAirdrop;
+    mapping(IJasperVault => mapping(IERC20 => bool)) public isAirdrop;
 
     /* ============ Constructor ============ */
 
@@ -105,126 +105,126 @@ contract AirdropModule is ModuleBase, ReentrancyGuard {
      * Absorb passed tokens into respective positions. If airdropFee defined, send portion to feeRecipient and portion to
      * protocol feeRecipient address. Callable only by manager unless manager has set anyoneAbsorb to true.
      *
-     * @param _setToken                 Address of SetToken
+     * @param _jasperVault                 Address of JasperVault
      * @param _tokens                   Array of tokens to absorb
      */
-    function batchAbsorb(ISetToken _setToken, address[] memory _tokens)
+    function batchAbsorb(IJasperVault _jasperVault, address[] memory _tokens)
         external
         nonReentrant
-        onlyValidCaller(_setToken)
-        onlyValidAndInitializedSet(_setToken)
+        onlyValidCaller(_jasperVault)
+        onlyValidAndInitializedSet(_jasperVault)
     {
-        _batchAbsorb(_setToken, _tokens);
+        _batchAbsorb(_jasperVault, _tokens);
     }
 
     /**
      * Absorb specified token into position. If airdropFee defined, send portion to feeRecipient and portion to
      * protocol feeRecipient address. Callable only by manager unless manager has set anyoneAbsorb to true.
      *
-     * @param _setToken                 Address of SetToken
+     * @param _jasperVault                 Address of JasperVault
      * @param _token                    Address of token to absorb
      */
-    function absorb(ISetToken _setToken, IERC20 _token)
+    function absorb(IJasperVault _jasperVault, IERC20 _token)
         external
         nonReentrant
-        onlyValidCaller(_setToken)
-        onlyValidAndInitializedSet(_setToken)
+        onlyValidCaller(_jasperVault)
+        onlyValidAndInitializedSet(_jasperVault)
     {
-        _absorb(_setToken, _token);
+        _absorb(_jasperVault, _token);
     }
 
     /**
      * SET MANAGER ONLY. Adds new tokens to be added to positions when absorb is called.
      *
-     * @param _setToken                 Address of SetToken
+     * @param _jasperVault                 Address of JasperVault
      * @param _airdrop                  Component to add to airdrop list
      */
-    function addAirdrop(ISetToken _setToken, IERC20 _airdrop) external onlyManagerAndValidSet(_setToken) {
-        require(!isAirdropToken(_setToken, _airdrop), "Token already added.");
-        airdropSettings[_setToken].airdrops.push(address(_airdrop));
-        isAirdrop[_setToken][_airdrop] = true;
-        emit AirdropComponentAdded(_setToken, _airdrop);
+    function addAirdrop(IJasperVault _jasperVault, IERC20 _airdrop) external onlyManagerAndValidSet(_jasperVault) {
+        require(!isAirdropToken(_jasperVault, _airdrop), "Token already added.");
+        airdropSettings[_jasperVault].airdrops.push(address(_airdrop));
+        isAirdrop[_jasperVault][_airdrop] = true;
+        emit AirdropComponentAdded(_jasperVault, _airdrop);
     }
 
     /**
      * SET MANAGER ONLY. Removes tokens from list to be absorbed.
      *
-     * @param _setToken                 Address of SetToken
+     * @param _jasperVault                 Address of JasperVault
      * @param _airdrop                  Component to remove from airdrop list
      */
-    function removeAirdrop(ISetToken _setToken, IERC20 _airdrop) external onlyManagerAndValidSet(_setToken) {
-        require(isAirdropToken(_setToken, _airdrop), "Token not added.");
-        airdropSettings[_setToken].airdrops.removeStorage(address(_airdrop));
-        isAirdrop[_setToken][_airdrop] = false;
-        emit AirdropComponentRemoved(_setToken, _airdrop);
+    function removeAirdrop(IJasperVault _jasperVault, IERC20 _airdrop) external onlyManagerAndValidSet(_jasperVault) {
+        require(isAirdropToken(_jasperVault, _airdrop), "Token not added.");
+        airdropSettings[_jasperVault].airdrops.removeStorage(address(_airdrop));
+        isAirdrop[_jasperVault][_airdrop] = false;
+        emit AirdropComponentRemoved(_jasperVault, _airdrop);
     }
 
     /**
      * SET MANAGER ONLY. Update whether manager allows other addresses to call absorb.
      *
-     * @param _setToken                 Address of SetToken
+     * @param _jasperVault                 Address of JasperVault
      */
-    function updateAnyoneAbsorb(ISetToken _setToken, bool _anyoneAbsorb) external onlyManagerAndValidSet(_setToken) {
-        airdropSettings[_setToken].anyoneAbsorb = _anyoneAbsorb;
-        emit AnyoneAbsorbUpdated(_setToken, _anyoneAbsorb);
+    function updateAnyoneAbsorb(IJasperVault _jasperVault, bool _anyoneAbsorb) external onlyManagerAndValidSet(_jasperVault) {
+        airdropSettings[_jasperVault].anyoneAbsorb = _anyoneAbsorb;
+        emit AnyoneAbsorbUpdated(_jasperVault, _anyoneAbsorb);
     }
 
     /**
      * SET MANAGER ONLY. Update address manager fees are sent to.
      *
-     * @param _setToken             Address of SetToken
+     * @param _jasperVault             Address of JasperVault
      * @param _newFeeRecipient      Address of new fee recipient
      */
     function updateFeeRecipient(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _newFeeRecipient
     )
         external
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
         require(_newFeeRecipient != address(0), "Passed address must be non-zero");
-        airdropSettings[_setToken].feeRecipient = _newFeeRecipient;
-        emit FeeRecipientUpdated(_setToken, _newFeeRecipient);
+        airdropSettings[_jasperVault].feeRecipient = _newFeeRecipient;
+        emit FeeRecipientUpdated(_jasperVault, _newFeeRecipient);
     }
 
     /**
      * SET MANAGER ONLY. Update airdrop fee percentage.
      *
-     * @param _setToken         Address of SetToken
+     * @param _jasperVault         Address of JasperVault
      * @param _newFee           Percentage, in preciseUnits, of new airdrop fee (1e16 = 1%)
      */
     function updateAirdropFee(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _newFee
     )
         external
-        onlySetManager(_setToken, msg.sender)
-        onlyValidAndInitializedSet(_setToken)
+        onlySetManager(_jasperVault, msg.sender)
+        onlyValidAndInitializedSet(_jasperVault)
     {
         require(_newFee <=  PreciseUnitMath.preciseUnit(), "Airdrop fee can't exceed 100%");
 
         // Absorb all outstanding tokens before fee is updated
-        _batchAbsorb(_setToken, airdropSettings[_setToken].airdrops);
+        _batchAbsorb(_jasperVault, airdropSettings[_jasperVault].airdrops);
 
-        airdropSettings[_setToken].airdropFee = _newFee;
-        emit AirdropFeeUpdated(_setToken, _newFee);
+        airdropSettings[_jasperVault].airdropFee = _newFee;
+        emit AirdropFeeUpdated(_jasperVault, _newFee);
     }
 
     /**
-     * SET MANAGER ONLY. Initialize module with SetToken and set initial airdrop tokens as well as specify
+     * SET MANAGER ONLY. Initialize module with JasperVault and set initial airdrop tokens as well as specify
      * whether anyone can call absorb.
      *
-     * @param _setToken                 Address of SetToken
+     * @param _jasperVault                 Address of JasperVault
      * @param _airdropSettings          Struct of airdrop setting for Set including accepted airdrops, feeRecipient,
      *                                  airdropFee, and indicating if anyone can call an absorb
      */
     function initialize(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         AirdropSettings memory _airdropSettings
     )
         external
-        onlySetManager(_setToken, msg.sender)
-        onlyValidAndPendingSet(_setToken)
+        onlySetManager(_jasperVault, msg.sender)
+        onlyValidAndPendingSet(_jasperVault)
     {
         require(_airdropSettings.airdropFee <= PreciseUnitMath.preciseUnit(), "Fee must be <= 100%.");
         require(_airdropSettings.feeRecipient != address(0), "Zero fee address passed");
@@ -232,47 +232,47 @@ contract AirdropModule is ModuleBase, ReentrancyGuard {
             require(!_airdropSettings.airdrops.hasDuplicate(), "Duplicate airdrop token passed");
         }
 
-        airdropSettings[_setToken] = _airdropSettings;
+        airdropSettings[_jasperVault] = _airdropSettings;
 
         for (uint256 i = 0; i < _airdropSettings.airdrops.length; i++) {
-            isAirdrop[_setToken][IERC20(_airdropSettings.airdrops[i])] = true;
+            isAirdrop[_jasperVault][IERC20(_airdropSettings.airdrops[i])] = true;
         }
 
-        _setToken.initializeModule();
+        _jasperVault.initializeModule();
     }
 
     /**
-     * Removes this module from the SetToken, via call by the SetToken. Token's airdrop settings are deleted.
+     * Removes this module from the JasperVault, via call by the JasperVault. Token's airdrop settings are deleted.
      * Airdrops are not absorbed.
      */
     function removeModule() external override {
-        address[] memory airdrops = airdropSettings[ISetToken(msg.sender)].airdrops;
+        address[] memory airdrops = airdropSettings[IJasperVault(msg.sender)].airdrops;
 
         for (uint256 i =0; i < airdrops.length; i++) {
-            isAirdrop[ISetToken(msg.sender)][IERC20(airdrops[i])] = false;
+            isAirdrop[IJasperVault(msg.sender)][IERC20(airdrops[i])] = false;
         }
 
-        delete airdropSettings[ISetToken(msg.sender)];
+        delete airdropSettings[IJasperVault(msg.sender)];
     }
 
     /**
-     * Get list of tokens approved to collect airdrops for the SetToken.
+     * Get list of tokens approved to collect airdrops for the JasperVault.
      *
-     * @param _setToken             Address of SetToken
+     * @param _jasperVault             Address of JasperVault
      * @return                      Array of tokens approved for airdrops
      */
-    function getAirdrops(ISetToken _setToken) external view returns (address[] memory) {
-        return airdropSettings[_setToken].airdrops;
+    function getAirdrops(IJasperVault _jasperVault) external view returns (address[] memory) {
+        return airdropSettings[_jasperVault].airdrops;
     }
 
     /**
      * Get boolean indicating if token is approved for airdrops.
      *
-     * @param _setToken             Address of SetToken
+     * @param _jasperVault             Address of JasperVault
      * @return                      Boolean indicating approval for airdrops
      */
-    function isAirdropToken(ISetToken _setToken, IERC20 _token) public view returns (bool) {
-        return isAirdrop[_setToken][_token];
+    function isAirdropToken(IJasperVault _jasperVault, IERC20 _token) public view returns (bool) {
+        return isAirdrop[_jasperVault][_token];
     }
 
     /* ============ Internal Functions ============ */
@@ -280,61 +280,61 @@ contract AirdropModule is ModuleBase, ReentrancyGuard {
     /**
      * Check token approved for airdrops then handle airdropped position.
      */
-    function _absorb(ISetToken _setToken, IERC20 _token) internal {
-        require(isAirdropToken(_setToken, _token), "Must be approved token.");
+    function _absorb(IJasperVault _jasperVault, IERC20 _token) internal {
+        require(isAirdropToken(_jasperVault, _token), "Must be approved token.");
 
-        _handleAirdropPosition(_setToken, _token);
+        _handleAirdropPosition(_jasperVault, _token);
     }
 
     /**
      * Loop through array of tokens and handle airdropped positions.
      */
-    function _batchAbsorb(ISetToken _setToken, address[] memory _tokens) internal {
+    function _batchAbsorb(IJasperVault _jasperVault, address[] memory _tokens) internal {
         for (uint256 i = 0; i < _tokens.length; i++) {
-            _absorb(_setToken, IERC20(_tokens[i]));
+            _absorb(_jasperVault, IERC20(_tokens[i]));
         }
     }
 
     /**
      * Calculate amount of tokens airdropped since last absorption, then distribute fees and update position.
      *
-     * @param _setToken                 Address of SetToken
+     * @param _jasperVault                 Address of JasperVault
      * @param _token                    Address of airdropped token
      */
-    function _handleAirdropPosition(ISetToken _setToken, IERC20 _token) internal {
-        uint256 preFeeTokenBalance = _token.balanceOf(address(_setToken));
-        uint256 amountAirdropped = preFeeTokenBalance.sub(_setToken.getDefaultTrackedBalance(address(_token)));
+    function _handleAirdropPosition(IJasperVault _jasperVault, IERC20 _token) internal {
+        uint256 preFeeTokenBalance = _token.balanceOf(address(_jasperVault));
+        uint256 amountAirdropped = preFeeTokenBalance.sub(_jasperVault.getDefaultTrackedBalance(address(_token)));
 
         if (amountAirdropped > 0) {
-            (uint256 managerTake, uint256 protocolTake, uint256 totalFees) = _handleFees(_setToken, _token, amountAirdropped);
+            (uint256 managerTake, uint256 protocolTake, uint256 totalFees) = _handleFees(_jasperVault, _token, amountAirdropped);
 
-            uint256 newUnit = _getPostAirdropUnit(_setToken, preFeeTokenBalance, totalFees);
+            uint256 newUnit = _getPostAirdropUnit(_jasperVault, preFeeTokenBalance, totalFees);
 
-            _setToken.editDefaultPosition(address(_token), newUnit);
+            _jasperVault.editDefaultPosition(address(_token), newUnit);
 
-            emit ComponentAbsorbed(_setToken, _token, amountAirdropped, managerTake, protocolTake);
+            emit ComponentAbsorbed(_jasperVault, _token, amountAirdropped, managerTake, protocolTake);
         }
     }
 
     /**
      * Calculate fee total and distribute between feeRecipient defined on module and the protocol feeRecipient.
      *
-     * @param _setToken                 Address of SetToken
+     * @param _jasperVault                 Address of JasperVault
      * @param _component                Address of airdropped component
-     * @param _amountAirdropped         Amount of tokens airdropped to the SetToken
+     * @param _amountAirdropped         Amount of tokens airdropped to the JasperVault
      * @return netManagerTake           Amount of airdropped tokens set aside for manager fees net of protocol fees
      * @return protocolTake             Amount of airdropped tokens set aside for protocol fees (taken from manager fees)
      * @return totalFees                Total fees paid
      */
     function _handleFees(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IERC20 _component,
         uint256 _amountAirdropped
     )
         internal
         returns (uint256 netManagerTake, uint256 protocolTake, uint256 totalFees)
     {
-        uint256 airdropFee = airdropSettings[_setToken].airdropFee;
+        uint256 airdropFee = airdropSettings[_jasperVault].airdropFee;
 
         if (airdropFee > 0) {
             totalFees = _amountAirdropped.preciseMul(airdropFee);
@@ -342,9 +342,9 @@ contract AirdropModule is ModuleBase, ReentrancyGuard {
             protocolTake = getModuleFee(AIRDROP_MODULE_PROTOCOL_FEE_INDEX, totalFees);
             netManagerTake = totalFees.sub(protocolTake);
 
-            _setToken.strictInvokeTransfer(address(_component), airdropSettings[_setToken].feeRecipient, netManagerTake);
+            _jasperVault.strictInvokeTransfer(address(_component), airdropSettings[_jasperVault].feeRecipient, netManagerTake);
 
-            payProtocolFeeFromSetToken(_setToken, address(_component), protocolTake);
+            payProtocolFeeFromSetToken(_jasperVault, address(_component), protocolTake);
 
             return (netManagerTake, protocolTake, totalFees);
         } else {
@@ -356,7 +356,7 @@ contract AirdropModule is ModuleBase, ReentrancyGuard {
      * Retrieve new unit, which is the current balance less fees paid divided by total supply
      */
     function _getPostAirdropUnit(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _totalComponentBalance,
         uint256 _totalFeesPaid
     )
@@ -364,14 +364,14 @@ contract AirdropModule is ModuleBase, ReentrancyGuard {
         view
         returns(uint256)
     {
-        uint256 totalSupply = _setToken.totalSupply();
+        uint256 totalSupply = _jasperVault.totalSupply();
         return totalSupply.getDefaultPositionUnit(_totalComponentBalance.sub(_totalFeesPaid));
     }
 
     /**
      * If absorption is confined to the manager, manager must be caller
      */
-    function _isValidCaller(ISetToken _setToken) internal view returns(bool) {
-        return airdropSettings[_setToken].anyoneAbsorb || isSetManager(_setToken, msg.sender);
+    function _isValidCaller(IJasperVault _jasperVault) internal view returns(bool) {
+        return airdropSettings[_jasperVault].anyoneAbsorb || isSetManager(_jasperVault, msg.sender);
     }
 }

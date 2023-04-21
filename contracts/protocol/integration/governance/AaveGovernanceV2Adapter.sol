@@ -132,7 +132,7 @@ contract AaveGovernanceV2Adapter {
     /**
      * Reverts as AAVE currently does not have a register mechanism in governance
      */
-    function getRegisterCalldata(address /* _setToken */) external pure returns (address, uint256, bytes memory) {
+    function getRegisterCalldata(address /* _jasperVault */) external pure returns (address, uint256, bytes memory) {
         revert("No register available in AAVE governance");
     }
 

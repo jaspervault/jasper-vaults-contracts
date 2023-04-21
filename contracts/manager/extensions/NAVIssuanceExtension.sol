@@ -22,7 +22,7 @@ pragma experimental "ABIEncoderV2";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {SafeMath} from "@openzeppelin/contracts/math/SafeMath.sol";
 
-import {ISetToken} from "@setprotocol/set-protocol-v2/contracts/interfaces/ISetToken.sol";
+import { IJasperVault } from "../../interfaces/IJasperVault.sol";
 import {INAVIssuanceModule} from "../../interfaces/INAVIssuanceModule.sol";
 import {INAVIssuanceHook} from "../../interfaces/INAVIssuanceHook.sol";
 
@@ -52,12 +52,12 @@ contract NAVIssuanceExtension is BaseGlobalExtension {
     /* ============ Events ============ */
 
     event IssuanceExtensionInitialized(
-        address indexed _setToken,
+        address indexed _jasperVault,
         address indexed _delegatedManager
     );
 
     event FeesDistributed(
-        address _setToken,
+        address _jasperVault,
         address indexed _ownerFeeRecipient,
         address indexed _methodologist,
         uint256 _ownerTake,
@@ -73,10 +73,10 @@ contract NAVIssuanceExtension is BaseGlobalExtension {
         uint256[2] managerFees; // Manager fees. 0 index is issue and 1 index is redeem fee (0.01% = 1e14, 1% = 1e16)
         uint256 maxManagerFee; // Maximum fee manager is allowed to set for issue and redeem
         uint256 premiumPercentage; // Premium percentage (0.01% = 1e14, 1% = 1e16). This premium is a buffer around oracle
-        // prices paid by user to the SetToken, which prevents arbitrage and oracle front running
+        // prices paid by user to the JasperVault, which prevents arbitrage and oracle front running
         uint256 maxPremiumPercentage; // Maximum premium percentage manager is allowed to set (configured by manager)
-        uint256 minSetTokenSupply; // Minimum SetToken supply required for issuance and redemption
-        // to prevent dramatic inflationary changes to the SetToken's position multiplier
+        uint256 minSetTokenSupply; // Minimum JasperVault supply required for issuance and redemption
+        // to prevent dramatic inflationary changes to the JasperVault's position multiplier
     }
     // Instance of navIssuanceModule
     INAVIssuanceModule public immutable navIssuanceModule;
@@ -96,10 +96,10 @@ contract NAVIssuanceExtension is BaseGlobalExtension {
      * ANYONE CALLABLE: Distributes fees accrued to the DelegatedManager. Calculates fees for
      * owner and methodologist, and sends to owner fee recipient and methodologist respectively.
      */
-    function distributeFees(ISetToken _setToken) public {
-        IDelegatedManager delegatedManager = _manager(_setToken);
+    function distributeFees(IJasperVault _jasperVault) public {
+        IDelegatedManager delegatedManager = _manager(_jasperVault);
 
-        uint256 totalFees = _setToken.balanceOf(address(delegatedManager));
+        uint256 totalFees = _jasperVault.balanceOf(address(delegatedManager));
 
         address methodologist = delegatedManager.methodologist();
         address ownerFeeRecipient = delegatedManager.ownerFeeRecipient();
@@ -111,7 +111,7 @@ contract NAVIssuanceExtension is BaseGlobalExtension {
 
         if (ownerTake > 0) {
             delegatedManager.transferTokens(
-                address(_setToken),
+                address(_jasperVault),
                 ownerFeeRecipient,
                 ownerTake
             );
@@ -119,14 +119,14 @@ contract NAVIssuanceExtension is BaseGlobalExtension {
 
         if (methodologistTake > 0) {
             delegatedManager.transferTokens(
-                address(_setToken),
+                address(_jasperVault),
                 methodologist,
                 methodologistTake
             );
         }
 
         emit FeesDistributed(
-            address(_setToken),
+            address(_jasperVault),
             ownerFeeRecipient,
             methodologist,
             ownerTake,
@@ -144,7 +144,7 @@ contract NAVIssuanceExtension is BaseGlobalExtension {
         );
 
         _initializeModule(
-            _delegatedManager.setToken(),
+            _delegatedManager.jasperVault(),
             _delegatedManager,
             _navIssuanceSettings
         );
@@ -164,12 +164,12 @@ contract NAVIssuanceExtension is BaseGlobalExtension {
             "Extension must be pending"
         );
 
-        ISetToken setToken = _delegatedManager.setToken();
+        IJasperVault jasperVault = _delegatedManager.jasperVault();
 
-        _initializeExtension(setToken, _delegatedManager);
+        _initializeExtension(jasperVault, _delegatedManager);
 
         emit IssuanceExtensionInitialized(
-            address(setToken),
+            address(jasperVault),
             address(_delegatedManager)
         );
     }
@@ -183,88 +183,88 @@ contract NAVIssuanceExtension is BaseGlobalExtension {
             "Extension must be pending"
         );
 
-        ISetToken setToken = _delegatedManager.setToken();
+        IJasperVault jasperVault = _delegatedManager.jasperVault();
 
-        _initializeExtension(setToken, _delegatedManager);
-        _initializeModule(setToken, _delegatedManager, _navIssuanceSettings);
+        _initializeExtension(jasperVault, _delegatedManager);
+        _initializeModule(jasperVault, _delegatedManager, _navIssuanceSettings);
 
         emit IssuanceExtensionInitialized(
-            address(setToken),
+            address(jasperVault),
             address(_delegatedManager)
         );
     }
 
     /**
-     * ONLY MANAGER: Remove an existing SetToken and DelegatedManager tracked by the IssuanceExtension
+     * ONLY MANAGER: Remove an existing JasperVault and DelegatedManager tracked by the IssuanceExtension
      */
     function removeExtension() external override {
         IDelegatedManager delegatedManager = IDelegatedManager(msg.sender);
-        ISetToken setToken = delegatedManager.setToken();
+        IJasperVault jasperVault = delegatedManager.jasperVault();
 
-        _removeExtension(setToken, delegatedManager);
+        _removeExtension(jasperVault, delegatedManager);
     }
 
-    function addReserveAsset(ISetToken _setToken, uint256 _reserveAsset)
+    function addReserveAsset(IJasperVault _jasperVault, uint256 _reserveAsset)
         external
-        onlyOwner(_setToken)
+        onlyOwner(_jasperVault)
     {
         bytes memory callData = abi.encodeWithSelector(
             INAVIssuanceModule.addReserveAsset.selector,
-            _setToken,
+            _jasperVault,
             _reserveAsset
         );
         _invokeManager(
-            _manager(_setToken),
+            _manager(_jasperVault),
             address(navIssuanceModule),
             callData
         );
     }
 
-    function removeReserveAsset(ISetToken _setToken, uint256 _reserveAsset)
+    function removeReserveAsset(IJasperVault _jasperVault, uint256 _reserveAsset)
         external
-        onlyOwner(_setToken)
+        onlyOwner(_jasperVault)
     {
         bytes memory callData = abi.encodeWithSelector(
             INAVIssuanceModule.removeReserveAsset.selector,
-            _setToken,
+            _jasperVault,
             _reserveAsset
         );
         _invokeManager(
-            _manager(_setToken),
+            _manager(_jasperVault),
             address(navIssuanceModule),
             callData
         );
     }
 
-    function editPremium(ISetToken _setToken, uint256 _premiumPercentage)
+    function editPremium(IJasperVault _jasperVault, uint256 _premiumPercentage)
         external
-        onlyOwner(_setToken)
+        onlyOwner(_jasperVault)
     {
         bytes memory callData = abi.encodeWithSelector(
             INAVIssuanceModule.editPremium.selector,
-            _setToken,
+            _jasperVault,
             _premiumPercentage
         );
         _invokeManager(
-            _manager(_setToken),
+            _manager(_jasperVault),
             address(navIssuanceModule),
             callData
         );
     }
 
     function editManagerFee(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _managerFeePercentage,
         uint256 _managerFeeIndex
-    ) external onlyOwner(_setToken) {
+    ) external onlyOwner(_jasperVault) {
         bytes memory callData = abi.encodeWithSelector(
             INAVIssuanceModule.editManagerFee.selector,
-            _setToken,
+            _jasperVault,
             _managerFeePercentage,
             _managerFeeIndex
         );
         _invokeManager(
-            _manager(_setToken),
+            _manager(_jasperVault),
             address(navIssuanceModule),
             callData
         );
@@ -273,20 +273,20 @@ contract NAVIssuanceExtension is BaseGlobalExtension {
     /**
      * ONLY OWNER: Updates fee recipient on navIssuanceModule
      *
-     * @param _setToken         Instance of the SetToken to update fee recipient for
+     * @param _jasperVault         Instance of the JasperVault to update fee recipient for
      * @param _newFeeRecipient  Address of new fee recipient. This should be the address of the DelegatedManager
      */
-    function editFeeRecipient(ISetToken _setToken, address _newFeeRecipient)
+    function editFeeRecipient(IJasperVault _jasperVault, address _newFeeRecipient)
         external
-        onlyOwner(_setToken)
+        onlyOwner(_jasperVault)
     {
         bytes memory callData = abi.encodeWithSelector(
             INAVIssuanceModule.editFeeRecipient.selector,
-            _setToken,
+            _jasperVault,
             _newFeeRecipient
         );
         _invokeManager(
-            _manager(_setToken),
+            _manager(_jasperVault),
             address(navIssuanceModule),
             callData
         );
@@ -295,13 +295,13 @@ contract NAVIssuanceExtension is BaseGlobalExtension {
     /* ============ Internal Functions ============ */
 
     function _initializeModule(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IDelegatedManager _delegatedManager,
         NAVIssuanceSettings memory _navIssuanceSettings
     ) internal {
         bytes memory callData = abi.encodeWithSelector(
             INAVIssuanceModule.initialize.selector,
-            _setToken,
+            _jasperVault,
             _navIssuanceSettings
         );
         _invokeManager(_delegatedManager, address(navIssuanceModule), callData);

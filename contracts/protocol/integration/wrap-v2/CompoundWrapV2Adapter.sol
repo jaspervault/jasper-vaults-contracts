@@ -55,12 +55,14 @@ contract CompoundWrapV2Adapter {
         address _wrappedToken,
         uint256 _underlyingUnits,
         address /* _to */,
-        bytes memory /* _wrapData */
+        bytes memory  _wrapData 
     )
         external
         pure
         returns (address, uint256, bytes memory)
     {
+        (uint256 coinType)=abi.decode(_wrapData,(uint256));
+        require(coinType==2,"wrappedToken is not cToken");
         uint256 value;
         bytes memory callData;
         if (_underlyingToken == ETH_TOKEN_ADDRESS) {
@@ -89,12 +91,14 @@ contract CompoundWrapV2Adapter {
         address _wrappedToken,
         uint256 _wrappedTokenUnits,
         address /* _to */,
-        bytes memory /* _unwrapData */
+        bytes memory  _unwrapData 
     )
         external
         pure
         returns (address, uint256, bytes memory)
     {
+        (uint256 coinType)=abi.decode(_unwrapData,(uint256));
+        require(coinType==2,"wrappedToken is not cToken");
         ( , , bytes memory callData) = ICErc20(_wrappedToken).getRedeemCalldata(_wrappedTokenUnits);
         return (_wrappedToken, 0, callData);
     }

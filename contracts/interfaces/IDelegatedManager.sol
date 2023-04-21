@@ -19,7 +19,7 @@
 pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
 
-import {ISetToken} from "./ISetToken.sol";
+import {IJasperVault} from "./IJasperVault.sol";
 
 interface IDelegatedManager {
     function interactManager(address _module, bytes calldata _encoded) external;
@@ -31,7 +31,6 @@ interface IDelegatedManager {
         address _destination,
         uint256 _amount
     ) external;
-   
 
     function updateOwnerFeeSplit(uint256 _newFeeSplit) external;
 
@@ -41,7 +40,7 @@ interface IDelegatedManager {
 
     function transferOwnership(address _owner) external;
 
-    function setToken() external view returns (ISetToken);
+    function jasperVault() external view returns (IJasperVault);
 
     function owner() external view returns (address);
 
@@ -53,15 +52,15 @@ interface IDelegatedManager {
 
     function isAllowedAsset(address _asset) external view returns (bool);
 
-    function isPendingExtension(address _extension)
-        external
-        view
-        returns (bool);
+    function isAllowedAdapter(address _adapter) external view returns (bool);
 
-    function isInitializedExtension(address _extension)
-        external
-        view
-        returns (bool);
+    function isPendingExtension(
+        address _extension
+    ) external view returns (bool);
+
+    function isInitializedExtension(
+        address _extension
+    ) external view returns (bool);
 
     function getExtensions() external view returns (address[] memory);
 
@@ -72,6 +71,10 @@ interface IDelegatedManager {
     function ownerFeeRecipient() external view returns (address);
 
     function ownerFeeSplit() external view returns (uint256);
-    function setSubscribeStatus(bool) external;
-    function subscribeStatus() external view returns (bool);
+
+    function setSubscribeStatus(uint256) external;
+
+    function subscribeStatus() external view returns (uint256);
+
+    function getAdapters() external view returns (address[] memory);
 }

@@ -30,7 +30,7 @@ import { IDebtIssuanceModule } from "../../../interfaces/IDebtIssuanceModule.sol
 import { IModuleIssuanceHook } from "../../../interfaces/IModuleIssuanceHook.sol";
 import { IWrappedfCash, IWrappedfCashComplete } from "../../../interfaces/IWrappedFCash.sol";
 import { IWrappedfCashFactory } from "../../../interfaces/IWrappedFCashFactory.sol";
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
 import { ModuleBase } from "../../lib/ModuleBase.sol";
 
 
@@ -59,42 +59,42 @@ contract NotionalTradeModule is ModuleBase, ReentrancyGuard, Ownable, IModuleIss
 
     /**
      * @dev Emitted on updateAllowedSetToken()
-     * @param _setToken SetToken being whose allowance to initialize this module is being updated
+     * @param _jasperVault JasperVault being whose allowance to initialize this module is being updated
      * @param _added    true if added false if removed
      */
     event SetTokenStatusUpdated(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         bool indexed _added
     );
 
     /**
      * @dev Emitted when minting new FCash
-     * @param _setToken         SetToken on whose behalf fcash was minted
+     * @param _jasperVault         JasperVault on whose behalf fcash was minted
      * @param _fCashPosition    Address of wrappedFCash token
      * @param _sendToken        Address of send token used to pay for minting
      * @param _fCashAmount      Amount of fCash minted
      * @param _sentAmount       Amount of sendToken spent
      */
     event FCashMinted(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         IWrappedfCashComplete indexed _fCashPosition,
-        IERC20 indexed _sendToken, 
+        IERC20 indexed _sendToken,
         uint256 _fCashAmount,
         uint256 _sentAmount
     );
 
     /**
      * @dev Emitted when redeeming new FCash
-     * @param _setToken         SetToken on whose behalf fcash was redeemed
+     * @param _jasperVault         JasperVault on whose behalf fcash was redeemed
      * @param _fCashPosition    Address of wrappedFCash token
      * @param _receiveToken     Address of receive token used to pay for redeeming
      * @param _fCashAmount      Amount of fCash redeemed / burned
      * @param _receivedAmount   Amount of receiveToken received
      */
     event FCashRedeemed(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         IWrappedfCashComplete indexed _fCashPosition,
-        IERC20 indexed _receiveToken, 
+        IERC20 indexed _receiveToken,
         uint256 _fCashAmount,
         uint256 _receivedAmount
     );
@@ -109,12 +109,12 @@ contract NotionalTradeModule is ModuleBase, ReentrancyGuard, Ownable, IModuleIss
     /* ============ State Variables ============ */
 
     // Mapping for a set token, wether or not to redeem to underlying upon reaching maturity
-    mapping(ISetToken => bool) public redeemToUnderlying;
+    mapping(IJasperVault => bool) public redeemToUnderlying;
 
-    // Mapping of SetToken to boolean indicating if SetToken is on allow list. Updateable by governance
-    mapping(ISetToken => bool) public allowedSetTokens;
+    // Mapping of JasperVault to boolean indicating if JasperVault is on allow list. Updateable by governance
+    mapping(IJasperVault => bool) public allowedSetTokens;
 
-    // Boolean that returns if any SetToken can initialize this module. If false, then subject to allow list. Updateable by governance.
+    // Boolean that returns if any JasperVault can initialize this module. If false, then subject to allow list. Updateable by governance.
     bool public anySetAllowed;
 
     // Factory that is used to deploy and check fCash wrapper contracts
@@ -146,15 +146,15 @@ contract NotionalTradeModule is ModuleBase, ReentrancyGuard, Ownable, IModuleIss
 
     /**
      * @dev MANAGER ONLY: Trades into a new fCash position.
-     * @param _setToken                   Instance of the SetToken
-     * @param _currencyId                 CurrencyId of the fCash token as defined by the notional protocol. 
+     * @param _jasperVault                   Instance of the JasperVault
+     * @param _currencyId                 CurrencyId of the fCash token as defined by the notional protocol.
      * @param _maturity                   Maturity of the fCash token as defined by the notional protocol.
-     * @param _mintAmount                 Amount of fCash token to mint 
+     * @param _mintAmount                 Amount of fCash token to mint
      * @param _sendToken                  Token to mint from, must be either the underlying or the asset token.
      * @param _maxSendAmount              Maximum amount to spend
      */
     function mintFCashPosition(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint16 _currencyId,
         uint40 _maturity,
         uint256 _mintAmount,
@@ -163,27 +163,27 @@ contract NotionalTradeModule is ModuleBase, ReentrancyGuard, Ownable, IModuleIss
     )
         external
         nonReentrant
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
         returns(uint256)
     {
-        require(_setToken.isComponent(address(_sendToken)), "Send token must be an index component");
+        require(_jasperVault.isComponent(address(_sendToken)), "Send token must be an index component");
 
         IWrappedfCashComplete wrappedfCash = _deployWrappedfCash(_currencyId, _maturity);
-        return _mintFCashPosition(_setToken, wrappedfCash, IERC20(_sendToken), _mintAmount, _maxSendAmount);
+        return _mintFCashPosition(_jasperVault, wrappedfCash, IERC20(_sendToken), _mintAmount, _maxSendAmount);
     }
 
     /**
      * @dev MANAGER ONLY: Trades out of an existing fCash position.
      * Will revert if no wrapper for the selected fCash token was deployed
-     * @param _setToken                   Instance of the SetToken
-     * @param _currencyId                 CurrencyId of the fCash token as defined by the notional protocol. 
+     * @param _jasperVault                   Instance of the JasperVault
+     * @param _currencyId                 CurrencyId of the fCash token as defined by the notional protocol.
      * @param _maturity                   Maturity of the fCash token as defined by the notional protocol.
-     * @param _redeemAmount               Amount of fCash token to redeem 
+     * @param _redeemAmount               Amount of fCash token to redeem
      * @param _receiveToken               Token to redeem into, must be either asset or underlying token of the fCash token
      * @param _minReceiveAmount           Minimum amount of receive token to receive
      */
     function redeemFCashPosition(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint16 _currencyId,
         uint40 _maturity,
         uint256 _redeemAmount,
@@ -192,99 +192,99 @@ contract NotionalTradeModule is ModuleBase, ReentrancyGuard, Ownable, IModuleIss
     )
         external
         nonReentrant
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
         returns(uint256)
     {
         IWrappedfCashComplete wrappedfCash = _getWrappedfCash(_currencyId, _maturity);
-        require(_setToken.isComponent(address(wrappedfCash)), "FCash to redeem must be an index component");
+        require(_jasperVault.isComponent(address(wrappedfCash)), "FCash to redeem must be an index component");
 
-        return _redeemFCashPosition(_setToken, wrappedfCash, IERC20(_receiveToken), _redeemAmount, _minReceiveAmount);
+        return _redeemFCashPosition(_jasperVault, wrappedfCash, IERC20(_receiveToken), _redeemAmount, _minReceiveAmount);
     }
 
     /**
-     * @dev CALLABLE BY ANYBODY: Redeem all matured fCash positions of given setToken
+     * @dev CALLABLE BY ANYBODY: Redeem all matured fCash positions of given jasperVault
      * Redeem all fCash positions that have reached maturity for their asset token (cToken)
      * This will update the set tokens components and positions (removes matured fCash positions and creates / increases positions of the asset token).
-     * @param _setToken                     Instance of the SetToken
+     * @param _jasperVault                     Instance of the JasperVault
      */
-    function redeemMaturedPositions(ISetToken _setToken) public nonReentrant onlyValidAndInitializedSet(_setToken) {
-        _redeemMaturedPositions(_setToken);
+    function redeemMaturedPositions(IJasperVault _jasperVault) public nonReentrant onlyValidAndInitializedSet(_jasperVault) {
+        _redeemMaturedPositions(_jasperVault);
     }
 
     /**
-     * @dev MANGER ONLY: Initialize given SetToken with initial list of registered fCash positions
+     * @dev MANGER ONLY: Initialize given JasperVault with initial list of registered fCash positions
      * Redeem all fCash positions that have reached maturity for their asset token (cToken)
-     * @param _setToken                     Instance of the SetToken
+     * @param _jasperVault                     Instance of the JasperVault
      */
     function initialize(
-        ISetToken _setToken
+        IJasperVault _jasperVault
     )
         external
-        onlySetManager(_setToken, msg.sender)
-        onlyValidAndPendingSet(_setToken)
+        onlySetManager(_jasperVault, msg.sender)
+        onlyValidAndPendingSet(_jasperVault)
     {
         if (!anySetAllowed) {
-            require(allowedSetTokens[_setToken], "Not allowed SetToken");
+            require(allowedSetTokens[_jasperVault], "Not allowed JasperVault");
         }
 
         // Initialize module before trying register
-        _setToken.initializeModule();
+        _jasperVault.initializeModule();
 
         // Get debt issuance module registered to this module and require that it is initialized
-        require(_setToken.isInitializedModule(getAndValidateAdapter(DEFAULT_ISSUANCE_MODULE_NAME)), "Issuance not initialized");
+        require(_jasperVault.isInitializedModule(getAndValidateAdapter(DEFAULT_ISSUANCE_MODULE_NAME)), "Issuance not initialized");
 
         // Try if register exists on any of the modules including the debt issuance module
-        address[] memory modules = _setToken.getModules();
+        address[] memory modules = _jasperVault.getModules();
         for(uint256 i = 0; i < modules.length; i++) {
-            try IDebtIssuanceModule(modules[i]).registerToIssuanceModule(_setToken) {} catch {}
+            try IDebtIssuanceModule(modules[i]).registerToIssuanceModule(_jasperVault) {} catch {}
         }
     }
 
     /**
-     * @dev MANAGER ONLY: Removes this module from the SetToken, via call by the SetToken. Redeems any matured positions
+     * @dev MANAGER ONLY: Removes this module from the JasperVault, via call by the JasperVault. Redeems any matured positions
      */
-    function removeModule() external override onlyValidAndInitializedSet(ISetToken(msg.sender)) {
-        ISetToken setToken = ISetToken(msg.sender);
+    function removeModule() external override onlyValidAndInitializedSet(IJasperVault(msg.sender)) {
+        IJasperVault jasperVault = IJasperVault(msg.sender);
 
         // Redeem matured positions prior to any removal action
-        _redeemMaturedPositions(setToken);
+        _redeemMaturedPositions(jasperVault);
 
         // Try if unregister exists on any of the modules
-        address[] memory modules = setToken.getModules();
+        address[] memory modules = jasperVault.getModules();
         for(uint256 i = 0; i < modules.length; i++) {
             if(modules[i].isContract()){
-                try IDebtIssuanceModule(modules[i]).unregisterFromIssuanceModule(setToken) {} catch {}
+                try IDebtIssuanceModule(modules[i]).unregisterFromIssuanceModule(jasperVault) {} catch {}
             }
         }
     }
 
     /**
-     * @dev MANAGER ONLY: Add registration of this module on the debt issuance module for the SetToken.
-     * Note: if the debt issuance module is not added to SetToken before this module is initialized, then this function
+     * @dev MANAGER ONLY: Add registration of this module on the debt issuance module for the JasperVault.
+     * Note: if the debt issuance module is not added to JasperVault before this module is initialized, then this function
      * needs to be called if the debt issuance module is later added and initialized to prevent state inconsistencies
-     * @param _setToken             Instance of the SetToken
+     * @param _jasperVault             Instance of the JasperVault
      * @param _debtIssuanceModule   Debt issuance module address to register
      */
-    function registerToModule(ISetToken _setToken, IDebtIssuanceModule _debtIssuanceModule) external onlyManagerAndValidSet(_setToken) {
-        require(_setToken.isInitializedModule(address(_debtIssuanceModule)), "Issuance not initialized");
+    function registerToModule(IJasperVault _jasperVault, IDebtIssuanceModule _debtIssuanceModule) external onlyManagerAndValidSet(_jasperVault) {
+        require(_jasperVault.isInitializedModule(address(_debtIssuanceModule)), "Issuance not initialized");
 
-        _debtIssuanceModule.registerToIssuanceModule(_setToken);
+        _debtIssuanceModule.registerToIssuanceModule(_jasperVault);
     }
 
     /**
-     * @dev GOVERNANCE ONLY: Enable/disable ability of a SetToken to initialize this module. Only callable by governance.
-     * @param _setToken             Instance of the SetToken
-     * @param _status               Bool indicating if _setToken is allowed to initialize this module
+     * @dev GOVERNANCE ONLY: Enable/disable ability of a JasperVault to initialize this module. Only callable by governance.
+     * @param _jasperVault             Instance of the JasperVault
+     * @param _status               Bool indicating if _jasperVault is allowed to initialize this module
      */
-    function updateAllowedSetToken(ISetToken _setToken, bool _status) external onlyOwner {
-        require(controller.isSet(address(_setToken)) || allowedSetTokens[_setToken], "Invalid SetToken");
-        allowedSetTokens[_setToken] = _status;
-        emit SetTokenStatusUpdated(_setToken, _status);
+    function updateAllowedSetToken(IJasperVault _jasperVault, bool _status) external onlyOwner {
+        require(controller.isSet(address(_jasperVault)) || allowedSetTokens[_jasperVault], "Invalid JasperVault");
+        allowedSetTokens[_jasperVault] = _status;
+        emit SetTokenStatusUpdated(_jasperVault, _status);
     }
 
     /**
-     * @dev GOVERNANCE ONLY: Toggle whether ANY SetToken is allowed to initialize this module. Only callable by governance.
-     * @param _anySetAllowed             Bool indicating if ANY SetToken is allowed to initialize this module
+     * @dev GOVERNANCE ONLY: Toggle whether ANY JasperVault is allowed to initialize this module. Only callable by governance.
+     * @param _anySetAllowed             Bool indicating if ANY JasperVault is allowed to initialize this module
      */
     function updateAnySetAllowed(bool _anySetAllowed) external onlyOwner {
         anySetAllowed = _anySetAllowed;
@@ -292,55 +292,55 @@ contract NotionalTradeModule is ModuleBase, ReentrancyGuard, Ownable, IModuleIss
     }
 
     function setRedeemToUnderlying(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         bool _toUnderlying
     )
     external
-    onlyManagerAndValidSet(_setToken)
+    onlyManagerAndValidSet(_jasperVault)
     {
-        redeemToUnderlying[_setToken] = _toUnderlying;
+        redeemToUnderlying[_jasperVault] = _toUnderlying;
     }
 
 
     /**
-     * @dev Hook called once before setToken issuance
+     * @dev Hook called once before jasperVault issuance
      * @dev Ensures that no matured fCash positions are in the set when it is issued
      */
-    function moduleIssueHook(ISetToken _setToken, uint256 /* _setTokenAmount */) external override onlyModule(_setToken) {
-        _redeemMaturedPositions(_setToken);
+    function moduleIssueHook(IJasperVault _jasperVault, uint256 /* _setTokenAmount */) external override onlyModule(_jasperVault) {
+        _redeemMaturedPositions(_jasperVault);
     }
 
     /**
-     * @dev Hook called once before setToken redemption
+     * @dev Hook called once before jasperVault redemption
      * @dev Ensures that no matured fCash positions are in the set when it is redeemed
      */
-    function moduleRedeemHook(ISetToken _setToken, uint256 /* _setTokenAmount */) external override onlyModule(_setToken) {
-        _redeemMaturedPositions(_setToken);
+    function moduleRedeemHook(IJasperVault _jasperVault, uint256 /* _setTokenAmount */) external override onlyModule(_jasperVault) {
+        _redeemMaturedPositions(_jasperVault);
     }
 
 
     /**
-     * @dev Hook called once for each component upon setToken issuance
+     * @dev Hook called once for each component upon jasperVault issuance
      * @dev Empty method added to satisfy IModuleIssuanceHook interface
      */
     function componentIssueHook(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _setTokenAmount,
         IERC20 _component,
         bool _isEquity
-    ) external override onlyModule(_setToken) {
+    ) external override onlyModule(_jasperVault) {
     }
 
     /**
-     * @dev Hook called once for each component upon setToken redemption
+     * @dev Hook called once for each component upon jasperVault redemption
      * @dev Empty method added to satisfy IModuleIssuanceHook interface
      */
     function componentRedeemHook(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _setTokenAmount,
         IERC20 _component,
         bool _isEquity
-    ) external override onlyModule(_setToken) {
+    ) external override onlyModule(_jasperVault) {
     }
 
 
@@ -350,14 +350,14 @@ contract NotionalTradeModule is ModuleBase, ReentrancyGuard, Ownable, IModuleIss
 
     /**
      * @dev Get array of registered fCash positions
-     * @param _setToken             Instance of the SetToken
+     * @param _jasperVault             Instance of the JasperVault
      */
-    function getFCashPositions(ISetToken _setToken)
+    function getFCashPositions(IJasperVault _jasperVault)
     external
     view
     returns(address[] memory positions)
     {
-        return _getFCashPositions(_setToken);
+        return _getFCashPositions(_jasperVault);
     }
 
     /* ============ Internal Functions ============ */
@@ -369,7 +369,7 @@ contract NotionalTradeModule is ModuleBase, ReentrancyGuard, Ownable, IModuleIss
         address wrappedfCashAddress = wrappedfCashFactory.deployWrapper(_currencyId, _maturity);
         return IWrappedfCashComplete(wrappedfCashAddress);
     }
-     
+
     /**
      * @dev Return wrapper address and revert if it isn't deployed
      */
@@ -380,15 +380,15 @@ contract NotionalTradeModule is ModuleBase, ReentrancyGuard, Ownable, IModuleIss
     }
 
     /**
-     * @dev Redeem all matured fCash positions for the given SetToken
+     * @dev Redeem all matured fCash positions for the given JasperVault
      */
-    function _redeemMaturedPositions(ISetToken _setToken)
+    function _redeemMaturedPositions(IJasperVault _jasperVault)
     internal
     {
-        ISetToken.Position[] memory positions = _setToken.getPositions();
+        IJasperVault.Position[] memory positions = _jasperVault.getPositions();
         uint positionsLength = positions.length;
 
-        bool toUnderlying = redeemToUnderlying[_setToken];
+        bool toUnderlying = redeemToUnderlying[_jasperVault];
 
         for(uint256 i = 0; i < positionsLength; i++) {
             // Check that the given position is an equity position
@@ -401,8 +401,8 @@ contract NotionalTradeModule is ModuleBase, ReentrancyGuard, Ownable, IModuleIss
                         if(address(receiveToken) == ETH_ADDRESS) {
                             receiveToken = weth;
                         }
-                        uint256 fCashBalance = fCashPosition.balanceOf(address(_setToken));
-                        _redeemFCashPosition(_setToken, fCashPosition, receiveToken, fCashBalance, 0);
+                        uint256 fCashBalance = fCashPosition.balanceOf(address(_jasperVault));
+                        _redeemFCashPosition(_jasperVault, fCashPosition, receiveToken, fCashBalance, 0);
                     }
                 }
             }
@@ -416,7 +416,7 @@ contract NotionalTradeModule is ModuleBase, ReentrancyGuard, Ownable, IModuleIss
      * @dev Alo adjust the components / position of the set token accordingly
      */
     function _mintFCashPosition(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IWrappedfCashComplete _fCashPosition,
         IERC20 _sendToken,
         uint256 _fCashAmount,
@@ -430,16 +430,16 @@ contract NotionalTradeModule is ModuleBase, ReentrancyGuard, Ownable, IModuleIss
         bool fromUnderlying = _isUnderlying(_fCashPosition, _sendToken);
 
 
-        _approve(_setToken, _fCashPosition, _sendToken, _maxSendAmount);
+        _approve(_jasperVault, _fCashPosition, _sendToken, _maxSendAmount);
 
-        uint256 preTradeSendTokenBalance = _sendToken.balanceOf(address(_setToken));
-        uint256 preTradeReceiveTokenBalance = _fCashPosition.balanceOf(address(_setToken));
+        uint256 preTradeSendTokenBalance = _sendToken.balanceOf(address(_jasperVault));
+        uint256 preTradeReceiveTokenBalance = _fCashPosition.balanceOf(address(_jasperVault));
 
-        _mint(_setToken, _fCashPosition, _maxSendAmount, _fCashAmount, fromUnderlying);
+        _mint(_jasperVault, _fCashPosition, _maxSendAmount, _fCashAmount, fromUnderlying);
 
 
         (sentAmount,) = _updateSetTokenPositions(
-            _setToken,
+            _jasperVault,
             address(_sendToken),
             preTradeSendTokenBalance,
             address(_fCashPosition),
@@ -447,7 +447,7 @@ contract NotionalTradeModule is ModuleBase, ReentrancyGuard, Ownable, IModuleIss
         );
 
         require(sentAmount <= _maxSendAmount, "Overspent");
-        emit FCashMinted(_setToken, _fCashPosition, _sendToken, _fCashAmount, sentAmount);
+        emit FCashMinted(_jasperVault, _fCashPosition, _sendToken, _fCashAmount, sentAmount);
     }
 
     /**
@@ -455,7 +455,7 @@ contract NotionalTradeModule is ModuleBase, ReentrancyGuard, Ownable, IModuleIss
      * @dev Alo adjust the components / position of the set token accordingly
      */
     function _redeemFCashPosition(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IWrappedfCashComplete _fCashPosition,
         IERC20 _receiveToken,
         uint256 _fCashAmount,
@@ -467,14 +467,14 @@ contract NotionalTradeModule is ModuleBase, ReentrancyGuard, Ownable, IModuleIss
         if(_fCashAmount == 0) return 0;
 
         bool toUnderlying = _isUnderlying(_fCashPosition, _receiveToken);
-        uint256 preTradeReceiveTokenBalance = _receiveToken.balanceOf(address(_setToken));
-        uint256 preTradeSendTokenBalance = _fCashPosition.balanceOf(address(_setToken));
+        uint256 preTradeReceiveTokenBalance = _receiveToken.balanceOf(address(_jasperVault));
+        uint256 preTradeSendTokenBalance = _fCashPosition.balanceOf(address(_jasperVault));
 
-        _redeem(_setToken, _fCashPosition, _fCashAmount, toUnderlying);
+        _redeem(_jasperVault, _fCashPosition, _fCashAmount, toUnderlying);
 
 
         (, receivedAmount) = _updateSetTokenPositions(
-            _setToken,
+            _jasperVault,
             address(_fCashPosition),
             preTradeSendTokenBalance,
             address(_receiveToken),
@@ -483,32 +483,32 @@ contract NotionalTradeModule is ModuleBase, ReentrancyGuard, Ownable, IModuleIss
 
 
         require(receivedAmount >= _minReceiveAmount, "Not enough received amount");
-        emit FCashRedeemed(_setToken, _fCashPosition, _receiveToken, _fCashAmount, receivedAmount);
+        emit FCashRedeemed(_jasperVault, _fCashPosition, _receiveToken, _fCashAmount, receivedAmount);
 
     }
 
     /**
-     * @dev Approve the given wrappedFCash instance to spend the setToken's sendToken 
+     * @dev Approve the given wrappedFCash instance to spend the jasperVault's sendToken
      */
     function _approve(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IWrappedfCashComplete _fCashPosition,
         IERC20 _sendToken,
         uint256 _maxAssetAmount
     )
     internal
     {
-        if(IERC20(_sendToken).allowance(address(_setToken), address(_fCashPosition)) < _maxAssetAmount) {
+        if(IERC20(_sendToken).allowance(address(_jasperVault), address(_fCashPosition)) < _maxAssetAmount) {
             bytes memory approveCallData = abi.encodeWithSelector(_sendToken.approve.selector, address(_fCashPosition), _maxAssetAmount);
-            _setToken.invoke(address(_sendToken), 0, approveCallData);
+            _jasperVault.invoke(address(_sendToken), 0, approveCallData);
         }
     }
 
     /**
-     * @dev Invokes the wrappedFCash token's mint function from the setToken
+     * @dev Invokes the wrappedFCash token's mint function from the jasperVault
      */
     function _mint(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IWrappedfCashComplete _fCashPosition,
         uint256 _maxAssetAmount,
         uint256 _fCashAmount,
@@ -518,24 +518,24 @@ contract NotionalTradeModule is ModuleBase, ReentrancyGuard, Ownable, IModuleIss
     {
         uint32 minImpliedRate = 0;
 
-        bytes4 functionSelector = 
+        bytes4 functionSelector =
             _fromUnderlying ? _fCashPosition.mintViaUnderlying.selector : _fCashPosition.mintViaAsset.selector;
         bytes memory mintCallData = abi.encodeWithSelector(
             functionSelector,
             _maxAssetAmount,
             uint88(_fCashAmount),
-            address(_setToken),
+            address(_jasperVault),
             minImpliedRate,
             _fromUnderlying
         );
-        _setToken.invoke(address(_fCashPosition), 0, mintCallData);
+        _jasperVault.invoke(address(_fCashPosition), 0, mintCallData);
     }
 
     /**
-     * @dev Redeems the given amount of fCash token on behalf of the setToken
+     * @dev Redeems the given amount of fCash token on behalf of the jasperVault
      */
     function _redeem(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IWrappedfCashComplete _fCashPosition,
         uint256 _fCashAmount,
         bool _toUnderlying
@@ -549,10 +549,10 @@ contract NotionalTradeModule is ModuleBase, ReentrancyGuard, Ownable, IModuleIss
         bytes memory redeemCallData = abi.encodeWithSelector(
             functionSelector,
             _fCashAmount,
-            address(_setToken),
+            address(_jasperVault),
             maxImpliedRate
         );
-        _setToken.invoke(address(_fCashPosition), 0, redeemCallData);
+        _jasperVault.invoke(address(_fCashPosition), 0, redeemCallData);
     }
 
     /**
@@ -593,12 +593,12 @@ contract NotionalTradeModule is ModuleBase, ReentrancyGuard, Ownable, IModuleIss
     /**
      * @dev Returns an array with fcash position addresses for given set token
      */
-    function _getFCashPositions(ISetToken _setToken)
+    function _getFCashPositions(IJasperVault _jasperVault)
     internal
     view
     returns(address[] memory fCashPositions)
     {
-        ISetToken.Position[] memory positions = _setToken.getPositions();
+        IJasperVault.Position[] memory positions = _jasperVault.getPositions();
         uint positionsLength = positions.length;
         uint numFCashPositions;
 
@@ -652,22 +652,22 @@ contract NotionalTradeModule is ModuleBase, ReentrancyGuard, Ownable, IModuleIss
      * @dev WARNING: This function is largely copied from the trade module
      */
     function _updateSetTokenPositions(
-        ISetToken setToken,
+        IJasperVault jasperVault,
         address sendToken,
         uint256 preTradeSendTokenBalance,
         address receiveToken,
         uint256 preTradeReceiveTokenBalance
     ) internal returns (uint256, uint256) {
 
-        uint256 setTotalSupply = setToken.totalSupply();
+        uint256 setTotalSupply = jasperVault.totalSupply();
 
-        (uint256 currentSendTokenBalance,,) = setToken.calculateAndEditDefaultPosition(
+        (uint256 currentSendTokenBalance,,) = jasperVault.calculateAndEditDefaultPosition(
             sendToken,
             setTotalSupply,
             preTradeSendTokenBalance
         );
 
-        (uint256 currentReceiveTokenBalance,,) = setToken.calculateAndEditDefaultPosition(
+        (uint256 currentReceiveTokenBalance,,) = jasperVault.calculateAndEditDefaultPosition(
             receiveToken,
             setTotalSupply,
             preTradeReceiveTokenBalance

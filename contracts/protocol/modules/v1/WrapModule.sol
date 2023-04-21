@@ -27,7 +27,7 @@ import { SafeMath } from "@openzeppelin/contracts/math/SafeMath.sol";
 import { IController } from "../../../interfaces/IController.sol";
 import { IIntegrationRegistry } from "../../../interfaces/IIntegrationRegistry.sol";
 import { Invoke } from "../../lib/Invoke.sol";
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
 import { IWETH } from "../../../interfaces/external/IWETH.sol";
 import { IWrapAdapter } from "../../../interfaces/IWrapAdapter.sol";
 import { ModuleBase } from "../../lib/ModuleBase.sol";
@@ -50,14 +50,14 @@ contract WrapModule is ModuleBase, ReentrancyGuard {
     using Position for uint256;
     using SafeMath for uint256;
 
-    using Invoke for ISetToken;
-    using Position for ISetToken.Position;
-    using Position for ISetToken;
+    using Invoke for IJasperVault;
+    using Position for IJasperVault.Position;
+    using Position for IJasperVault;
 
     /* ============ Events ============ */
 
     event ComponentWrapped(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         address indexed _underlyingToken,
         address indexed _wrappedToken,
         uint256 _underlyingQuantity,
@@ -66,7 +66,7 @@ contract WrapModule is ModuleBase, ReentrancyGuard {
     );
 
     event ComponentUnwrapped(
-        ISetToken indexed _setToken,
+        IJasperVault indexed _jasperVault,
         address indexed _underlyingToken,
         address indexed _wrappedToken,
         uint256 _underlyingQuantity,
@@ -92,16 +92,16 @@ contract WrapModule is ModuleBase, ReentrancyGuard {
     /* ============ External Functions ============ */
 
     /**
-     * MANAGER-ONLY: Instructs the SetToken to wrap an underlying asset into a wrappedToken via a specified adapter.
+     * MANAGER-ONLY: Instructs the JasperVault to wrap an underlying asset into a wrappedToken via a specified adapter.
      *
-     * @param _setToken             Instance of the SetToken
+     * @param _jasperVault             Instance of the JasperVault
      * @param _underlyingToken      Address of the component to be wrapped
      * @param _wrappedToken         Address of the desired wrapped token
      * @param _underlyingUnits      Quantity of underlying units in Position units
      * @param _integrationName      Name of wrap module integration (mapping on integration registry)
      */
     function wrap(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _underlyingToken,
         address _wrappedToken,
         uint256 _underlyingUnits,
@@ -109,14 +109,14 @@ contract WrapModule is ModuleBase, ReentrancyGuard {
     )
         external
         nonReentrant
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
         (
             uint256 notionalUnderlyingWrapped,
             uint256 notionalWrapped
         ) = _validateWrapAndUpdate(
             _integrationName,
-            _setToken,
+            _jasperVault,
             _underlyingToken,
             _wrappedToken,
             _underlyingUnits,
@@ -124,7 +124,7 @@ contract WrapModule is ModuleBase, ReentrancyGuard {
         );
 
         emit ComponentWrapped(
-            _setToken,
+            _jasperVault,
             _underlyingToken,
             _wrappedToken,
             notionalUnderlyingWrapped,
@@ -134,31 +134,31 @@ contract WrapModule is ModuleBase, ReentrancyGuard {
     }
 
     /**
-     * MANAGER-ONLY: Instructs the SetToken to wrap Ether into a wrappedToken via a specified adapter. Since SetTokens
-     * only hold WETH, in order to support protocols that collateralize with Ether the SetToken's WETH must be unwrapped
+     * MANAGER-ONLY: Instructs the JasperVault to wrap Ether into a wrappedToken via a specified adapter. Since SetTokens
+     * only hold WETH, in order to support protocols that collateralize with Ether the JasperVault's WETH must be unwrapped
      * first before sending to the external protocol.
      *
-     * @param _setToken             Instance of the SetToken
+     * @param _jasperVault             Instance of the JasperVault
      * @param _wrappedToken         Address of the desired wrapped token
      * @param _underlyingUnits      Quantity of underlying units in Position units
      * @param _integrationName      Name of wrap module integration (mapping on integration registry)
      */
     function wrapWithEther(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _wrappedToken,
         uint256 _underlyingUnits,
         string calldata _integrationName
     )
         external
         nonReentrant
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
         (
             uint256 notionalUnderlyingWrapped,
             uint256 notionalWrapped
         ) = _validateWrapAndUpdate(
             _integrationName,
-            _setToken,
+            _jasperVault,
             address(weth),
             _wrappedToken,
             _underlyingUnits,
@@ -166,7 +166,7 @@ contract WrapModule is ModuleBase, ReentrancyGuard {
         );
 
         emit ComponentWrapped(
-            _setToken,
+            _jasperVault,
             address(weth),
             _wrappedToken,
             notionalUnderlyingWrapped,
@@ -176,16 +176,16 @@ contract WrapModule is ModuleBase, ReentrancyGuard {
     }
 
     /**
-     * MANAGER-ONLY: Instructs the SetToken to unwrap a wrapped asset into its underlying via a specified adapter.
+     * MANAGER-ONLY: Instructs the JasperVault to unwrap a wrapped asset into its underlying via a specified adapter.
      *
-     * @param _setToken             Instance of the SetToken
+     * @param _jasperVault             Instance of the JasperVault
      * @param _underlyingToken      Address of the underlying asset
      * @param _wrappedToken         Address of the component to be unwrapped
      * @param _wrappedUnits         Quantity of wrapped tokens in Position units
      * @param _integrationName      ID of wrap module integration (mapping on integration registry)
      */
     function unwrap(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _underlyingToken,
         address _wrappedToken,
         uint256 _wrappedUnits,
@@ -193,14 +193,14 @@ contract WrapModule is ModuleBase, ReentrancyGuard {
     )
         external
         nonReentrant
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
         (
             uint256 notionalUnderlyingUnwrapped,
             uint256 notionalUnwrapped
         ) = _validateUnwrapAndUpdate(
             _integrationName,
-            _setToken,
+            _jasperVault,
             _underlyingToken,
             _wrappedToken,
             _wrappedUnits,
@@ -208,7 +208,7 @@ contract WrapModule is ModuleBase, ReentrancyGuard {
         );
 
         emit ComponentUnwrapped(
-            _setToken,
+            _jasperVault,
             _underlyingToken,
             _wrappedToken,
             notionalUnderlyingUnwrapped,
@@ -218,30 +218,30 @@ contract WrapModule is ModuleBase, ReentrancyGuard {
     }
 
     /**
-     * MANAGER-ONLY: Instructs the SetToken to unwrap a wrapped asset collateralized by Ether into Wrapped Ether. Since
-     * external protocol will send back Ether that Ether must be Wrapped into WETH in order to be accounted for by SetToken.
+     * MANAGER-ONLY: Instructs the JasperVault to unwrap a wrapped asset collateralized by Ether into Wrapped Ether. Since
+     * external protocol will send back Ether that Ether must be Wrapped into WETH in order to be accounted for by JasperVault.
      *
-     * @param _setToken                 Instance of the SetToken
+     * @param _jasperVault                 Instance of the JasperVault
      * @param _wrappedToken             Address of the component to be unwrapped
      * @param _wrappedUnits             Quantity of wrapped tokens in Position units
      * @param _integrationName          ID of wrap module integration (mapping on integration registry)
      */
     function unwrapWithEther(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _wrappedToken,
         uint256 _wrappedUnits,
         string calldata _integrationName
     )
         external
         nonReentrant
-        onlyManagerAndValidSet(_setToken)
+        onlyManagerAndValidSet(_jasperVault)
     {
         (
             uint256 notionalUnderlyingUnwrapped,
             uint256 notionalUnwrapped
         ) = _validateUnwrapAndUpdate(
             _integrationName,
-            _setToken,
+            _jasperVault,
             address(weth),
             _wrappedToken,
             _wrappedUnits,
@@ -249,7 +249,7 @@ contract WrapModule is ModuleBase, ReentrancyGuard {
         );
 
         emit ComponentUnwrapped(
-            _setToken,
+            _jasperVault,
             address(weth),
             _wrappedToken,
             notionalUnderlyingUnwrapped,
@@ -259,18 +259,18 @@ contract WrapModule is ModuleBase, ReentrancyGuard {
     }
 
     /**
-     * Initializes this module to the SetToken. Only callable by the SetToken's manager.
+     * Initializes this module to the JasperVault. Only callable by the JasperVault's manager.
      *
-     * @param _setToken             Instance of the SetToken to issue
+     * @param _jasperVault             Instance of the JasperVault to issue
      */
-    function initialize(ISetToken _setToken) external onlySetManager(_setToken, msg.sender) {
-        require(controller.isSet(address(_setToken)), "Must be controller-enabled SetToken");
-        require(isSetPendingInitialization(_setToken), "Must be pending initialization");
-        _setToken.initializeModule();
+    function initialize(IJasperVault _jasperVault) external onlySetManager(_jasperVault, msg.sender) {
+        require(controller.isSet(address(_jasperVault)), "Must be controller-enabled JasperVault");
+        require(isSetPendingInitialization(_jasperVault), "Must be pending initialization");
+        _jasperVault.initializeModule();
     }
 
     /**
-     * Removes this module from the SetToken, via call by the SetToken.
+     * Removes this module from the JasperVault, via call by the JasperVault.
      */
     function removeModule() external override {}
 
@@ -287,7 +287,7 @@ contract WrapModule is ModuleBase, ReentrancyGuard {
      * integration.
      */
     function _validateInputs(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _transactPosition,
         uint256 _transactPositionUnits
     )
@@ -295,16 +295,16 @@ contract WrapModule is ModuleBase, ReentrancyGuard {
         view
     {
         require(_transactPositionUnits > 0, "Target position units must be > 0");
-        require(_setToken.hasDefaultPosition(_transactPosition), "Target default position must be component");
+        require(_jasperVault.hasDefaultPosition(_transactPosition), "Target default position must be component");
         require(
-            _setToken.hasSufficientDefaultUnits(_transactPosition, _transactPositionUnits),
+            _jasperVault.hasSufficientDefaultUnits(_transactPosition, _transactPositionUnits),
             "Unit cant be greater than existing"
         );
     }
 
     /**
      * The WrapModule calculates the total notional underlying to wrap, approves the underlying to the 3rd party
-     * integration contract, then invokes the SetToken to call wrap by passing its calldata along. When raw ETH
+     * integration contract, then invokes the JasperVault to call wrap by passing its calldata along. When raw ETH
      * is being used (_usesEther = true) WETH position must first be unwrapped and underlyingAddress sent to
      * adapter must be external protocol's ETH representative address.
      *
@@ -312,7 +312,7 @@ contract WrapModule is ModuleBase, ReentrancyGuard {
      */
     function _validateWrapAndUpdate(
         string calldata _integrationName,
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _underlyingToken,
         address _wrappedToken,
         uint256 _underlyingUnits,
@@ -321,29 +321,29 @@ contract WrapModule is ModuleBase, ReentrancyGuard {
         internal
         returns (uint256, uint256)
     {
-        _validateInputs(_setToken, _underlyingToken, _underlyingUnits);
+        _validateInputs(_jasperVault, _underlyingToken, _underlyingUnits);
 
         // Snapshot pre wrap balances
         (
             uint256 preActionUnderlyingNotional,
             uint256 preActionWrapNotional
-        ) = _snapshotTargetAssetsBalance(_setToken, _underlyingToken, _wrappedToken);
+        ) = _snapshotTargetAssetsBalance(_jasperVault, _underlyingToken, _wrappedToken);
 
-        uint256 notionalUnderlying = _setToken.totalSupply().getDefaultTotalNotional(_underlyingUnits);
+        uint256 notionalUnderlying = _jasperVault.totalSupply().getDefaultTotalNotional(_underlyingUnits);
         IWrapAdapter wrapAdapter = IWrapAdapter(getAndValidateAdapter(_integrationName));
 
         // Execute any pre-wrap actions depending on if using raw ETH or not
         if (_usesEther) {
-            _setToken.invokeUnwrapWETH(address(weth), notionalUnderlying);
+            _jasperVault.invokeUnwrapWETH(address(weth), notionalUnderlying);
         } else {
             address spender = wrapAdapter.getSpenderAddress(_underlyingToken, _wrappedToken);
 
-            _setToken.invokeApprove(_underlyingToken, spender, notionalUnderlying);
+            _jasperVault.invokeApprove(_underlyingToken, spender, notionalUnderlying);
         }
 
-        // Get function call data and invoke on SetToken
+        // Get function call data and invoke on JasperVault
         _createWrapDataAndInvoke(
-            _setToken,
+            _jasperVault,
             wrapAdapter,
             _usesEther ? wrapAdapter.ETH_TOKEN_ADDRESS() : _underlyingToken,
             _wrappedToken,
@@ -354,10 +354,10 @@ contract WrapModule is ModuleBase, ReentrancyGuard {
         (
             uint256 postActionUnderlyingNotional,
             uint256 postActionWrapNotional
-        ) = _snapshotTargetAssetsBalance(_setToken, _underlyingToken, _wrappedToken);
+        ) = _snapshotTargetAssetsBalance(_jasperVault, _underlyingToken, _wrappedToken);
 
-        _updatePosition(_setToken, _underlyingToken, preActionUnderlyingNotional, postActionUnderlyingNotional);
-        _updatePosition(_setToken, _wrappedToken, preActionWrapNotional, postActionWrapNotional);
+        _updatePosition(_jasperVault, _underlyingToken, preActionUnderlyingNotional, postActionUnderlyingNotional);
+        _updatePosition(_jasperVault, _wrappedToken, preActionWrapNotional, postActionWrapNotional);
 
         return (
             preActionUnderlyingNotional.sub(postActionUnderlyingNotional),
@@ -366,7 +366,7 @@ contract WrapModule is ModuleBase, ReentrancyGuard {
     }
 
     /**
-     * The WrapModule calculates the total notional wrap token to unwrap, then invokes the SetToken to call
+     * The WrapModule calculates the total notional wrap token to unwrap, then invokes the JasperVault to call
      * unwrap by passing its calldata along. When raw ETH is being used (_usesEther = true) underlyingAddress
      * sent to adapter must be set to external protocol's ETH representative address and ETH returned from
      * external protocol is wrapped.
@@ -375,7 +375,7 @@ contract WrapModule is ModuleBase, ReentrancyGuard {
      */
     function _validateUnwrapAndUpdate(
         string calldata _integrationName,
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _underlyingToken,
         address _wrappedToken,
         uint256 _wrappedTokenUnits,
@@ -384,19 +384,19 @@ contract WrapModule is ModuleBase, ReentrancyGuard {
         internal
         returns (uint256, uint256)
     {
-        _validateInputs(_setToken, _wrappedToken, _wrappedTokenUnits);
+        _validateInputs(_jasperVault, _wrappedToken, _wrappedTokenUnits);
 
         (
             uint256 preActionUnderlyingNotional,
             uint256 preActionWrapNotional
-        ) = _snapshotTargetAssetsBalance(_setToken, _underlyingToken, _wrappedToken);
+        ) = _snapshotTargetAssetsBalance(_jasperVault, _underlyingToken, _wrappedToken);
 
-        uint256 notionalWrappedToken = _setToken.totalSupply().getDefaultTotalNotional(_wrappedTokenUnits);
+        uint256 notionalWrappedToken = _jasperVault.totalSupply().getDefaultTotalNotional(_wrappedTokenUnits);
         IWrapAdapter wrapAdapter = IWrapAdapter(getAndValidateAdapter(_integrationName));
 
-        // Get function call data and invoke on SetToken
+        // Get function call data and invoke on JasperVault
         _createUnwrapDataAndInvoke(
-            _setToken,
+            _jasperVault,
             wrapAdapter,
             _usesEther ? wrapAdapter.ETH_TOKEN_ADDRESS() : _underlyingToken,
             _wrappedToken,
@@ -404,16 +404,16 @@ contract WrapModule is ModuleBase, ReentrancyGuard {
         );
 
         if (_usesEther) {
-            _setToken.invokeWrapWETH(address(weth), address(_setToken).balance);
+            _jasperVault.invokeWrapWETH(address(weth), address(_jasperVault).balance);
         }
 
         (
             uint256 postActionUnderlyingNotional,
             uint256 postActionWrapNotional
-        ) = _snapshotTargetAssetsBalance(_setToken, _underlyingToken, _wrappedToken);
+        ) = _snapshotTargetAssetsBalance(_jasperVault, _underlyingToken, _wrappedToken);
 
-        _updatePosition(_setToken, _underlyingToken, preActionUnderlyingNotional, postActionUnderlyingNotional);
-        _updatePosition(_setToken, _wrappedToken, preActionWrapNotional, postActionWrapNotional);
+        _updatePosition(_jasperVault, _underlyingToken, preActionUnderlyingNotional, postActionUnderlyingNotional);
+        _updatePosition(_jasperVault, _wrappedToken, preActionWrapNotional, postActionWrapNotional);
 
         return (
             postActionUnderlyingNotional.sub(preActionUnderlyingNotional),
@@ -422,10 +422,10 @@ contract WrapModule is ModuleBase, ReentrancyGuard {
     }
 
     /**
-     * Create the calldata for wrap and then invoke the call on the SetToken.
+     * Create the calldata for wrap and then invoke the call on the JasperVault.
      */
     function _createWrapDataAndInvoke(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IWrapAdapter _wrapAdapter,
         address _underlyingToken,
         address _wrappedToken,
@@ -441,14 +441,14 @@ contract WrapModule is ModuleBase, ReentrancyGuard {
             _notionalUnderlying
         );
 
-        _setToken.invoke(callTarget, callValue, callByteData);
+        _jasperVault.invoke(callTarget, callValue, callByteData);
     }
 
     /**
-     * Create the calldata for unwrap and then invoke the call on the SetToken.
+     * Create the calldata for unwrap and then invoke the call on the JasperVault.
      */
     function _createUnwrapDataAndInvoke(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         IWrapAdapter _wrapAdapter,
         address _underlyingToken,
         address _wrappedToken,
@@ -464,38 +464,38 @@ contract WrapModule is ModuleBase, ReentrancyGuard {
             _notionalUnderlying
         );
 
-        _setToken.invoke(callTarget, callValue, callByteData);
+        _jasperVault.invoke(callTarget, callValue, callByteData);
     }
 
     /**
      * After a wrap/unwrap operation, check the underlying and wrap token quantities and recalculate
-     * the units ((total tokens - airdrop)/ total supply). Then update the position on the SetToken.
+     * the units ((total tokens - airdrop)/ total supply). Then update the position on the JasperVault.
      */
     function _updatePosition(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _token,
         uint256 _preActionTokenBalance,
         uint256 _postActionTokenBalance
     ) internal {
-        uint256 newUnit = _setToken.totalSupply().calculateDefaultEditPositionUnit(
+        uint256 newUnit = _jasperVault.totalSupply().calculateDefaultEditPositionUnit(
             _preActionTokenBalance,
             _postActionTokenBalance,
-            _setToken.getDefaultPositionRealUnit(_token).toUint256()
+            _jasperVault.getDefaultPositionRealUnit(_token).toUint256()
         );
 
-        _setToken.editDefaultPosition(_token, newUnit);
+        _jasperVault.editDefaultPosition(_token, newUnit);
     }
 
     /**
-     * Take snapshot of SetToken's balance of underlying and wrapped tokens.
+     * Take snapshot of JasperVault's balance of underlying and wrapped tokens.
      */
     function _snapshotTargetAssetsBalance(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _underlyingToken,
         address _wrappedToken
     ) internal view returns(uint256, uint256) {
-        uint256 underlyingTokenBalance = IERC20(_underlyingToken).balanceOf(address(_setToken));
-        uint256 wrapTokenBalance = IERC20(_wrappedToken).balanceOf(address(_setToken));
+        uint256 underlyingTokenBalance = IERC20(_underlyingToken).balanceOf(address(_jasperVault));
+        uint256 wrapTokenBalance = IERC20(_wrappedToken).balanceOf(address(_jasperVault));
 
         return (
             underlyingTokenBalance,

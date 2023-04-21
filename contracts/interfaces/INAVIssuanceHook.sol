@@ -17,11 +17,11 @@
 */
 pragma solidity 0.6.10;
 
-import { ISetToken } from "./ISetToken.sol";
+import { IJasperVault } from "./IJasperVault.sol";
 
 interface INAVIssuanceHook {
     function invokePreIssueHook(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         address _reserveAsset,
         uint256 _reserveAssetQuantity,
         address _sender,
@@ -30,7 +30,7 @@ interface INAVIssuanceHook {
         external;
 
     function invokePreRedeemHook(
-        ISetToken _setToken,
+        IJasperVault _jasperVault,
         uint256 _redeemQuantity,
         address _sender,
         address _to

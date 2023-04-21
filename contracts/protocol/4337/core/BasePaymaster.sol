@@ -4,9 +4,11 @@ pragma solidity ^0.8.12;
 
 /* solhint-disable reason-string */
 
-import "../../../proxy/access/Ownable.sol";
+// import "../proxy/access/Ownable.sol";
 import "../interfaces/IPaymaster.sol";
 import "../interfaces/IEntryPoint.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+
 import "./Helpers.sol";
 
 /**
@@ -14,7 +16,8 @@ import "./Helpers.sol";
  * provides helper methods for staking.
  * validates that the postOp is called only by the entryPoint
  */
-abstract contract BasePaymaster is IPaymaster, Ownable {
+abstract contract BasePaymaster is IPaymaster, OwnableUpgradeable {
+
 
     IEntryPoint immutable public entryPoint;
 
@@ -60,7 +63,7 @@ abstract contract BasePaymaster is IPaymaster, Ownable {
     /**
      * add a deposit for this paymaster, used for paying for transaction fees
      */
-    function deposit() public payable {
+    function deposit() internal {
         entryPoint.depositTo{value : msg.value}(address(this));
     }
 
@@ -69,7 +72,7 @@ abstract contract BasePaymaster is IPaymaster, Ownable {
      * @param withdrawAddress target to send to
      * @param amount to withdraw
      */
-    function withdrawTo(address payable withdrawAddress, uint256 amount) public onlyOwner {
+    function withdrawTo(address payable withdrawAddress, uint256 amount) internal  {
         entryPoint.withdrawTo(withdrawAddress, amount);
     }
     /**

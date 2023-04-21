@@ -46,7 +46,6 @@ contract EntryPoint is IEntryPoint, StakeManager {
      * @param beneficiary the address to receive the fees
      * @param amount amount to transfer.
      */
-     //赔偿 用所有UserOperations收取的费用补偿调用者的受益人地址。
     function _compensate(address payable beneficiary, uint256 amount) internal {
         require(beneficiary != address(0), "AA90 invalid beneficiary");
         (bool success,) = beneficiary.call{value : amount}("");
@@ -61,9 +60,7 @@ contract EntryPoint is IEntryPoint, StakeManager {
      * @return collected the total amount this userOp paid.
      */
     function _executeUserOp(uint256 opIndex, UserOperation calldata userOp, UserOpInfo memory opInfo) private returns (uint256 collected) {
-        //获取当前gas余额
         uint256 preGas = gasleft();
-        //获取操作内存位置
         bytes memory context = getMemoryBytesFromOffset(opInfo.contextOffset);
 
         try this.innerHandleOp(userOp.callData, opInfo, context) returns (uint256 _actualGasCost) {

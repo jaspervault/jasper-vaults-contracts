@@ -21,7 +21,7 @@ pragma solidity 0.6.10;
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import { ISetToken } from "../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../interfaces/IJasperVault.sol";
 
 contract ClaimAdapterMock is ERC20  {
 
@@ -43,7 +43,7 @@ contract ClaimAdapterMock is ERC20  {
     }
 
     function getClaimCallData(
-        ISetToken _holder,
+        IJasperVault _holder,
         address _rewardPool
     ) external view returns(address _subject, uint256 _value, bytes memory _calldata) {
         // Quell compiler warnings about unused vars
@@ -54,7 +54,7 @@ contract ClaimAdapterMock is ERC20  {
         return (address(this), 0, callData);
     }
 
-    function getRewardsAmount(ISetToken _holder, address _rewardPool) external view returns(uint256) {
+    function getRewardsAmount(IJasperVault _holder, address _rewardPool) external view returns(uint256) {
         // Quell compiler warnings about unused vars
         _holder;
         _rewardPool;

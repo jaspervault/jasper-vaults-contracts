@@ -22,14 +22,14 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeCast } from "@openzeppelin/contracts/utils/SafeCast.sol";
 import { SafeMath } from "@openzeppelin/contracts/math/SafeMath.sol";
 
-import { ISetToken } from "../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../interfaces/IJasperVault.sol";
 import { PreciseUnitMath } from "../../lib/PreciseUnitMath.sol";
 
 /**
  * @title IssuanceValidationUtils
  * @author Set Protocol
  *
- * A collection of utility functions to help during issuance/redemption of SetToken.
+ * A collection of utility functions to help during issuance/redemption of JasperVault.
  */
 library IssuanceValidationUtils {
     using SafeMath for uint256;
@@ -37,27 +37,27 @@ library IssuanceValidationUtils {
     using PreciseUnitMath for uint256;
 
     /**
-     * Validates component transfer IN to SetToken during issuance/redemption. Reverts if Set is undercollateralized post transfer.
+     * Validates component transfer IN to JasperVault during issuance/redemption. Reverts if Set is undercollateralized post transfer.
      * NOTE: Call this function immediately after transfer IN but before calling external hooks (if any).
      *
-     * @param _setToken             Instance of the SetToken being issued/redeemed
+     * @param _jasperVault             Instance of the JasperVault being issued/redeemed
      * @param _component            Address of component being transferred in/out
-     * @param _initialSetSupply     Initial SetToken supply before issuance/redemption
-     * @param _componentQuantity    Amount of component transferred into SetToken
+     * @param _initialSetSupply     Initial JasperVault supply before issuance/redemption
+     * @param _componentQuantity    Amount of component transferred into JasperVault
      */
     function validateCollateralizationPostTransferInPreHook(
-        ISetToken _setToken, 
-        address _component, 
+        IJasperVault _jasperVault,
+        address _component,
         uint256 _initialSetSupply,
         uint256 _componentQuantity
     )
         internal
         view
     {
-        uint256 newComponentBalance = IERC20(_component).balanceOf(address(_setToken));
+        uint256 newComponentBalance = IERC20(_component).balanceOf(address(_jasperVault));
 
-        uint256 defaultPositionUnit = _setToken.getDefaultPositionRealUnit(address(_component)).toUint256();
-        
+        uint256 defaultPositionUnit = _jasperVault.getDefaultPositionRealUnit(address(_component)).toUint256();
+
         require(
             // Use preciseMulCeil to increase the lower bound and maintain over-collateralization
             newComponentBalance >= _initialSetSupply.preciseMulCeil(defaultPositionUnit).add(_componentQuantity),
@@ -66,23 +66,23 @@ library IssuanceValidationUtils {
     }
 
     /**
-     * Validates component transfer OUT of SetToken during issuance/redemption. Reverts if Set is undercollateralized post transfer.
+     * Validates component transfer OUT of JasperVault during issuance/redemption. Reverts if Set is undercollateralized post transfer.
      *
-     * @param _setToken         Instance of the SetToken being issued/redeemed
+     * @param _jasperVault         Instance of the JasperVault being issued/redeemed
      * @param _component        Address of component being transferred in/out
-     * @param _finalSetSupply   Final SetToken supply after issuance/redemption
+     * @param _finalSetSupply   Final JasperVault supply after issuance/redemption
      */
     function validateCollateralizationPostTransferOut(
-        ISetToken _setToken, 
-        address _component, 
+        IJasperVault _jasperVault,
+        address _component,
         uint256 _finalSetSupply
     )
-        internal 
-        view 
+        internal
+        view
     {
-        uint256 newComponentBalance = IERC20(_component).balanceOf(address(_setToken));
+        uint256 newComponentBalance = IERC20(_component).balanceOf(address(_jasperVault));
 
-        uint256 defaultPositionUnit = _setToken.getDefaultPositionRealUnit(address(_component)).toUint256();
+        uint256 defaultPositionUnit = _jasperVault.getDefaultPositionRealUnit(address(_component)).toUint256();
 
         require(
             // Use preciseMulCeil to increase lower bound and maintain over-collateralization

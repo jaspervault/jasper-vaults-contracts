@@ -18,7 +18,7 @@
 
 pragma solidity 0.6.10;
 
-import { ISetToken } from "../../../interfaces/ISetToken.sol";
+import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
 import { ICErc20 } from "../../../interfaces/external/ICErc20.sol";
 import { IComptroller } from "../../../interfaces/external/IComptroller.sol";
 
@@ -32,7 +32,7 @@ library Compound {
     /* ============ External ============ */
 
     /**
-     * Get enter markets calldata from SetToken
+     * Get enter markets calldata from JasperVault
      */
     function getEnterMarketsCalldata(
         ICErc20 _cToken,
@@ -52,17 +52,17 @@ library Compound {
     }
 
     /**
-     * Invoke enter markets from SetToken
+     * Invoke enter markets from JasperVault
      */
-    function invokeEnterMarkets(ISetToken _setToken, ICErc20 _cToken, IComptroller _comptroller) external {
+    function invokeEnterMarkets(IJasperVault _jasperVault, ICErc20 _cToken, IComptroller _comptroller) external {
         ( , , bytes memory enterMarketsCalldata) = getEnterMarketsCalldata(_cToken, _comptroller);
 
-        uint256[] memory returnValues = abi.decode(_setToken.invoke(address(_comptroller), 0, enterMarketsCalldata), (uint256[]));
+        uint256[] memory returnValues = abi.decode(_jasperVault.invoke(address(_comptroller), 0, enterMarketsCalldata), (uint256[]));
         require(returnValues[0] == 0, "Entering failed");
     }
 
     /**
-     * Get exit market calldata from SetToken
+     * Get exit market calldata from JasperVault
      */
     function getExitMarketCalldata(
         ICErc20 _cToken,
@@ -79,18 +79,18 @@ library Compound {
     }
 
     /**
-     * Invoke exit market from SetToken
+     * Invoke exit market from JasperVault
      */
-    function invokeExitMarket(ISetToken _setToken, ICErc20 _cToken, IComptroller _comptroller) external {
+    function invokeExitMarket(IJasperVault _jasperVault, ICErc20 _cToken, IComptroller _comptroller) external {
         ( , , bytes memory exitMarketCalldata) = getExitMarketCalldata(_cToken, _comptroller);
         require(
-            abi.decode(_setToken.invoke(address(_comptroller), 0, exitMarketCalldata), (uint256)) == 0,
+            abi.decode(_jasperVault.invoke(address(_comptroller), 0, exitMarketCalldata), (uint256)) == 0,
             "Exiting failed"
         );
     }
 
     /**
-     * Get mint cEther calldata from SetToken
+     * Get mint cEther calldata from JasperVault
      */
     function getMintCEtherCalldata(
        ICErc20 _cEther,
@@ -109,10 +109,10 @@ library Compound {
     /**
      * Invoke mint cEther from the SetToken
      */
-    function invokeMintCEther(ISetToken _setToken, ICErc20 _cEther, uint256 _mintNotional) external {
+    function invokeMintCEther(IJasperVault _jasperVault, ICErc20 _cEther, uint256 _mintNotional) external {
         ( , , bytes memory mintCEtherCalldata) = getMintCEtherCalldata(_cEther, _mintNotional);
 
-        _setToken.invoke(address(_cEther), _mintNotional, mintCEtherCalldata);
+        _jasperVault.invoke(address(_cEther), _mintNotional, mintCEtherCalldata);
     }
 
     /**
@@ -135,11 +135,11 @@ library Compound {
     /**
      * Invoke mint from the SetToken. Mints the specified cToken from the underlying of the specified notional quantity
      */
-    function invokeMintCToken(ISetToken _setToken, ICErc20 _cToken, uint256 _mintNotional) external {
+    function invokeMintCToken(IJasperVault _jasperVault, ICErc20 _cToken, uint256 _mintNotional) external {
         ( , , bytes memory mintCTokenCalldata) = getMintCTokenCalldata(_cToken, _mintNotional);
 
         require(
-            abi.decode(_setToken.invoke(address(_cToken), 0, mintCTokenCalldata), (uint256)) == 0,
+            abi.decode(_jasperVault.invoke(address(_cToken), 0, mintCTokenCalldata), (uint256)) == 0,
             "Mint failed"
         );
     }
@@ -164,11 +164,11 @@ library Compound {
     /**
      * Invoke redeem underlying from the SetToken
      */
-    function invokeRedeemUnderlying(ISetToken _setToken, ICErc20 _cToken, uint256 _redeemNotional) external {
+    function invokeRedeemUnderlying(IJasperVault _jasperVault, ICErc20 _cToken, uint256 _redeemNotional) external {
         ( , , bytes memory redeemUnderlyingCalldata) = getRedeemUnderlyingCalldata(_cToken, _redeemNotional);
 
         require(
-            abi.decode(_setToken.invoke(address(_cToken), 0, redeemUnderlyingCalldata), (uint256)) == 0,
+            abi.decode(_jasperVault.invoke(address(_cToken), 0, redeemUnderlyingCalldata), (uint256)) == 0,
             "Redeem underlying failed"
         );
     }
@@ -193,11 +193,11 @@ library Compound {
     /**
      * Invoke redeem from the SetToken
      */
-    function invokeRedeem(ISetToken _setToken, ICErc20 _cToken, uint256 _redeemNotional) external {
+    function invokeRedeem(IJasperVault _jasperVault, ICErc20 _cToken, uint256 _redeemNotional) external {
         ( , , bytes memory redeemCalldata) = getRedeemCalldata(_cToken, _redeemNotional);
 
         require(
-            abi.decode(_setToken.invoke(address(_cToken), 0, redeemCalldata), (uint256)) == 0,
+            abi.decode(_jasperVault.invoke(address(_cToken), 0, redeemCalldata), (uint256)) == 0,
             "Redeem failed"
         );
     }
@@ -222,9 +222,9 @@ library Compound {
     /**
      * Invoke repay cEther from the SetToken
      */
-    function invokeRepayBorrowCEther(ISetToken _setToken, ICErc20 _cEther, uint256 _repayNotional) external {
+    function invokeRepayBorrowCEther(IJasperVault _jasperVault, ICErc20 _cEther, uint256 _repayNotional) external {
         ( , , bytes memory repayBorrowCalldata) = getRepayBorrowCEtherCalldata(_cEther, _repayNotional);
-        _setToken.invoke(address(_cEther), _repayNotional, repayBorrowCalldata);
+        _jasperVault.invoke(address(_cEther), _repayNotional, repayBorrowCalldata);
     }
 
     /**
@@ -247,10 +247,10 @@ library Compound {
     /**
      * Invoke repay cToken from the SetToken
      */
-    function invokeRepayBorrowCToken(ISetToken _setToken, ICErc20 _cToken, uint256 _repayNotional) external {
+    function invokeRepayBorrowCToken(IJasperVault _jasperVault, ICErc20 _cToken, uint256 _repayNotional) external {
         ( , , bytes memory repayBorrowCalldata) = getRepayBorrowCTokenCalldata(_cToken, _repayNotional);
         require(
-            abi.decode(_setToken.invoke(address(_cToken), 0, repayBorrowCalldata), (uint256)) == 0,
+            abi.decode(_jasperVault.invoke(address(_cToken), 0, repayBorrowCalldata), (uint256)) == 0,
             "Repay failed"
         );
     }
@@ -275,10 +275,10 @@ library Compound {
     /**
      * Invoke the SetToken to interact with the specified cToken to borrow the cToken's underlying of the specified borrowQuantity.
      */
-    function invokeBorrow(ISetToken _setToken, ICErc20 _cToken, uint256 _notionalBorrowQuantity) external {
+    function invokeBorrow(IJasperVault _jasperVault, ICErc20 _cToken, uint256 _notionalBorrowQuantity) external {
         ( , , bytes memory borrowCalldata) = getBorrowCalldata(_cToken, _notionalBorrowQuantity);
         require(
-            abi.decode(_setToken.invoke(address(_cToken), 0, borrowCalldata), (uint256)) == 0,
+            abi.decode(_jasperVault.invoke(address(_cToken), 0, borrowCalldata), (uint256)) == 0,
             "Borrow failed"
         );
     }
