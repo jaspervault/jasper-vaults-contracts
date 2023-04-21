@@ -1,4 +1,3 @@
-
 # JasperVault
 
 JasperVault is a web3 asset management platform that empowers everyone with cutting-edge financial infrastructure tools. By combining the features of other leading web3 asset management systems with our innovative follow-investment service and account abstraction technology, JasperVault delivers a comprehensive and powerful solution for investors, managers, and developers in the world of decentralized finance.
@@ -52,23 +51,19 @@ These instructions will get you a copy of the project up and running on your loc
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/your_username/JasperVault.git
+   git@github.com:jaspervault/jasper-vaults-contracts.gi
    ```
-
-
 2. Navigate to the project directory:Clone the repositor
 
 ```bash
 cd JasperVault
 ```
 
-
     3. Install the project dependencies:Clone the reposito
 
 ```bash
 yarn
 ```
-
 
     4. Compile the smart contracts
 
