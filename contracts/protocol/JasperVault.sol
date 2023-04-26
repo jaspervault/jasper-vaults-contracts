@@ -165,7 +165,9 @@ contract JasperVault is ERC20 {
 
     address public masterToken;
 
-    
+    uint256 public followFee;
+    uint256 public profitShareFee;
+
     string private jasperName;
     string private jasperSymbol;
 
@@ -191,14 +193,27 @@ contract JasperVault is ERC20 {
         IController _controller,
         address _manager,
         string memory _name,
-        string memory _symbol
+        string memory _symbol,
+        uint256 _followFee,
+        uint256 _profitShareFee
     ) public ERC20(_name, _symbol) {
-        jasperName=_name;
-        jasperSymbol=_symbol;
+        require(
+            _followFee <= PreciseUnitMath.PRECISE_UNIT,
+            "subscribeFee too high"
+        );
+        require(
+            _profitShareFee <= PreciseUnitMath.PRECISE_UNIT,
+            "profitShareFee too high"
+        );
+
+        jasperName = _name;
+        jasperSymbol = _symbol;
         controller = _controller;
         manager = _manager;
         positionMultiplier = PreciseUnitMath.preciseUnitInt();
         components = _components;
+        followFee = _followFee;
+        profitShareFee = _profitShareFee;
         if (_components.length > 0) {
             masterToken = _components[0];
         }
@@ -254,23 +269,39 @@ contract JasperVault is ERC20 {
         emit ComponentAdded(_component);
     }
 
-    function setBaseProperty(   
-        address _masterToken,    
+    function setBaseProperty(
         string memory _name,
-        string memory _symbol) external onlyManager{
-        masterToken=_masterToken;
-        jasperName=_name;
-        jasperSymbol=_symbol;
+        string memory _symbol
+    ) external onlyManager {
+        jasperName = _name;
+        jasperSymbol = _symbol;
     }
 
-   function name() public view override  returns(string memory){
+    function setBaseFeeAndToken(
+        address _masterToken,
+        uint256 _followFee,
+        uint256 _profitShareFee
+    ) external onlyManager {
+        require(
+            _followFee <= PreciseUnitMath.PRECISE_UNIT,
+            "subscribeFee too high"
+        );
+        require(
+            _profitShareFee <= PreciseUnitMath.PRECISE_UNIT,
+            "profitShareFee too high"
+        );
+        masterToken = _masterToken;
+        followFee = _followFee;
+        profitShareFee = _profitShareFee;
+    }
+
+    function name() public view override returns (string memory) {
         return jasperName;
-   }
-   function symbol() public view override returns(string memory){
+    }
+
+    function symbol() public view override returns (string memory) {
         return jasperSymbol;
-   }
-
-
+    }
 
     /**
      * PRIVELEGED MODULE FUNCTION. Low level function that removes a component from the components array.
@@ -285,7 +316,7 @@ contract JasperVault is ERC20 {
 
     /**
      * PRIVELEGED MODULE FUNCTION. Low level function that edits a component's virtual unit. Takes a real unit
-     * and converts it to virtual before committing. 
+     * and converts it to virtual before committing.
      */
     function editDefaultPositionUnit(
         address _component,
@@ -296,12 +327,21 @@ contract JasperVault is ERC20 {
         emit DefaultPositionUnitEdited(_component, _realUnit);
     }
 
-    function editDefaultPositionCoinType(address _component,uint256 coinType)  external onlyModule whenLockedOnlyLocker{
-        componentPositions[_component].coinType=coinType;
+    function editDefaultPositionCoinType(
+        address _component,
+        uint256 coinType
+    ) external onlyModule whenLockedOnlyLocker {
+        componentPositions[_component].coinType = coinType;
     }
 
-    function editExternalPositionCoinType(address _component, address _module,uint256 coinType) external onlyModule whenLockedOnlyLocker{
-        componentPositions[_component].externalPositions[_module].coinType=coinType;
+    function editExternalPositionCoinType(
+        address _component,
+        address _module,
+        uint256 coinType
+    ) external onlyModule whenLockedOnlyLocker {
+        componentPositions[_component]
+            .externalPositions[_module]
+            .coinType = coinType;
     }
 
     /**
@@ -510,14 +550,6 @@ contract JasperVault is ERC20 {
         emit ManagerEdited(_manager, oldManager);
     }
 
-    function setMasterToken(address _masterToken) external onlyManager {
-        require(!isLocked, "Only when unlocked");
-        address oldMasterToken = masterToken;
-        masterToken = _masterToken;
-
-        emit MasterTokenEdited(_masterToken, oldMasterToken);
-    }
-
     /* ============ External Getter Functions ============ */
 
     function getComponents() external view returns (address[] memory) {
@@ -608,7 +640,7 @@ contract JasperVault is ERC20 {
                     module: address(0),
                     unit: getDefaultPositionRealUnit(component),
                     positionState: DEFAULT,
-                    coinType:componentPositions[component].coinType,
+                    coinType: componentPositions[component].coinType,
                     data: ""
                 });
 
@@ -626,7 +658,9 @@ contract JasperVault is ERC20 {
                     module: currentModule,
                     unit: getExternalPositionRealUnit(component, currentModule),
                     positionState: EXTERNAL,
-                    coinType:componentPositions[component].externalPositions[currentModule].coinType,
+                    coinType: componentPositions[component]
+                        .externalPositions[currentModule]
+                        .coinType,
                     data: _externalPositionData(component, currentModule)
                 });
 

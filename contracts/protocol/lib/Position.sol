@@ -19,14 +19,13 @@
 pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
 
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { SafeCast } from "@openzeppelin/contracts/utils/SafeCast.sol";
-import { SafeMath } from "@openzeppelin/contracts/math/SafeMath.sol";
-import { SignedSafeMath } from "@openzeppelin/contracts/math/SignedSafeMath.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/SafeCast.sol";
+import {SafeMath} from "@openzeppelin/contracts/math/SafeMath.sol";
+import {SignedSafeMath} from "@openzeppelin/contracts/math/SignedSafeMath.sol";
 
-import { IJasperVault } from "../../interfaces/IJasperVault.sol";
-import { PreciseUnitMath } from "../../lib/PreciseUnitMath.sol";
-
+import {IJasperVault} from "../../interfaces/IJasperVault.sol";
+import {PreciseUnitMath} from "../../lib/PreciseUnitMath.sol";
 
 /**
  * @title Position
@@ -49,22 +48,34 @@ library Position {
     /**
      * Returns whether the JasperVault has a default position for a given component (if the real unit is > 0)
      */
-    function hasDefaultPosition(IJasperVault _jasperVault, address _component) internal view returns(bool) {
+    function hasDefaultPosition(
+        IJasperVault _jasperVault,
+        address _component
+    ) internal view returns (bool) {
         return _jasperVault.getDefaultPositionRealUnit(_component) > 0;
     }
 
     /**
      * Returns whether the JasperVault has an external position for a given component (if # of position modules is > 0)
      */
-    function hasExternalPosition(IJasperVault _jasperVault, address _component) internal view returns(bool) {
+    function hasExternalPosition(
+        IJasperVault _jasperVault,
+        address _component
+    ) internal view returns (bool) {
         return _jasperVault.getExternalPositionModules(_component).length > 0;
     }
 
     /**
      * Returns whether the JasperVault component default position real unit is greater than or equal to units passed in.
      */
-    function hasSufficientDefaultUnits(IJasperVault _jasperVault, address _component, uint256 _unit) internal view returns(bool) {
-        return _jasperVault.getDefaultPositionRealUnit(_component) >= _unit.toInt256();
+    function hasSufficientDefaultUnits(
+        IJasperVault _jasperVault,
+        address _component,
+        uint256 _unit
+    ) internal view returns (bool) {
+        return
+            _jasperVault.getDefaultPositionRealUnit(_component) >=
+            _unit.toInt256();
     }
 
     /**
@@ -75,12 +86,12 @@ library Position {
         address _component,
         address _positionModule,
         uint256 _unit
-    )
-        internal
-        view
-        returns(bool)
-    {
-       return _jasperVault.getExternalPositionRealUnit(_component, _positionModule) >= _unit.toInt256();
+    ) internal view returns (bool) {
+        return
+            _jasperVault.getExternalPositionRealUnit(
+                _component,
+                _positionModule
+            ) >= _unit.toInt256();
     }
 
     /**
@@ -92,7 +103,11 @@ library Position {
      * @param _component          Address of the component
      * @param _newUnit            Quantity of Position units - must be >= 0
      */
-    function editDefaultPosition(IJasperVault _jasperVault, address _component, uint256 _newUnit) internal {
+    function editDefaultPosition(
+        IJasperVault _jasperVault,
+        address _component,
+        uint256 _newUnit
+    ) internal {
         bool isPositionFound = hasDefaultPosition(_jasperVault, _component);
         if (!isPositionFound && _newUnit > 0) {
             // If there is no Default Position and no External Modules, then component does not exist
@@ -108,14 +123,26 @@ library Position {
         _jasperVault.editDefaultPositionUnit(_component, _newUnit.toInt256());
     }
 
-    function editCoinType(IJasperVault _jasperVault, address _component,uint256 coinType) internal {
-        _jasperVault.editDefaultPositionCoinType(_component,coinType);
+    function editCoinType(
+        IJasperVault _jasperVault,
+        address _component,
+        uint256 coinType
+    ) internal {
+        _jasperVault.editDefaultPositionCoinType(_component, coinType);
     }
 
-    function editExternalCoinType(IJasperVault _jasperVault, address _component,address _module,uint256 coinType) internal {
-        _jasperVault.editExternalPositionCoinType(_component,_module,coinType);
+    function editExternalCoinType(
+        IJasperVault _jasperVault,
+        address _component,
+        address _module,
+        uint256 coinType
+    ) internal {
+        _jasperVault.editExternalPositionCoinType(
+            _component,
+            _module,
+            coinType
+        );
     }
-
 
     /**
      * Update an external position and remove and external positions or components if necessary. The logic flows as follows:
@@ -139,27 +166,39 @@ library Position {
         address _module,
         int256 _newUnit,
         bytes memory _data
-    )
-        internal
-    {
+    ) internal {
         if (_newUnit != 0) {
-
             if (!_jasperVault.isComponent(_component)) {
                 _jasperVault.addComponent(_component);
                 _jasperVault.addExternalPositionModule(_component, _module);
-            } else if (!_jasperVault.isExternalPositionModule(_component, _module)) {
+            } else if (
+                !_jasperVault.isExternalPositionModule(_component, _module)
+            ) {
                 _jasperVault.addExternalPositionModule(_component, _module);
             }
-            _jasperVault.editExternalPositionUnit(_component, _module, _newUnit);
+            _jasperVault.editExternalPositionUnit(
+                _component,
+                _module,
+                _newUnit
+            );
             _jasperVault.editExternalPositionData(_component, _module, _data);
-
         } else {
             require(_data.length == 0, "Passed data must be null");
             // If no default or external position remaining then remove component from components array
-            if (_jasperVault.getExternalPositionRealUnit(_component, _module) != 0) {
-                address[] memory positionModules = _jasperVault.getExternalPositionModules(_component);
-                if (_jasperVault.getDefaultPositionRealUnit(_component) == 0 && positionModules.length == 1) {
-                    require(positionModules[0] == _module, "External positions must be 0 to remove component");
+            if (
+                _jasperVault.getExternalPositionRealUnit(_component, _module) !=
+                0
+            ) {
+                address[] memory positionModules = _jasperVault
+                    .getExternalPositionModules(_component);
+                if (
+                    _jasperVault.getDefaultPositionRealUnit(_component) == 0 &&
+                    positionModules.length == 1
+                ) {
+                    require(
+                        positionModules[0] == _module,
+                        "External positions must be 0 to remove component"
+                    );
                     _jasperVault.removeComponent(_component);
                 }
                 _jasperVault.removeExternalPositionModule(_component, _module);
@@ -175,7 +214,10 @@ library Position {
      *
      * @return                    Total notional amount of units
      */
-    function getDefaultTotalNotional(uint256 _setTokenSupply, uint256 _positionUnit) internal pure returns (uint256) {
+    function getDefaultTotalNotional(
+        uint256 _setTokenSupply,
+        uint256 _positionUnit
+    ) internal pure returns (uint256) {
         return _setTokenSupply.preciseMul(_positionUnit);
     }
 
@@ -186,7 +228,10 @@ library Position {
      * @param _totalNotional      Total notional amount of component prior to
      * @return                    Default position unit
      */
-    function getDefaultPositionUnit(uint256 _setTokenSupply, uint256 _totalNotional) internal pure returns (uint256) {
+    function getDefaultPositionUnit(
+        uint256 _setTokenSupply,
+        uint256 _totalNotional
+    ) internal pure returns (uint256) {
         return _totalNotional.preciseDiv(_setTokenSupply);
     }
 
@@ -197,8 +242,13 @@ library Position {
      * @param _component          Address of the component
      * @return                    Notional tracked balance
      */
-    function getDefaultTrackedBalance(IJasperVault _jasperVault, address _component) internal view returns(uint256) {
-        int256 positionUnit = _jasperVault.getDefaultPositionRealUnit(_component);
+    function getDefaultTrackedBalance(
+        IJasperVault _jasperVault,
+        address _component
+    ) internal view returns (uint256) {
+        int256 positionUnit = _jasperVault.getDefaultPositionRealUnit(
+            _component
+        );
         return _jasperVault.totalSupply().preciseMul(positionUnit.toUint256());
     }
 
@@ -218,12 +268,13 @@ library Position {
         address _component,
         uint256 _setTotalSupply,
         uint256 _componentPreviousBalance
-    )
-        internal
-        returns(uint256, uint256, uint256)
-    {
-        uint256 currentBalance = IERC20(_component).balanceOf(address(_jasperVault));
-        uint256 positionUnit = _jasperVault.getDefaultPositionRealUnit(_component).toUint256();
+    ) internal returns (uint256, uint256, uint256) {
+        uint256 currentBalance = IERC20(_component).balanceOf(
+            address(_jasperVault)
+        );
+        uint256 positionUnit = _jasperVault
+            .getDefaultPositionRealUnit(_component)
+            .toUint256();
 
         uint256 newTokenUnit;
         if (currentBalance > 0) {
@@ -257,13 +308,14 @@ library Position {
         uint256 _preTotalNotional,
         uint256 _postTotalNotional,
         uint256 _prePositionUnit
-    )
-        internal
-        pure
-        returns (uint256)
-    {
+    ) internal pure returns (uint256) {
         // If pre action total notional amount is greater then subtract post action total notional and calculate new position units
-        uint256 airdroppedAmount = _preTotalNotional.sub(_prePositionUnit.preciseMul(_setTokenSupply));
-        return _postTotalNotional.sub(airdroppedAmount).preciseDiv(_setTokenSupply);
+        uint256 airdroppedAmount = _preTotalNotional.sub(
+            _prePositionUnit.preciseMul(_setTokenSupply)
+        );
+        return
+            _postTotalNotional.sub(airdroppedAmount).preciseDiv(
+                _setTokenSupply
+            );
     }
 }

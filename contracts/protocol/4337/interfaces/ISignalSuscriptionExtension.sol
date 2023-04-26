@@ -5,7 +5,6 @@ pragma solidity ^0.8.12;
 interface ISignalSuscriptionExtension {
     function getFollowers(address _jasperVault) external view returns(address[] memory);
     function getExectueFollow(address _jasperVault) external view returns(bool);
-    function isExectueFollow(address _jasperVault) external view returns(bool);
     function exectueFollowEnd(address _jasperVault) external;
     function warnLine() external view returns(uint256);
     function unsubscribeLine() external view returns(uint256);

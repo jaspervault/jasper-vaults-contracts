@@ -156,8 +156,6 @@ interface IJasperVault is IERC20 {
 
     function setManager(address _manager) external;
 
-    function setMasterToken(address _masterToken) external;
-
     function manager() external view returns (address);
 
     function moduleStates(address _module) external view returns (ModuleState);
@@ -206,4 +204,11 @@ interface IJasperVault is IERC20 {
     function isLocked() external view returns (bool);
 
     function masterToken() external view returns (address);
+
+    function setBaseProperty(string memory _name,    string memory _symbol) external;    
+    function setBaseFeeAndToken(address _masterToken,uint256 _followFee,uint256 _profitShareFee) external;
+
+     function followFee() external view returns(uint256);
+     function profitShareFee() external view returns(uint256);
+
 }

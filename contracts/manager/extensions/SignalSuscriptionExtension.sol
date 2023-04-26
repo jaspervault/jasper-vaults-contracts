@@ -40,6 +40,12 @@ contract SignalSuscriptionExtension is BaseGlobalExtension {
         address indexed _delegatedManager
     );
 
+    event SetFee(
+        IJasperVault indexed _jasperVault,
+        uint256 _followFee,
+        uint256 _profitShareFee
+    );
+
     // event SetSubscribeTarget(
     //      address indexed _jasperVault,
     //      address target
@@ -163,6 +169,26 @@ contract SignalSuscriptionExtension is BaseGlobalExtension {
         _removeExtension(jasperVault, delegatedManager);
     }
 
+    function editSubscribeFee(IJasperVault _jasperVault,address _masterToken,uint256 _followFee,uint256 _profitShareFee) external  onlySettle(_jasperVault)   onlyOperator(_jasperVault){
+        address[] memory followers=signalSuscriptionModule.get_followers(address(_jasperVault));
+        for(uint256 i=0;i<followers.length;i++){
+            bytes memory callData = abi.encodeWithSelector(
+                ISignalSuscriptionModule.unsubscribe.selector,
+                followers[i],
+                address(_jasperVault)
+            );
+            _invokeManager(
+                _manager(IJasperVault(followers[i])),
+                address(signalSuscriptionModule),
+                callData
+            );
+            _manager(IJasperVault(followers[i])).setSubscribeStatus(2);
+            emit SetSubscribeStatus(IJasperVault(followers[i]), 2);
+         }
+         _manager(_jasperVault).setBaseFeeAndToken(_masterToken,_followFee,_profitShareFee);
+         emit SetFee(_jasperVault,_followFee,_profitShareFee);
+    }
+
     function subscribe(
         IJasperVault _jasperVault,
         address target
@@ -186,7 +212,7 @@ contract SignalSuscriptionExtension is BaseGlobalExtension {
         emit SetSubscribeStatus(_jasperVault, 1);
     }
 
-    function udpate_allowedCopytrading(
+    function update_allowedCopytrading(
         IJasperVault _jasperVault,
         bool can_copy_trading
     ) external onlyOperator(_jasperVault) {
@@ -221,8 +247,8 @@ contract SignalSuscriptionExtension is BaseGlobalExtension {
             address(signalSuscriptionModule),
             callData
         );
-        _manager(_jasperVault).setSubscribeStatus(0);
-        emit SetSubscribeStatus(_jasperVault, 0);
+        _manager(_jasperVault).setSubscribeStatus(2);
+        emit SetSubscribeStatus(_jasperVault, 2);
     }
 
 

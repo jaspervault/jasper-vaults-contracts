@@ -27,7 +27,7 @@ interface IDelegatedManagerFactory {
     ) external;
 
     function jasperVaultType(address _jasperVault) external view returns(uint256);
-    function acccount2setToken(address _account) external view returns(address);
+    function account2setToken(address _account) external view returns(address);
     function setToken2account(address _jasperVault) external view returns(address);
 
 }

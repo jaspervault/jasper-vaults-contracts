@@ -26,17 +26,12 @@ contract TestStableswap{
     constructor(address _lido) public {
          lido=_lido;
     }
-    //交换
+
     function exchange(int128 i,int128 j,uint256 dx, uint256 min_dy ) external payable returns (uint256){
-            // 要给msg.sender 发送eth
-            //要接收用户地址 steth
-            // 把setToken的钱 转到当前地址
-            //接收用户steth;
             IERC20(lido).transferFrom(msg.sender,address(this),dx);
             payable(msg.sender).transfer(dx);  
             return   dx;      
     }
-    // 接收ether
     receive() external payable {
     }
     fallback() external payable {}

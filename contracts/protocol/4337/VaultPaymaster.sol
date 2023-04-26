@@ -53,9 +53,9 @@ contract VaultPaymaster is
 
     event Withdraw(address user, address to, address token, uint256 amount);
 
-    event WarnLine(address jasperVault,uint256 balance);
+    event WarnLine(address jasperVault, uint256 balance);
 
-    event Unsubscribe(address target,address jasperVault,uint256 balance);
+    event Unsubscribe(address target, address jasperVault, uint256 balance);
 
     address public ETH_TOKEN_ADDRESS;
 
@@ -107,7 +107,7 @@ contract VaultPaymaster is
         ETH_TOKEN_ADDRESS = _eth;
     }
 
-    function setToekenToPath(
+    function setTokenToPath(
         address _token,
         address[] calldata _path
     ) external onlyOwner {
@@ -297,7 +297,7 @@ contract VaultPaymaster is
         require(
             userOp.verificationGasLimit > COST_OF_POST,
             "Paymaster: gas too low for postOp"
-        ); 
+        );
         address owner = IOwnable(userOp.sender).owner();
         require(
             user2balance[owner] >= (requiredPreFund + opFee),
@@ -345,14 +345,15 @@ contract VaultPaymaster is
     }
 
     function settleFollowers(address sender, uint256 totalGasCost) internal {
-        address jasperVault = delegatedManagerFactory.acccount2setToken(sender);
+        address jasperVault = delegatedManagerFactory.account2setToken(sender);
 
-        bool isExectueFollow = signalSuscriptionExtension.isExectueFollow(jasperVault);
+        bool isExectueFollow = signalSuscriptionExtension.getExectueFollow(
+            jasperVault
+        );
 
         if (isExectueFollow) {
-            address[] memory folllowers = signalSuscriptionExtension.getFollowers(
-                jasperVault
-            );
+            address[] memory folllowers = signalSuscriptionExtension
+                .getFollowers(jasperVault);
             uint256 len = folllowers.length;
             if (len > 0) {
                 uint256 averageGas = totalGasCost / (len + 1);
@@ -368,14 +369,30 @@ contract VaultPaymaster is
                     } else {
                         user2balance[setTokenOwner] -= setTokenOwnerBalance;
                         totalAddGas += setTokenOwnerBalance;
-                    }                      
-                    if(signalSuscriptionExtension.unsubscribeLine()>=user2balance[setTokenOwner]){
-                      //unsubscribe
-                      signalSuscriptionExtension.unsubscribe(folllowers[i],jasperVault);     
-                      emit Unsubscribe(folllowers[i],jasperVault,user2balance[setTokenOwner]);     
-                    }else  if(signalSuscriptionExtension.warnLine()>=user2balance[setTokenOwner]){         
-                       //warnLine
-                       emit WarnLine(folllowers[i],user2balance[setTokenOwner]);
+                    }
+                    if (
+                        signalSuscriptionExtension.unsubscribeLine() >=
+                        user2balance[setTokenOwner]
+                    ) {
+                        //unsubscribe
+                        signalSuscriptionExtension.unsubscribe(
+                            folllowers[i],
+                            jasperVault
+                        );
+                        emit Unsubscribe(
+                            folllowers[i],
+                            jasperVault,
+                            user2balance[setTokenOwner]
+                        );
+                    } else if (
+                        signalSuscriptionExtension.warnLine() >=
+                        user2balance[setTokenOwner]
+                    ) {
+                        //warnLine
+                        emit WarnLine(
+                            folllowers[i],
+                            user2balance[setTokenOwner]
+                        );
                     }
                 }
                 address owner = IOwnable(sender).owner();

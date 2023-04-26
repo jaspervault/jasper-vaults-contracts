@@ -25,7 +25,9 @@ interface ISetTokenCreator {
         address[] memory _modules,
         address _manager,
         string memory _name,
-        string memory _symbol
+        string memory _symbol,
+        uint256 _followFee,
+        uint256 _profitShareFee
     )
         external
         returns (address);

@@ -77,4 +77,7 @@ interface IDelegatedManager {
     function subscribeStatus() external view returns (uint256);
 
     function getAdapters() external view returns (address[] memory);
+    
+    function setBaseFeeAndToken(address _masterToken,uint256 _followFee,uint256 _profitShareFee) external;
+    function setBaseProperty(string memory _name,string memory _symbol) external;
 }

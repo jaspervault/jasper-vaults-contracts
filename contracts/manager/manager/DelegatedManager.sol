@@ -76,11 +76,11 @@ contract DelegatedManager is Ownable, MutualUpgradeV2 {
 
     event UseAssetAllowlistUpdated(bool _status);
 
-    event OwnerFeeSplitUpdated(uint256 _newFeeSplit);
-
-    event OwnerFeeRecipientUpdated(address indexed _newFeeRecipient);
+    event UseAdapterAllowlistUpdated(bool _status);
 
     event AllowedAdapterRemoved(address indexed _adapter);
+
+    event  SetAdapter(address[]  _addList,address[]  _deleteList);
 
     /* ============ Modifiers ============ */
 
@@ -125,37 +125,24 @@ contract DelegatedManager is Ownable, MutualUpgradeV2 {
     // List of approved operators
     address[] internal operators;
 
-    // Mapping indicating if asset is approved to be traded for, wrapped into, claimed, etc.
-    mapping(address => bool) public assetAllowlist;
-
     // List of allowed assets
     address[] internal allowedAssets;
 
     // Toggle if asset allow list is being enforced
     bool public useAssetAllowlist;
-
-    mapping(address => bool) public useAsset_waitlist;
-
-    mapping(address => uint256) public useAsset_timestamps;
-
-    // Global owner fee split that can be referenced by Extensions
-    uint256 public ownerFeeSplit;
-
-    uint256 public managerFee;
-
     // Address owners portions of fees get sent to
     address public ownerFeeRecipient;
 
     // Address of methodologist which serves as providing methodology for the index and receives fee splits
     address public methodologist;
+    address[] internal adapters;
 
-    mapping(address => bool) public adapterAllowlist;
+    bool public useAdapterAllowlist;
 
-    address[] public adapters;
+    mapping(address=>uint256) public adapters_timestamps;
+    mapping(address=>uint256) public assets_timestamps;
 
-    mapping(address => bool) public adapters_waitlist;
 
-    mapping(address => uint256) public adapters_timestamps;
 
     uint256 public delay;
 
@@ -169,21 +156,22 @@ contract DelegatedManager is Ownable, MutualUpgradeV2 {
         address[] memory _operators,
         address[] memory _allowedAssets,
         address[] memory _adapters,
-        bool _useAssetAllowlist
+        bool _useAssetAllowlist,
+        bool _useAdapterAllowlist,
+        uint256 _delay
     ) public {
         jasperVault = _jasperVault;
         factory = _factory;
         methodologist = _methodologist;
         useAssetAllowlist = _useAssetAllowlist;
-
-        emit UseAssetAllowlistUpdated(_useAssetAllowlist);
+        useAdapterAllowlist=_useAdapterAllowlist;
+        delay = _delay;
 
         _addExtensions(_extensions);
         _addOperators(_operators);
         _addAllowedAssets(_allowedAssets);
         _addAllowAdapters(_adapters);
-        // 1 month
-        delay = 2419200;
+        emit UseAssetAllowlistUpdated(_useAssetAllowlist);
     }
 
     /* ============ ExternalFunctions ============ */
@@ -209,23 +197,10 @@ contract DelegatedManager is Ownable, MutualUpgradeV2 {
             _module != address(jasperVault),
             "Extensions cannot call JasperVault"
         );
-        if (adapters_timestamps[msg.sender] >= block.timestamp) {
-            address[] memory _adapters = new address[](1);
-            _adapters[0] = msg.sender;
-            _addAllowAdapters(_adapters);
-            delete adapters_timestamps[msg.sender];
-            delete adapters_waitlist[msg.sender];
-        }
-        if (useAsset_timestamps[msg.sender] >= block.timestamp) {
-            address[] memory _assets = new address[](1);
-            _assets[0] = msg.sender;
-            _addAllowedAssets(_assets);
-            delete useAsset_timestamps[msg.sender];
-            delete useAsset_waitlist[msg.sender];
-        }
-        // Invoke call to module, assume value will always be 0
         _module.functionCallWithValue(_data, 0);
     }
+
+    
 
     /**
      * EXTENSION ONLY: Transfers _tokens held by the manager to _destination. Can be used to
@@ -295,6 +270,9 @@ contract DelegatedManager is Ownable, MutualUpgradeV2 {
         }
     }
 
+    function updateDelay(uint256 _delay) external onlyOwner{
+           delay=_delay;
+    }
     /**
      * ONLY OWNER: Add new operator(s) address(es)
      *
@@ -323,108 +301,64 @@ contract DelegatedManager is Ownable, MutualUpgradeV2 {
         }
     }
 
+
+    function setAllowedAssets(address[] memory _addAssets,address[] memory _deleteAssets) external onlyOwner{ 
+        require(subscribeStatus!=1,"not operable after subscription");
+        _addAllowedAssets(_addAssets);
+        for (uint256 i = 0; i < _deleteAssets.length; i++) {
+            address asset = _deleteAssets[i];
+            if(allowedAssets.contains(asset)){
+                allowedAssets.removeStorage(asset);
+                emit AllowedAssetRemoved(asset);
+            }
+
+        }
+    }
+   
+    function setAdapters(address[] memory _addList,address[] memory _deleteList)  external onlyOwner{
+            require(subscribeStatus!=1,"not operable after subscription");
+            _addAllowAdapters(_addList);
+            for(uint256 i=0;i<_deleteList.length;i++){
+                if(adapters.contains(_deleteList[i])){
+                   adapters.removeStorage(_deleteList[i]);         
+                }
+            }
+            emit SetAdapter(_addList,_deleteList);
+    }
+
+    function isAllowedAsset(address _asset) external view returns (bool) {
+        return useAssetAllowlist&&assets_timestamps[_asset]<=block.timestamp && allowedAssets.contains(_asset);
+    }
+
+    function isAllowedAdapter(address _adapter) external view returns (bool) {
+        return useAdapterAllowlist && adapters_timestamps[_adapter]<=block.timestamp && adapters.contains(_adapter);
+    }
     /**
-     * ONLY OWNER: Add new asset(s) that can be traded to, wrapped to, or claimed
+     * ONLY OWNER: Toggle useAssetAllowlist on and off. When false asset allowlist is ignored
+     * when true it is enforced.
      *
-     * @param _assets           New asset(s) to add
+     * @param _useAssetAllowlist           Bool indicating whether to use asset allow list
      */
-    function addAllowedAssets(address[] memory _assets) external onlyOwner {
-        for (uint256 i = 0; i < _assets.length; i++) {
-            address asset = _assets[i];
-            useAsset_timestamps[asset] = block.timestamp + delay;
-            useAsset_waitlist[asset] = true;
-        }
+    function updateUseAssetAllowlist(bool _useAssetAllowlist) external onlyOwner {
+        useAssetAllowlist = _useAssetAllowlist;
+        emit UseAssetAllowlistUpdated(_useAssetAllowlist);
     }
 
-    function addAdapters(address[] memory _adapters) external onlyOwner {
-        for (uint256 i = 0; i < _adapters.length; i++) {
-            address adapter = _adapters[i];
-            adapters_timestamps[adapter] = block.timestamp + delay;
-            adapters_waitlist[adapter] = true;
-        }
+    function updateUseAdapterAllowlist(bool _useAdapterAllowlist) external onlyOwner {
+        useAdapterAllowlist = _useAdapterAllowlist;
+        emit UseAdapterAllowlistUpdated(_useAdapterAllowlist);
     }
+ 
 
-    function removeAllowedAdapter(
-        address[] memory _adapters
-    ) external onlyOwner {
-        for (uint256 i = 0; i < _adapters.length; i++) {
-            address adapter = _adapters[i];
-
-            require(adapterAllowlist[adapter], "Adapter is not in the list");
-
-            adapters.removeStorage(adapter);
-
-            adapterAllowlist[adapter] = false;
-
-            emit AllowedAdapterRemoved(adapter);
-        }
+    function setBaseProperty(          
+        string memory _name,
+        string memory _symbol) external onlyOwner{
+        jasperVault.setBaseProperty(_name,_symbol);
     }
-
-    function remoeAllowedAssets(address[] memory _assets) external onlyOwner {
-        for (uint256 i = 0; i < _assets.length; i++) {
-            address asset = _assets[i];
-
-            require(assetAllowlist[asset], "Asset is not in the list");
-
-            allowedAssets.removeStorage(asset);
-
-            assetAllowlist[asset] = false;
-
-            emit AllowedAssetRemoved(asset);
-        }
+    function setBaseFeeAndToken(address _masterToken, uint256 _followFee,uint256 _profitShareFee) external  onlyExtension{
+         jasperVault.setBaseFeeAndToken(_masterToken,_followFee,_profitShareFee);
     }
-
-    /**
-     * MUTUAL UPGRADE: Update percent of fees that are sent to owner. Owner and Methodologist must each call this function to execute
-     * the update. If Owner and Methodologist point to the same address, the update can be executed in a single call.
-     *
-     * @param _newFeeSplit           Percent in precise units (100% = 10**18) of fees that accrue to owner
-     */
-    function updateOwnerFeeSplit(
-        uint256 _newFeeSplit
-    ) external mutualUpgrade(owner(), methodologist) {
-        require(
-            _newFeeSplit <= PreciseUnitMath.preciseUnit(),
-            "Invalid fee split"
-        );
-
-        ownerFeeSplit = _newFeeSplit;
-
-        emit OwnerFeeSplitUpdated(_newFeeSplit);
-    }
-
-    function factoryReset(
-        uint256 _newFeeSplit,
-        uint256 _managerFees,
-        uint256 _delay,
-        address _masterToken
-    ) external mutualUpgrade(owner(), methodologist) {
-        require(
-            _newFeeSplit <= PreciseUnitMath.preciseUnit(),
-            "Invalid fee split"
-        );
-
-        ownerFeeSplit = _newFeeSplit;
-        delay = _delay;
-        jasperVault.setMasterToken(_masterToken);
-        managerFee = _managerFees;
-    }
-
-    /**
-     * ONLY OWNER: Update address owner receives fees at
-     *
-     * @param _newFeeRecipient           Address to send owner fees to
-     */
-    function updateOwnerFeeRecipient(
-        address _newFeeRecipient
-    ) external onlyOwner {
-        require(_newFeeRecipient != address(0), "Null address passed");
-
-        ownerFeeRecipient = _newFeeRecipient;
-
-        emit OwnerFeeRecipientUpdated(_newFeeRecipient);
-    }
-
+   
     /**
      * ONLY METHODOLOGIST: Update the methodologist address
      *
@@ -470,25 +404,6 @@ contract DelegatedManager is Ownable, MutualUpgradeV2 {
     }
 
     /* ============ External View Functions ============ */
-
-    function isAllowedAsset(address _asset) external view returns (bool) {
-        if (useAsset_waitlist[_asset] == true) {
-            if (useAsset_timestamps[_asset] > block.timestamp) {
-                return true;
-            }
-        }
-        return !useAssetAllowlist || assetAllowlist[_asset];
-    }
-
-    function isAllowedAdapter(address _adapter) external view returns (bool) {
-        if (adapters_waitlist[_adapter] == true) {
-            if (adapters_timestamps[_adapter] > block.timestamp) {
-                return true;
-            }
-        }
-        return adapterAllowlist[_adapter];
-    }
-
     function isPendingExtension(
         address _extension
     ) external view returns (bool) {
@@ -511,6 +426,10 @@ contract DelegatedManager is Ownable, MutualUpgradeV2 {
 
     function getAllowedAssets() external view returns (address[] memory) {
         return allowedAssets;
+    }
+
+    function getAdapters() external view returns(address[] memory){
+         return adapters;
     }
 
     /* ============ Internal Functions ============ */
@@ -562,24 +481,21 @@ contract DelegatedManager is Ownable, MutualUpgradeV2 {
     function _addAllowedAssets(address[] memory _assets) internal {
         for (uint256 i = 0; i < _assets.length; i++) {
             address asset = _assets[i];
-            if (!assetAllowlist[asset]) {
+            if (!allowedAssets.contains(asset)) {
+                assets_timestamps[asset]=block.timestamp+delay;
                 allowedAssets.push(asset);
-                assetAllowlist[asset] = true;
                 emit AllowedAssetAdded(asset);
             }
         }
     }
 
     function _addAllowAdapters(address[] memory _adapters) internal {
-        for (uint256 i = 0; i < _adapters.length; i++) {
+        for (uint256 i = 0; i < _adapters.length; i++) { 
             address adapter = _adapters[i];
-
-            require(!adapterAllowlist[adapter], "Adapter already added");
-
-            adapters.push(adapter);
-
-            adapterAllowlist[adapter] = true;
-
+            if(!adapters.contains(adapter)){
+                adapters_timestamps[adapter]=block.timestamp+delay;
+                adapters.push(adapter);
+            }
             emit AllowedAdapterAdded(adapter);
         }
     }

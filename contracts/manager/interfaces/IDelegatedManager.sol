@@ -35,8 +35,7 @@ interface IDelegatedManager {
     function factoryReset(
         uint256 _newFeeSplit,
         uint256 _managerFees,
-        uint256 _delay,
-        address _masterToken
+        uint256 _delay
     ) external;
 
     function updateOwnerFeeSplit(uint256 _newFeeSplit) external;
@@ -86,4 +85,8 @@ interface IDelegatedManager {
     function setSubscribeStatus(uint256) external;
 
     function getAdapters() external view returns (address[] memory);
+
+    function setBaseFeeAndToken(address _masterToken,uint256 _followFee,uint256 _profitShareFee) external;
+    function setBaseProperty(string memory _name,string memory _symbol) external;
+    
 }

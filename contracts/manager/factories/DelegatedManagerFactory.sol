@@ -24,7 +24,7 @@ import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {AddressArrayUtils} from "@setprotocol/set-protocol-v2/contracts/lib/AddressArrayUtils.sol";
 import {IController} from "@setprotocol/set-protocol-v2/contracts/interfaces/IController.sol";
 import {IJasperVault} from "../../interfaces/IJasperVault.sol";
-import {ISetTokenCreator} from "@setprotocol/set-protocol-v2/contracts/interfaces/ISetTokenCreator.sol";
+import {ISetTokenCreator} from "../../interfaces/ISetTokenCreator.sol";
 
 import {DelegatedManager} from "../manager/DelegatedManager.sol";
 import {IDelegatedManager} from "../interfaces/IDelegatedManager.sol";
@@ -43,9 +43,27 @@ contract DelegatedManagerFactory {
     using AddressArrayUtils for address[];
     using Address for address;
 
-    mapping(address => address) public acccount2setToken;
+    mapping(address => address) public account2setToken;
     mapping(address => address) public setToken2account;
     mapping(address => uint256) public jasperVaultType;
+
+    struct CreateInfo{
+        uint256 vaultType;
+        uint256 followFee;
+        uint256 profitShareFee;
+        address[]  components;
+        int256[]  units;
+        string  name;
+        string  symbol;
+        address owner;
+        address methodologist;
+        uint256 delay;
+        address[]  modules;
+        address[]  adapters;
+        address[]  operators;
+        address[]  assets;
+        address[]  extensions;
+    }
 
     /* ============ Structs ============ */
 
@@ -115,66 +133,40 @@ contract DelegatedManagerFactory {
 
     /* ============ External Functions ============ */
 
-    /**
-     * ANYONE CAN CALL: Deploys a new JasperVault and DelegatedManager. Sets some temporary metadata about
-     * the deployment which will be read during a subsequent intialization step which wires everything
-     * together.
-     *
-     * @param _components       List of addresses of components for initial Positions
-     * @param _units            List of units. Each unit is the # of components per 10^18 of a JasperVault
-     * @param _name             Name of the JasperVault
-     * @param _symbol           Symbol of the JasperVault
-     * @param _owner            Address to set as the DelegateManager's `owner` role
-     * @param _methodologist    Address to set as the DelegateManager's methodologist role
-     * @param _modules          List of modules to enable. All modules must be approved by the Controller
-     * @param _operators        List of operators authorized for the DelegateManager
-     * @param _assets           List of assets DelegateManager can trade. When empty, asset allow list is not enforced
-     * @param _extensions       List of extensions authorized for the DelegateManager
-     *
-     * @return (IJasperVault, address) The created JasperVault and DelegatedManager addresses, respectively
-     */
     function createSetAndManager(
-        uint256 _vaultType,
-        address[] memory _components,
-        int256[] memory _units,
-        string memory _name,
-        string memory _symbol,
-        address _owner,
-        address _methodologist,
-        address[] memory _modules,
-        address[] memory _adapters,
-        address[] memory _operators,
-        address[] memory _assets,
-        address[] memory _extensions
+      CreateInfo memory _info
     ) external returns (IJasperVault, address) {
-        // require(acccount2setToken[msg.sender] == address(0x0000000000000000000000000000000000000000), "sender has a jasperVault");
-        _validateManagerParameters(_components, _extensions, _assets);
+        // require(account2setToken[msg.sender] == address(0x0000000000000000000000000000000000000000), "sender has a jasperVault");
+        _validateManagerParameters(_info.components,_info.extensions, _info.assets);
         IJasperVault jasperVault = _deploySet(
-            _components,
-            _units,
-            _modules,
-            _name,
-            _symbol
+            _info.components,
+            _info.units,
+            _info.modules,
+            _info.name,
+            _info.symbol,
+            _info.followFee,
+            _info.profitShareFee
         );
 
         DelegatedManager manager = _deployManager(
             jasperVault,
-            _extensions,
-            _operators,
-            _assets,
-            _adapters
+            _info.extensions,
+            _info.operators,
+            _info.assets,
+            _info.adapters,
+            _info.delay
         );
 
         _setInitializationState(
             jasperVault,
             address(manager),
-            _owner,
-            _methodologist
+            _info.owner,
+            _info.methodologist
         );
 
-        acccount2setToken[msg.sender] = address(jasperVault);
+        account2setToken[msg.sender] = address(jasperVault);
         setToken2account[address(jasperVault)] = msg.sender;
-        jasperVaultType[address(jasperVault)] = _vaultType;
+        jasperVaultType[address(jasperVault)] =_info.vaultType;
         return (jasperVault, address(manager));
     }
 
@@ -203,7 +195,8 @@ contract DelegatedManagerFactory {
         address[] memory _adapters,
         address[] memory _operators,
         address[] memory _assets,
-        address[] memory _extensions
+        address[] memory _extensions,
+        uint256 _delay
     ) external returns (address) {
         require(
             controller.isSet(address(_jasperVault)),
@@ -222,7 +215,8 @@ contract DelegatedManagerFactory {
             _extensions,
             _operators,
             _assets,
-            _adapters
+            _adapters,
+            _delay
         );
         _setInitializationState(
             _jasperVault,
@@ -241,18 +235,11 @@ contract DelegatedManagerFactory {
      * must be reset to point at the newly deployed DelegatedManager contract in a separate, final transaction.
      *
      * @param  _jasperVault                Instance of the JasperVault
-     * @param  _ownerFeeSplit           Percent of fees in precise units (10^16 = 1%) sent to owner, rest to methodologist
-     * @param  _ownerFeeRecipient       Address which receives owner's share of fees when they're distributed
      * @param  _extensions              List of addresses of extensions which need to be initialized
      * @param  _initializeBytecode      List of bytecode encoded calls to relevant target's initialize function
      */
     function initialize(
         IJasperVault _jasperVault,
-        uint256 _ownerFeeSplit,
-        address _ownerFeeRecipient,
-        uint256 _managerFee,
-        address _masterToken,
-        uint256 _delay,
         address[] memory _extensions,
         bytes[] memory _initializeBytecode
     ) external {
@@ -279,12 +266,7 @@ contract DelegatedManagerFactory {
         _setManagerState(
             manager,
             initializeState[_jasperVault].owner,
-            initializeState[_jasperVault].methodologist,
-            _ownerFeeSplit,
-            _ownerFeeRecipient,
-            _managerFee,
-            _masterToken,
-            _delay
+            initializeState[_jasperVault].methodologist
         );
 
         delete initializeState[_jasperVault];
@@ -311,7 +293,9 @@ contract DelegatedManagerFactory {
         int256[] memory _units,
         address[] memory _modules,
         string memory _name,
-        string memory _symbol
+        string memory _symbol,
+        uint256  _followFee,
+        uint256  _profitShareFee
     ) internal returns (IJasperVault) {
         address jasperVault = setTokenFactory.create(
             _components,
@@ -319,7 +303,9 @@ contract DelegatedManagerFactory {
             _modules,
             address(this),
             _name,
-            _symbol
+            _symbol,
+            _followFee,
+            _profitShareFee
         );
 
         return IJasperVault(jasperVault);
@@ -341,12 +327,13 @@ contract DelegatedManagerFactory {
         address[] memory _extensions,
         address[] memory _operators,
         address[] memory _assets,
-        address[] memory _adapters
+        address[] memory _adapters,
+        uint256 _delay
     ) internal returns (DelegatedManager) {
         // If asset array is empty, manager's useAssetAllowList will be set to false
         // and the asset allow list is not enforced
         bool useAssetAllowlist = _assets.length > 0;
-
+        bool useAdapterAllowlist=_adapters.length>0;
         DelegatedManager newManager = new DelegatedManager(
             _jasperVault,
             address(this),
@@ -355,7 +342,9 @@ contract DelegatedManagerFactory {
             _operators,
             _assets,
             _adapters,
-            useAssetAllowlist
+            useAssetAllowlist,
+            useAdapterAllowlist,
+            _delay
         );
 
         // Registers manager with ManagerCore
@@ -437,28 +426,12 @@ contract DelegatedManagerFactory {
      *
      * @param  _manager                 Instance of DelegatedManager
      * @param  _owner                   Address that will be given the `owner` DelegatedManager's role
-     * @param  _methodologist           Address that will be given the `methodologist` DelegatedManager's role
-     * @param  _ownerFeeSplit           Percent of fees in precise units (10^16 = 1%) sent to owner, rest to methodologist
-     * @param  _ownerFeeRecipient       Address which receives owner's share of fees when they're distributed
      */
     function _setManagerState(
         IDelegatedManager _manager,
         address _owner,
-        address _methodologist,
-        uint256 _ownerFeeSplit,
-        address _ownerFeeRecipient,
-        uint256 _managerFees,
-        address _masterToken,
-        uint256 _delay
+        address _methodologist
     ) internal {
-        _manager.factoryReset(
-            _ownerFeeSplit,
-            _managerFees,
-            _delay,
-            _masterToken
-        );
-        _manager.updateOwnerFeeRecipient(_ownerFeeRecipient);
-
         _manager.transferOwnership(_owner);
         _manager.setMethodologist(_methodologist);
     }

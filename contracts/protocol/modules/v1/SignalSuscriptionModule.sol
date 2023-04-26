@@ -60,13 +60,18 @@ contract SignalSuscriptionModule is ModuleBase, Ownable, ReentrancyGuard {
     address public platform_vault;
 
     mapping(address => address) public Signal_provider;
-    //1%=1e16  100%=1e18
-    mapping(IJasperVault => uint256) public strategistsFee;
+
+
     mapping(IJasperVault => uint256) private jasperVaultPreBalance;
 
-    ISubscribeFeePool public immutable subscribeFeePool;
+    mapping(address=>uint256)  public followFees;
 
-    uint256 public platformPercentage;
+    mapping(address=>uint256) public profitShareFees;
+
+
+
+    ISubscribeFeePool public  subscribeFeePool;
+
 
     /* ============ Constructor ============ */
 
@@ -75,12 +80,12 @@ contract SignalSuscriptionModule is ModuleBase, Ownable, ReentrancyGuard {
         ISubscribeFeePool _subscribeFeePool,
         uint256 _warningLine,
         uint256 _unsubscribeLine,
-        uint256 _platformPercentage,
+        uint256 _platformFee,
         address _platform_vault
     ) public ModuleBase(_controller) {
         warningLine = _warningLine;
         unsubscribeLine = _unsubscribeLine;
-        platformPercentage = _platformPercentage;
+        platformFee = _platformFee;
         subscribeFeePool = _subscribeFeePool;
         platform_vault = _platform_vault;
     }
@@ -106,11 +111,17 @@ contract SignalSuscriptionModule is ModuleBase, Ownable, ReentrancyGuard {
 
     //1%=1e16  100%=1e18
     function setPlatformAndPlatformFee(
+        ISubscribeFeePool _subscribeFeePool,
         address _platform_vault,
+        uint256 _warningLine,
+        uint256 _unsubscribeLine,
         uint256 _fee
     ) external nonReentrant onlyOwner {
+        subscribeFeePool = _subscribeFeePool;
         platformFee = _fee;
         platform_vault = _platform_vault;
+        warningLine = _warningLine;
+        unsubscribeLine = _unsubscribeLine;
     }
 
     /**
@@ -148,6 +159,9 @@ contract SignalSuscriptionModule is ModuleBase, Ownable, ReentrancyGuard {
         jasperVaultPreBalance[_jasperVault] = preBalance;
         followers[target].push(address(_jasperVault));
         Signal_provider[address(_jasperVault)] = target;
+
+        followFees[address(_jasperVault)]=IJasperVault(target).followFee();
+        profitShareFees[address(_jasperVault)]=IJasperVault(target).profitShareFee();
     }
 
     function udpate_allowedCopytrading(
@@ -195,33 +209,39 @@ contract SignalSuscriptionModule is ModuleBase, Ownable, ReentrancyGuard {
     ) external nonReentrant onlyManagerAndValidSet(_jasperVault) {
         address masterToken = _jasperVault.masterToken();
         uint256 preBalance = jasperVaultPreBalance[_jasperVault];
-        uint256 nexBalance = controller
+        address target = Signal_provider[address(_jasperVault)];
+        uint256 nextBalance = controller
             .getSetValuer()
             .calculateSetTokenValuation(_jasperVault, masterToken);
-
-        if (nexBalance > preBalance) {
-            uint256 totalSupply = _jasperVault.totalSupply();
-            uint256 fee = nexBalance.sub(preBalance).mul(totalSupply);
+        uint256 totalSupply = _jasperVault.totalSupply();
+        uint256 followFee=followFees[address(_jasperVault)];
+        uint256 strategistFeeBalance =(followFee.preciseMul(nextBalance)).preciseMul(totalSupply);
+        if (nextBalance > preBalance) {  
+            uint256   fee=nextBalance.sub(preBalance).mul(totalSupply);
             //calculate platformFee
             uint256 platformFeeBalance = fee.preciseMul(platformFee);
-
-            //calculate strategistsFee
-            address target = Signal_provider[address(_jasperVault)];
-            uint256 _strategistFee = strategistsFee[IJasperVault(target)];
-            uint256 strategistFeeBalance = _strategistFee.preciseMul(
-                _strategistFee
-            );
-            //approve
+           //approve
             _jasperVault.invokeApprove(
                 masterToken,
                 address(subscribeFeePool),
-                platformFeeBalance.add(strategistFeeBalance)
+                platformFeeBalance
             );
             desposit(
                 _jasperVault,
                 masterToken,
                 platform_vault,
                 platformFeeBalance
+            );
+            //calculate strategistsFee
+            uint256 _strategistFee=profitShareFees[address(_jasperVault)];
+            strategistFeeBalance =strategistFeeBalance.add(_strategistFee.preciseMul(fee));  
+        }
+   
+            //approve
+            _jasperVault.invokeApprove(
+                masterToken,
+                address(subscribeFeePool),
+                strategistFeeBalance
             );
             desposit(_jasperVault, masterToken, target, strategistFeeBalance);
             //update position
@@ -230,7 +250,7 @@ contract SignalSuscriptionModule is ModuleBase, Ownable, ReentrancyGuard {
             );
             tokenBalance = tokenBalance.preciseDiv(totalSupply);
             _updatePosition(_jasperVault, masterToken, tokenBalance, 0);
-        }
+       
     }
 
     function desposit(

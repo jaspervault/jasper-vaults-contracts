@@ -74,6 +74,25 @@ contract VaultFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         entryPoint.addStake{value : msg.value}(unstakeDelaySec);
     }
 
+    function getAccountByIndex(address _account,uint256 salt) external view returns (AccountInfo memory){
+            AccountInfo memory info;
+            info.vault=getAddress(_account,salt);
+            info.jasperVault=delegatedManagerFactory.account2setToken(info.vault);
+            info.jasperVaultType=delegatedManagerFactory.jasperVaultType(info.jasperVault);
+            info.vaultIndex=account2Index[_account][info.vault];
+            return info;
+    }
+
+    function getAccountByVault(address _account,address _vault) external view returns(AccountInfo memory){
+            AccountInfo memory info;
+            uint256 salt=account2Index[_account][_vault];
+            info.vault=getAddress(_account,salt);
+            info.jasperVault=delegatedManagerFactory.account2setToken(info.vault);
+            info.jasperVaultType=delegatedManagerFactory.jasperVaultType(info.jasperVault);
+            info.vaultIndex=account2Index[_account][info.vault];
+            return info;  
+    }
+
     function getAccountList(address _account,uint256 _page,uint256 _pageSize) external view returns(AccountInfo[] memory){
         require(_page> 0 && _pageSize>0, "_page and _pageSize  must greater than zero");
         uint256 start=(_page-1)*_pageSize;
@@ -90,17 +109,18 @@ contract VaultFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
            len=_pageSize;
         }
         AccountInfo[] memory infos=new AccountInfo[](len);
-        AccountInfo memory info;
         uint256 index;
         for(uint256 i=0;i<len;i++) {
+              AccountInfo memory info;
               index=i+start;
               uint256 salt=account2salts[_account][index];
               info.vault=getAddress(_account,salt);
-              info.jasperVault=delegatedManagerFactory.acccount2setToken(info.vault);
-              info.jasperVaultType=delegatedManagerFactory.jasperVaultType(info.vault);
+              info.jasperVault=delegatedManagerFactory.account2setToken(info.vault);
+              info.jasperVaultType=delegatedManagerFactory.jasperVaultType(info.jasperVault);
               info.vaultIndex=account2Index[_account][info.vault];
               infos[i]=info;
         }
+
         return  infos;
     }
     /**

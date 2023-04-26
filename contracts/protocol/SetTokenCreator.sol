@@ -69,7 +69,9 @@ contract SetTokenCreator {
         address[] memory _modules,
         address _manager,
         string memory _name,
-        string memory _symbol
+        string memory _symbol,
+        uint256 _followFee,
+        uint256 _profitShareFee
     )
         external
         returns (address)
@@ -97,7 +99,9 @@ contract SetTokenCreator {
             controller,
             _manager,
             _name,
-            _symbol
+            _symbol,
+            _followFee,
+            _profitShareFee
         );
 
         // Registers Set with controller
