@@ -36,6 +36,7 @@ interface IIssuanceModule {
         uint256 _managerIssueFee,
         uint256 _managerRedeemFee,
         address _feeRecipient,
-        address _managerIssuanceHook
+        address _managerIssuanceHook,
+        address _iROwers
     ) external;
 }

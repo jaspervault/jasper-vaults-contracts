@@ -136,7 +136,8 @@ contract NAVIssuanceExtension is BaseGlobalExtension {
 
     function initializeModule(
         IDelegatedManager _delegatedManager,
-        NAVIssuanceSettings memory _navIssuanceSettings
+        NAVIssuanceSettings memory _navIssuanceSettings,
+        address[] memory _iROwer
     ) external onlyOwnerAndValidManager(_delegatedManager) {
         require(
             _delegatedManager.isInitializedExtension(address(this)),
@@ -146,7 +147,8 @@ contract NAVIssuanceExtension is BaseGlobalExtension {
         _initializeModule(
             _delegatedManager.jasperVault(),
             _delegatedManager,
-            _navIssuanceSettings
+            _navIssuanceSettings,
+            _iROwer
         );
     }
 
@@ -176,7 +178,8 @@ contract NAVIssuanceExtension is BaseGlobalExtension {
 
     function initializeModuleAndExtension(
         IDelegatedManager _delegatedManager,
-        NAVIssuanceSettings memory _navIssuanceSettings
+        NAVIssuanceSettings memory _navIssuanceSettings,
+        address[] memory _iROwer
     ) external onlyOwnerAndValidManager(_delegatedManager) {
         require(
             _delegatedManager.isPendingExtension(address(this)),
@@ -186,7 +189,7 @@ contract NAVIssuanceExtension is BaseGlobalExtension {
         IJasperVault jasperVault = _delegatedManager.jasperVault();
 
         _initializeExtension(jasperVault, _delegatedManager);
-        _initializeModule(jasperVault, _delegatedManager, _navIssuanceSettings);
+        _initializeModule(jasperVault, _delegatedManager, _navIssuanceSettings,_iROwer);
 
         emit IssuanceExtensionInitialized(
             address(jasperVault),
@@ -297,12 +300,14 @@ contract NAVIssuanceExtension is BaseGlobalExtension {
     function _initializeModule(
         IJasperVault _jasperVault,
         IDelegatedManager _delegatedManager,
-        NAVIssuanceSettings memory _navIssuanceSettings
+        NAVIssuanceSettings memory _navIssuanceSettings,
+        address[] memory _iROwer
     ) internal {
         bytes memory callData = abi.encodeWithSelector(
             INAVIssuanceModule.initialize.selector,
             _jasperVault,
-            _navIssuanceSettings
+            _navIssuanceSettings,
+            _iROwer
         );
         _invokeManager(_delegatedManager, address(navIssuanceModule), callData);
     }

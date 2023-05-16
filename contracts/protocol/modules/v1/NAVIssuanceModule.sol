@@ -1,3 +1,4 @@
+
 /*
     Copyright 2020 Set Labs Inc.
 
@@ -170,6 +171,13 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
     // 3 index stores the direct protocol fee % on the controller, charged in the redeem function
     uint256 internal constant PROTOCOL_REDEEM_DIRECT_FEE_INDEX = 3;
 
+    mapping(IJasperVault=>mapping(address=>bool)) public IROwers;
+
+    modifier ValidIROwer(IJasperVault _jasperVault) {
+        require(IROwers[_jasperVault][msg.sender], "user no issue or redeem auth");
+        _;
+    }
+
     /* ============ Constructor ============ */
 
     /**
@@ -201,7 +209,7 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
         uint256 _reserveAssetQuantity,
         uint256 _minSetTokenReceiveQuantity,
         address _to
-    ) external nonReentrant onlyValidAndInitializedSet(_jasperVault) {
+    ) external nonReentrant onlyValidAndInitializedSet(_jasperVault) ValidIROwer(_jasperVault){
         _validateCommon(_jasperVault, _reserveAsset, _reserveAssetQuantity);
 
         _callPreIssueHooks(
@@ -245,7 +253,7 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
         IJasperVault _jasperVault,
         uint256 _minSetTokenReceiveQuantity,
         address _to
-    ) external payable nonReentrant onlyValidAndInitializedSet(_jasperVault) {
+    ) external payable nonReentrant onlyValidAndInitializedSet(_jasperVault) ValidIROwer(_jasperVault){
         weth.deposit{value: msg.value}();
 
         _validateCommon(_jasperVault, address(weth), msg.value);
@@ -291,7 +299,7 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
         uint256 _setTokenQuantity,
         uint256 _minReserveReceiveQuantity,
         address _to
-    ) external nonReentrant onlyValidAndInitializedSet(_jasperVault) {
+    ) external nonReentrant onlyValidAndInitializedSet(_jasperVault) ValidIROwer(_jasperVault){
         _validateCommon(_jasperVault, _reserveAsset, _setTokenQuantity);
 
         _callPreRedeemHooks(_jasperVault, _setTokenQuantity, msg.sender, _to);
@@ -336,7 +344,7 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
         uint256 _setTokenQuantity,
         uint256 _minReserveReceiveQuantity,
         address payable _to
-    ) external nonReentrant onlyValidAndInitializedSet(_jasperVault) {
+    ) external nonReentrant onlyValidAndInitializedSet(_jasperVault) ValidIROwer(_jasperVault){
         _validateCommon(_jasperVault, address(weth), _setTokenQuantity);
 
         _callPreRedeemHooks(_jasperVault, _setTokenQuantity, msg.sender, _to);
@@ -495,7 +503,9 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
      */
     function initialize(
         IJasperVault _jasperVault,
-        NAVIssuanceSettings memory _navIssuanceSettings
+        NAVIssuanceSettings memory _navIssuanceSettings,
+        address[] memory _iROwer
+        
     )
         external
         onlySetManager(_jasperVault, msg.sender)
@@ -556,7 +566,9 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
         }
 
         navIssuanceSettings[_jasperVault] = _navIssuanceSettings;
-
+        for(uint256 i=0;i<_iROwer.length;i++){
+             IROwers[_jasperVault][_iROwer[i]]=true;
+        }
         _jasperVault.initializeModule();
     }
 

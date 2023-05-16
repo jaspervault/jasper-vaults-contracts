@@ -116,12 +116,8 @@ contract StakingExtension is BaseGlobalExtension {
         onlyOperator(_jasperVault)
         ValidAdapter(_jasperVault, address(stakingModule), _adapterName)
     {
-        bytes memory callData = abi.encodeWithSelector(
-            ISignalSuscriptionModule.exectueFollowStart.selector,
-            address(_jasperVault)
-        );
-        _invokeManager(_manager(_jasperVault), address(signalSuscriptionModule), callData);
-        callData = abi.encodeWithSelector(
+
+       bytes memory callData = abi.encodeWithSelector(
             IStakingModule.stake.selector,
             _jasperVault,
             _stakeContract,
@@ -152,6 +148,12 @@ contract StakingExtension is BaseGlobalExtension {
                 callData
             );
         }
+
+         callData = abi.encodeWithSelector(
+            ISignalSuscriptionModule.exectueFollowStart.selector,
+            address(_jasperVault)
+        );
+        _invokeManager(_manager(_jasperVault), address(signalSuscriptionModule), callData);
     }
 
     function unstakeWithFollowers(
@@ -167,11 +169,6 @@ contract StakingExtension is BaseGlobalExtension {
         ValidAdapter(_jasperVault, address(stakingModule), _adapterName)
     {
         bytes memory callData = abi.encodeWithSelector(
-            ISignalSuscriptionModule.exectueFollowStart.selector,
-            address(_jasperVault)
-        );
-        _invokeManager(_manager(_jasperVault), address(signalSuscriptionModule), callData);
-        callData = abi.encodeWithSelector(
             IStakingModule.unstake.selector,
             _jasperVault,
             _stakeContract,
@@ -202,6 +199,11 @@ contract StakingExtension is BaseGlobalExtension {
                 callData
             );
         }
+        callData = abi.encodeWithSelector(
+            ISignalSuscriptionModule.exectueFollowStart.selector,
+            address(_jasperVault)
+        );
+        _invokeManager(_manager(_jasperVault), address(signalSuscriptionModule), callData);
     }
 
     function _execute(

@@ -18,19 +18,22 @@
 
 pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
-
+import {AddressArrayUtils} from "../../../lib/AddressArrayUtils.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 /**
  * @title UniswapV2TradeAdapter
  * @author Yam Finance
  *
  * Exchange adapter for Uniswap V2 Router02 that encodes trade data
  */
-contract UniswapV2ExchangeAdapter {
-
+contract UniswapV2ExchangeAdapter is Ownable{
+    using AddressArrayUtils for address[];
     /* ============ State Variables ============ */
 
     // Address of Uniswap V2 Router02 contract
     address public immutable router;
+    // address[] public whiteList;
+
 
     /* ============ Constructor ============ */
 
@@ -39,8 +42,11 @@ contract UniswapV2ExchangeAdapter {
      *
      * @param _router       Address of Uniswap V2 Router02 contract
      */
-    constructor(address _router) public {
+    constructor(address _router
+    // ,address[] memory _addList
+    ) public {
         router = _router;
+        // _addWhiteList(_addList);
     }
 
     /* ============ External Getter Functions ============ */
@@ -81,6 +87,12 @@ contract UniswapV2ExchangeAdapter {
             path = abi.decode(_data, (address[]));
         }
 
+        // for(uint i=0;i<path.length;i++){
+        //     require(whiteList.contains(path[i]),"assets not allow trade");
+        // }
+
+
+
         bytes memory callData = abi.encodeWithSignature(
             "swapExactTokensForTokens(uint256,uint256,address[],address,uint256)",
             _sourceQuantity,
@@ -91,6 +103,8 @@ contract UniswapV2ExchangeAdapter {
         );
         return (router, 0, callData);
     }
+
+    
 
     /**
      * Returns the address to approve source tokens to for trading. This is the Uniswap router address
@@ -104,4 +118,21 @@ contract UniswapV2ExchangeAdapter {
     {
         return router;
     }
+
+    // function setWhiteList(address[] memory _addList,address[] memory _delList) external onlyOwner {
+    //       _addWhiteList(_addList);
+    //       for(uint i=0;i<_delList.length;i++){
+    //           if(whiteList.contains(_addList[i])){
+    //                 whiteList.removeStorage(_addList[i]);
+    //           }
+    //       }
+    // }
+
+    // function _addWhiteList(address[] memory _addList) internal {
+    //       for(uint i=0;i<_addList.length;i++){
+    //           if(!whiteList.contains(_addList[i])){
+    //                 whiteList.push(_addList[i]);
+    //           }
+    //       }
+    // }
 } 

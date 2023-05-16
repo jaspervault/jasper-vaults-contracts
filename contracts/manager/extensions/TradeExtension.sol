@@ -19,7 +19,7 @@
 pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
 import { IJasperVault } from "../../interfaces/IJasperVault.sol";
-import { ITradeModule } from "@setprotocol/set-protocol-v2/contracts/interfaces/ITradeModule.sol";
+import { ITradeModule } from "../../interfaces/ITradeModule.sol";
 
 import { BaseGlobalExtension } from "../lib/BaseGlobalExtension.sol";
 import { IDelegatedManager } from "../interfaces/IDelegatedManager.sol";
@@ -35,7 +35,7 @@ contract TradeExtension is BaseGlobalExtension {
     struct TradeInfo {
         string exchangeName;             // Human readable name of the exchange in the integrations registry
         address sendToken;               // Address of the token to be sent to the exchange
-        uint256 sendQuantity;            // Max units of `sendToken` sent to the exchange
+        int256 sendQuantity;            // Max units of `sendToken` sent to the exchange
         address receiveToken;            // Address of the token that will be received from the exchange
         uint256 minReceiveQuantity;         // Min units of `receiveToken` to be received from the exchange
         bytes data;                      // Arbitrary bytes to be used to construct trade call data
@@ -129,7 +129,7 @@ contract TradeExtension is BaseGlobalExtension {
         ValidAdapter(_jasperVault,address(tradeModule),_tradeInfo.exchangeName)
     {
         bytes memory callData = abi.encodeWithSignature(
-            "trade(address,string,address,uint256,address,uint256,bytes)",
+            "trade(address,string,address,int256,address,uint256,bytes)",
             _jasperVault,
             _tradeInfo.exchangeName,
             _tradeInfo.sendToken,

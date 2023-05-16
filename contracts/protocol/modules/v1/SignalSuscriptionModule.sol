@@ -30,7 +30,7 @@ import {ModuleBase} from "../../lib/ModuleBase.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {PreciseUnitMath} from "../../../lib/PreciseUnitMath.sol";
 import {AddressArrayUtils} from "../../../lib/AddressArrayUtils.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20} from "../../../interfaces/IERC20.sol";
 import {ISubscribeFeePool} from "../../../interfaces/ISubscribeFeePool.sol";
 
 /**
@@ -51,8 +51,8 @@ contract SignalSuscriptionModule is ModuleBase, Ownable, ReentrancyGuard {
 
     mapping(address => address[]) public followers;
 
-    mapping(address => bool) public allowed_Copytrading;
     mapping(address => bool) public isExectueFollow;
+   
     uint256 public warningLine;
     uint256 public unsubscribeLine;
     //1%=1e16  100%=1e18
@@ -60,9 +60,7 @@ contract SignalSuscriptionModule is ModuleBase, Ownable, ReentrancyGuard {
     address public platform_vault;
 
     mapping(address => address) public Signal_provider;
-
-
-    mapping(IJasperVault => uint256) private jasperVaultPreBalance;
+    mapping(IJasperVault => uint256) public jasperVaultPreBalance;
 
     mapping(address=>uint256)  public followFees;
 
@@ -149,34 +147,29 @@ contract SignalSuscriptionModule is ModuleBase, Ownable, ReentrancyGuard {
         IJasperVault _jasperVault,
         address target
     ) external nonReentrant onlyManagerAndValidSet(_jasperVault) {
-        require(allowed_Copytrading[target], "Unable to subscribe this fund");
         uint256 preBalance = controller
             .getSetValuer()
             .calculateSetTokenValuation(
                 _jasperVault,
                 _jasperVault.masterToken()
             );
-        jasperVaultPreBalance[_jasperVault] = preBalance;
+
+        uint256 decimals=IERC20(_jasperVault.masterToken()).decimals();  
+        jasperVaultPreBalance[_jasperVault] =preBalance.mul(10**decimals).preciseMul(_jasperVault.totalSupply()).div(PreciseUnitMath.preciseUnit());
         followers[target].push(address(_jasperVault));
         Signal_provider[address(_jasperVault)] = target;
-
         followFees[address(_jasperVault)]=IJasperVault(target).followFee();
         profitShareFees[address(_jasperVault)]=IJasperVault(target).profitShareFee();
     }
 
-    function udpate_allowedCopytrading(
-        IJasperVault _jasperVault,
-        bool can_copy_trading
-    ) external onlyManagerAndValidSet(_jasperVault) {
-        allowed_Copytrading[address(_jasperVault)] = can_copy_trading;
-    }
+
 
     function unsubscribe(
         IJasperVault _jasperVault,
         address target
     ) external nonReentrant onlyManagerAndValidSet(_jasperVault) {
         followers[target].removeStorage(address(_jasperVault));
-        delete Signal_provider[address(_jasperVault)];
+      
     }
 
     function removeFollower(
@@ -190,11 +183,7 @@ contract SignalSuscriptionModule is ModuleBase, Ownable, ReentrancyGuard {
     function get_followers(
         address target
     ) external view returns (address[] memory) {
-        if (allowed_Copytrading[target]) {
-            return followers[target];
-        } else {
-            return new address[](0);
-        }
+          return followers[target]; 
     }
 
     function get_signal_provider(
@@ -210,31 +199,34 @@ contract SignalSuscriptionModule is ModuleBase, Ownable, ReentrancyGuard {
         address masterToken = _jasperVault.masterToken();
         uint256 preBalance = jasperVaultPreBalance[_jasperVault];
         address target = Signal_provider[address(_jasperVault)];
-        uint256 nextBalance = controller
-            .getSetValuer()
-            .calculateSetTokenValuation(_jasperVault, masterToken);
+        delete jasperVaultPreBalance[_jasperVault];
+        delete Signal_provider[address(_jasperVault)];
+        uint256 nextBalance=IERC20(masterToken).balanceOf(address(_jasperVault));
         uint256 totalSupply = _jasperVault.totalSupply();
         uint256 followFee=followFees[address(_jasperVault)];
-        uint256 strategistFeeBalance =(followFee.preciseMul(nextBalance)).preciseMul(totalSupply);
+        uint256 strategistFeeBalance=preBalance.preciseMul(followFee);      
         if (nextBalance > preBalance) {  
-            uint256   fee=nextBalance.sub(preBalance).mul(totalSupply);
+            //Calculated profit
+            uint256   fee=nextBalance-preBalance;
             //calculate platformFee
             uint256 platformFeeBalance = fee.preciseMul(platformFee);
-           //approve
-            _jasperVault.invokeApprove(
-                masterToken,
-                address(subscribeFeePool),
-                platformFeeBalance
-            );
-            desposit(
-                _jasperVault,
-                masterToken,
-                platform_vault,
-                platformFeeBalance
-            );
+            if(platformFeeBalance>0){
+                //approve
+                _jasperVault.invokeApprove(
+                    masterToken,
+                    address(subscribeFeePool),
+                    platformFeeBalance
+                );
+                desposit(
+                    _jasperVault,
+                    masterToken,
+                    platform_vault,
+                    platformFeeBalance
+                );
+            }
             //calculate strategistsFee
             uint256 _strategistFee=profitShareFees[address(_jasperVault)];
-            strategistFeeBalance =strategistFeeBalance.add(_strategistFee.preciseMul(fee));  
+            strategistFeeBalance =strategistFeeBalance.add(fee.preciseMul(_strategistFee));  
         }
    
             //approve
@@ -244,11 +236,12 @@ contract SignalSuscriptionModule is ModuleBase, Ownable, ReentrancyGuard {
                 strategistFeeBalance
             );
             desposit(_jasperVault, masterToken, target, strategistFeeBalance);
+     
             //update position
             uint256 tokenBalance = IERC20(masterToken).balanceOf(
                 address(_jasperVault)
             );
-            tokenBalance = tokenBalance.preciseDiv(totalSupply);
+            tokenBalance = tokenBalance.preciseDiv(totalSupply);       
             _updatePosition(_jasperVault, masterToken, tokenBalance, 0);
        
     }

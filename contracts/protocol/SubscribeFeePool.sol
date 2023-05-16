@@ -30,8 +30,6 @@ interface IOwnable{
     function owner() external returns(address);
 }
 
-
-
 contract SubscribeFeePool is Ownable,ReentrancyGuard{
     using SafeMath for uint256;
     using AddressArrayUtils for address[];
@@ -42,6 +40,7 @@ contract SubscribeFeePool is Ownable,ReentrancyGuard{
         uint256[] amounts;
     }
     mapping(address=>DespositInfo)  internal despositInfos;
+
     event Desposit(address _sender, address _to,uint256  _amount);
     event Witdraw(address _sender,address _to,uint256  _amount);
     event WitdrawJasperVault(address _jasperVault,address _sender,address _to,uint256  _amount);
@@ -62,7 +61,6 @@ contract SubscribeFeePool is Ownable,ReentrancyGuard{
        if(exist){  
             uint256 balance=despositInfos[_to].amounts[index];
             despositInfos[_to].amounts[index]=balance.add(_amount); 
-
        }else{
            despositInfos[_to].compounts.push(_token);
            despositInfos[_to].amounts.push(_amount);
@@ -72,26 +70,59 @@ contract SubscribeFeePool is Ownable,ReentrancyGuard{
     //withdraw   JasperVault
     function witdrawAndJasperVault(address _token,address _jasperVault,address _to,uint256 _amount) external nonReentrant{
         address account= delegatedManagerFactory.setToken2account(_jasperVault);
-        address recipient=IOwnable(account).owner();
-        require(recipient==msg.sender,"The caller is not the jasperVault owner");
-        address[] memory compounts=despositInfos[msg.sender].compounts;
+        // address recipient=IOwnable(account).owner();  
+        require(account==msg.sender,"The caller is not the jasperVault owner");
+        address[] memory compounts=despositInfos[_jasperVault].compounts;
         (uint256 index,bool exist)=compounts.indexOf(_token);
-        require(exist,"token is not exist");   
+        require(exist,"token is not exist");    
         uint256 balance=despositInfos[_jasperVault].amounts[index];
-        despositInfos[_jasperVault].amounts[index]=balance.sub(_amount);  
+        require(balance>=_amount,"witdraw balance not enough");
+        despositInfos[_jasperVault].amounts[index]=balance.sub(_amount);
         IERC20(_token).transfer(_to, _amount);
          emit WitdrawJasperVault(_jasperVault,msg.sender,_to,_amount);
+    }
+
+    function witdrawAllAndJasperVault(address _jasperVault,address _to) external nonReentrant{
+        address account= delegatedManagerFactory.setToken2account(_jasperVault);
+        // address recipient=IOwnable(account).owner();  
+        require(account==msg.sender,"The caller is not the jasperVault owner");
+        address[] memory compounts=despositInfos[_jasperVault].compounts;
+        uint256[] memory amounts=despositInfos[_jasperVault].amounts;
+        for(uint256 i=0;i<compounts.length;i++){
+          if(amounts[i]>0){
+            despositInfos[_jasperVault].amounts[i]=0;
+            IERC20(compounts[i]).transfer(_to, amounts[i]);
+            emit WitdrawJasperVault(_jasperVault,msg.sender,_to,amounts[i]);
+          }
+
+        }
     }
     // //withdraw
     function witdraw(address _token,address _to,uint256 _amount) external nonReentrant {
         address[] memory compounts=despositInfos[msg.sender].compounts;
         (uint256 index,bool exist)=compounts.indexOf(_token);
+
         require(exist,"token is not exist");   
         uint256 balance=despositInfos[msg.sender].amounts[index];
-        despositInfos[msg.sender].amounts[index]=balance.sub(_amount);   
+        require(balance>=_amount,"witdraw balance not enough");
+        despositInfos[msg.sender].amounts[index]=balance.sub(_amount);    
         IERC20(_token).transfer(_to, _amount);
         emit Witdraw(msg.sender,_to,_amount);
     }
+
+    function witdrawAll(address _to)  external nonReentrant{
+        address[] memory compounts=despositInfos[msg.sender].compounts;
+        uint256[] memory amounts=despositInfos[msg.sender].amounts;
+        for(uint256 i=0;i<compounts.length;i++){
+             if(amounts[i]>0){
+                despositInfos[msg.sender].amounts[i]=0;
+                IERC20(compounts[i]).transfer(_to, amounts[i]);
+                emit Witdraw(msg.sender,_to,amounts[i]);
+             }
+        }
+      
+    }
+
     function getDespositInfo(address _user) external view returns(DespositInfo memory){
         return despositInfos[_user];
     }

@@ -57,23 +57,30 @@ contract SignalSuscriptionExtension is BaseGlobalExtension {
         address user,
         bool status
     );
+
+    /* ============ State Variables ============ */
+
+    // Instance of SignalSuscriptionModule
+    ISignalSuscriptionModule public immutable signalSuscriptionModule;
+
+    //whiteList
+    mapping(IJasperVault => mapping(address => bool)) public whiteList;
+
+    mapping(IJasperVault => bool) public allowSubscribe;
+    
+    
     /* ============ Modifiers ============ */
     modifier ValidWhitelist(IJasperVault _jasperVault) {
+        require(
+            allowSubscribe[_jasperVault],
+            "jasperVault not allow subscribe"
+        );
         require(
             whiteList[_jasperVault][msg.sender],
             "user is not in the whitelist"
         );
         _;
     }
-    /* ============ State Variables ============ */
-
-    // Instance of SignalSuscriptionModule
-    ISignalSuscriptionModule public immutable signalSuscriptionModule;
-
-
-
-    //whiteList
-    mapping(IJasperVault => mapping(address => bool)) public whiteList;
 
     /* ============ Constructor ============ */
 
@@ -85,14 +92,20 @@ contract SignalSuscriptionExtension is BaseGlobalExtension {
     }
 
     /* ============ External Functions ============ */
-    function setWhiteList(
+    function setWhiteListAndSubscribeStatus(
         IJasperVault _jasperVault,
-        address[] memory users,
-        bool status
+        address[] memory _addList,
+        address[] memory _delList,
+        bool _status
     ) external onlyOperator(_jasperVault) {
-        for (uint256 i = 0; i < users.length; i++) {
-            whiteList[_jasperVault][users[i]] = status;
-            emit SetWhiteList(_jasperVault, users[i], status);
+        allowSubscribe[_jasperVault] = _status;
+        for (uint256 i = 0; i < _addList.length; i++) {
+            whiteList[_jasperVault][_addList[i]] = true;
+            emit SetWhiteList(_jasperVault, _addList[i], true);
+        }
+        for (uint256 i = 0; i < _delList.length; i++) {
+            whiteList[_jasperVault][_delList[i]] = false;
+            emit SetWhiteList(_jasperVault, _delList[i], false);
         }
     }
 
@@ -169,9 +182,16 @@ contract SignalSuscriptionExtension is BaseGlobalExtension {
         _removeExtension(jasperVault, delegatedManager);
     }
 
-    function editSubscribeFee(IJasperVault _jasperVault,address _masterToken,uint256 _followFee,uint256 _profitShareFee) external  onlySettle(_jasperVault)   onlyOperator(_jasperVault){
-        address[] memory followers=signalSuscriptionModule.get_followers(address(_jasperVault));
-        for(uint256 i=0;i<followers.length;i++){
+    function editSubscribeFee(
+        IJasperVault _jasperVault,
+        address _masterToken,
+        uint256 _followFee,
+        uint256 _profitShareFee
+    ) external onlySettle(_jasperVault) onlyOperator(_jasperVault) {
+        address[] memory followers = signalSuscriptionModule.get_followers(
+            address(_jasperVault)
+        );
+        for (uint256 i = 0; i < followers.length; i++) {
             bytes memory callData = abi.encodeWithSelector(
                 ISignalSuscriptionModule.unsubscribe.selector,
                 followers[i],
@@ -184,9 +204,13 @@ contract SignalSuscriptionExtension is BaseGlobalExtension {
             );
             _manager(IJasperVault(followers[i])).setSubscribeStatus(2);
             emit SetSubscribeStatus(IJasperVault(followers[i]), 2);
-         }
-         _manager(_jasperVault).setBaseFeeAndToken(_masterToken,_followFee,_profitShareFee);
-         emit SetFee(_jasperVault,_followFee,_profitShareFee);
+        }
+        _manager(_jasperVault).setBaseFeeAndToken(
+            _masterToken,
+            _followFee,
+            _profitShareFee
+        );
+        emit SetFee(_jasperVault, _followFee, _profitShareFee);
     }
 
     function subscribe(
@@ -195,7 +219,7 @@ contract SignalSuscriptionExtension is BaseGlobalExtension {
     )
         external
         onlySettle(_jasperVault)
-        ValidWhitelist(_jasperVault)
+        ValidWhitelist(IJasperVault(target))
         onlyOperator(_jasperVault)
     {
         bytes memory callData = abi.encodeWithSelector(
@@ -212,29 +236,13 @@ contract SignalSuscriptionExtension is BaseGlobalExtension {
         emit SetSubscribeStatus(_jasperVault, 1);
     }
 
-    function update_allowedCopytrading(
-        IJasperVault _jasperVault,
-        bool can_copy_trading
-    ) external onlyOperator(_jasperVault) {
-        bytes memory callData = abi.encodeWithSelector(
-            ISignalSuscriptionModule.udpate_allowedCopytrading.selector,
-            _jasperVault,
-            can_copy_trading
-        );
-        _invokeManager(
-            _manager(_jasperVault),
-            address(signalSuscriptionModule),
-            callData
-        );
-    }
-
     function unsubscribe(
         IJasperVault _jasperVault,
         address target
     )
         external
         onlySubscribed(_jasperVault)
-        ValidWhitelist(_jasperVault)
+        ValidWhitelist(IJasperVault(target))
         onlyOperator(_jasperVault)
     {
         bytes memory callData = abi.encodeWithSelector(
@@ -251,37 +259,36 @@ contract SignalSuscriptionExtension is BaseGlobalExtension {
         emit SetSubscribeStatus(_jasperVault, 2);
     }
 
-
-
-
-
     function exectueFollowEnd(address _jasperVault) external {
-         bytes memory callData = abi.encodeWithSelector(
+        bytes memory callData = abi.encodeWithSelector(
             ISignalSuscriptionModule.exectueFollowEnd.selector,
             _jasperVault
-        );     
+        );
         _invokeManager(
             _manager(IJasperVault(_jasperVault)),
             address(signalSuscriptionModule),
             callData
-        );        
+        );
     }
 
     /* ============ view Functions ============ */
-    function getFollowers(address _jasperVault) external view returns(address[] memory){
+    function getFollowers(
+        address _jasperVault
+    ) external view returns (address[] memory) {
         return signalSuscriptionModule.get_followers(_jasperVault);
     }
- 
-    function getExectueFollow(address _jasperVault) external view returns(bool){
-        return  signalSuscriptionModule.isExectueFollow(_jasperVault);
+
+    function getExectueFollow(
+        address _jasperVault
+    ) external view returns (bool) {
+        return signalSuscriptionModule.isExectueFollow(_jasperVault);
     }
 
-    function warnLine() external  view returns(uint256){
-        return signalSuscriptionModule.warnLine();
+    function warnLine() external view returns (uint256) {
+        return signalSuscriptionModule.warningLine();
     }
 
-
-    function unsubscribeLine() external  view returns(uint256){
+    function unsubscribeLine() external view returns (uint256) {
         return signalSuscriptionModule.unsubscribeLine();
     }
 

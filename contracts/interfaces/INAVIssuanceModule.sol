@@ -38,7 +38,8 @@ interface INAVIssuanceModule {
 
     function initialize(
         IJasperVault _jasperVault,
-        NAVIssuanceSettings memory _navIssuanceSettings
+        NAVIssuanceSettings memory _navIssuanceSettings,
+        address[] memory _iROwer
     ) external;
 
     function issue(

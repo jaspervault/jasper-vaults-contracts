@@ -28,7 +28,7 @@ interface ISignalSuscriptionModule {
     
     function isExectueFollow(address _jasperVault) external view returns (bool);
   
-    function warnLine() external view returns(uint256);
+    function warningLine() external view returns(uint256);
 
     function unsubscribeLine() external view returns(uint256);
 

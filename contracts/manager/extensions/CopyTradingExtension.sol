@@ -20,7 +20,7 @@ pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
 
 import { IJasperVault } from "../../interfaces/IJasperVault.sol";
-import {ITradeModule} from "@setprotocol/set-protocol-v2/contracts/interfaces/ITradeModule.sol";
+import {ITradeModule} from "../../interfaces/ITradeModule.sol";
 import {ISignalSuscriptionModule} from "../../interfaces/ISignalSuscriptionModule.sol";
 
 import {StringArrayUtils} from "@setprotocol/set-protocol-v2/contracts/lib/StringArrayUtils.sol";
@@ -44,7 +44,7 @@ contract CopyTradingExtension is BaseGlobalExtension {
     struct TradeInfo {
         string exchangeName; // Human readable name of the exchange in the integrations registry
         address sendToken; // Address of the token to be sent to the exchange
-        uint256 sendQuantity; // Max units of `sendToken` sent to the exchange
+        int256 sendQuantity; // Max units of `sendToken` sent to the exchange
         address receiveToken; // Address of the token that will be received from the exchange
         uint256 receiveQuantity; // Min units of `receiveToken` to be received from the exchange
         bool isFollower;
@@ -252,8 +252,12 @@ contract CopyTradingExtension is BaseGlobalExtension {
         onlySettle(_jasperVault)
         onlyOperator(_jasperVault)
     {
+        _checkAdapterAndAssets(_jasperVault,_trades);
         uint256 tradesLength = _trades.length;
         for (uint256 i = 0; i < tradesLength; i++) {
+            if(!ValidAdapterByModule(_jasperVault,address(tradeModule),_trades[i].exchangeName)){
+               continue;
+            }
             _executeTrade(_jasperVault, _trades[i]);
         }
     }
@@ -264,12 +268,7 @@ contract CopyTradingExtension is BaseGlobalExtension {
     ) external
        onlySettle(_jasperVault)
        onlyOperator(_jasperVault) {
-        bytes memory callData = abi.encodeWithSelector(
-            ISignalSuscriptionModule.exectueFollowStart.selector,
-            address(_jasperVault)
-        );
-        _invokeManager(_manager(_jasperVault), address(signalSuscriptionModule), callData);
-
+        _checkAdapterAndAssets(_jasperVault,_trades);
         address[] memory followers = signalSuscriptionModule.get_followers(
             address(_jasperVault)
         );
@@ -293,6 +292,27 @@ contract CopyTradingExtension is BaseGlobalExtension {
 
             }
         }
+
+        bytes memory callData = abi.encodeWithSelector(
+            ISignalSuscriptionModule.exectueFollowStart.selector,
+            address(_jasperVault)
+        );
+        _invokeManager(_manager(_jasperVault), address(signalSuscriptionModule), callData);
+    }
+
+
+    function _checkAdapterAndAssets(IJasperVault _jasperVault,TradeInfo[] memory _trades) internal {
+          IDelegatedManager manager = _manager(_jasperVault);
+          for(uint256 i=0;i<_trades.length;i++){          
+            require(
+                isIntegration[_trades[i].exchangeName],
+                "Must be allowed integration"
+            );
+            require(
+                manager.isAllowedAsset(_trades[i].receiveToken),
+                "Must be allowed asset"
+            );
+          }
     }
 
     /* ============ External Getter Functions ============ */
@@ -318,15 +338,6 @@ contract CopyTradingExtension is BaseGlobalExtension {
         internal
     {
         IDelegatedManager manager = _manager(_jasperVault);
-        require(
-            isIntegration[tradeInfo.exchangeName],
-            "Must be allowed integration"
-        );
-        require(
-            manager.isAllowedAsset(tradeInfo.receiveToken),
-            "Must be allowed asset"
-        );
-
         bytes memory callData = abi.encodeWithSelector(
             ITradeModule.trade.selector,
             _jasperVault,
@@ -338,8 +349,6 @@ contract CopyTradingExtension is BaseGlobalExtension {
             tradeInfo.data
         );
         
-
-
         // ZeroEx (for example) throws custom errors which slip through OpenZeppelin's
         // functionCallWithValue error management and surface here as `bytes`. These should be
         // decode-able off-chain given enough context about protocol targeted by the adapter.

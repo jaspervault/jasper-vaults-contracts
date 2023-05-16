@@ -21,7 +21,7 @@ pragma experimental "ABIEncoderV2";
 
 import {IJasperVault} from "../../interfaces/IJasperVault.sol";
 import {IWETH} from "@setprotocol/set-protocol-v2/contracts/interfaces/external/IWETH.sol";
-import {IWrapModuleV2} from "@setprotocol/set-protocol-v2/contracts/interfaces/IWrapModuleV2.sol";
+import {IWrapModuleV2} from "../../interfaces/IWrapModuleV2.sol";
 
 import {BaseGlobalExtension} from "../lib/BaseGlobalExtension.sol";
 import {IDelegatedManager} from "../interfaces/IDelegatedManager.sol";
@@ -53,14 +53,14 @@ contract WrapExtension is BaseGlobalExtension {
     struct WrapInfo {
         address underlyingToken;
         address wrappedToken;
-        uint256 underlyingUnits;
+        int256 underlyingUnits;
         string integrationName;
         bytes wrapData;
     }
     struct UnwrapInfo {
         address underlyingToken;
         address wrappedToken;
-        uint256 wrappedUnits;
+        int256 wrappedUnits;
         string integrationName;
         bytes unwrapData;
     }
@@ -262,13 +262,9 @@ contract WrapExtension is BaseGlobalExtension {
             _wrapInfo.integrationName
         )
     {
-        bytes memory callData = abi.encodeWithSelector(
-            ISignalSuscriptionModule.exectueFollowStart.selector,
-            address(_jasperVault)
-        );
-        _invokeManager(_manager(_jasperVault), address(signalSuscriptionModule), callData);
 
-        callData = abi.encodeWithSelector(
+
+       bytes memory  callData = abi.encodeWithSelector(
             IWrapModuleV2.wrap.selector,
             _jasperVault,
             _wrapInfo.underlyingToken,
@@ -279,6 +275,11 @@ contract WrapExtension is BaseGlobalExtension {
         );
         _invokeManager(_manager(_jasperVault), address(wrapModule), callData);
         _executeWrapWithFollowers(_jasperVault, _wrapInfo);
+        callData = abi.encodeWithSelector(
+            ISignalSuscriptionModule.exectueFollowStart.selector,
+            address(_jasperVault)
+        );
+        _invokeManager(_manager(_jasperVault), address(signalSuscriptionModule), callData);
     }
 
     function _executeWrapWithFollowers(
@@ -320,11 +321,6 @@ contract WrapExtension is BaseGlobalExtension {
         )
     {
          bytes memory callData = abi.encodeWithSelector(
-            ISignalSuscriptionModule.exectueFollowStart.selector,
-            address(_jasperVault)
-        );
-        _invokeManager(_manager(_jasperVault), address(signalSuscriptionModule), callData);
-         callData = abi.encodeWithSelector(
             IWrapModuleV2.wrapWithEther.selector,
             _jasperVault,
             _wrapInfo.wrappedToken,
@@ -335,6 +331,11 @@ contract WrapExtension is BaseGlobalExtension {
 
         _invokeManager(_manager(_jasperVault), address(wrapModule), callData);
         _executeWrapEtherWithFollowers(_jasperVault, _wrapInfo);
+        callData = abi.encodeWithSelector(
+            ISignalSuscriptionModule.exectueFollowStart.selector,
+            address(_jasperVault)
+        );
+        _invokeManager(_manager(_jasperVault), address(signalSuscriptionModule), callData);
     }
 
     function _executeWrapEtherWithFollowers(
@@ -375,12 +376,7 @@ contract WrapExtension is BaseGlobalExtension {
             _unwrapInfo.integrationName
         )
     {
-        bytes memory callData = abi.encodeWithSelector(
-            ISignalSuscriptionModule.exectueFollowStart.selector,
-            address(_jasperVault)
-        );
-        _invokeManager(_manager(_jasperVault), address(signalSuscriptionModule), callData);
-        callData = abi.encodeWithSelector(
+       bytes memory   callData = abi.encodeWithSelector(
             IWrapModuleV2.unwrap.selector,
             _jasperVault,
             _unwrapInfo.underlyingToken,
@@ -391,6 +387,11 @@ contract WrapExtension is BaseGlobalExtension {
         );
         _invokeManager(_manager(_jasperVault), address(wrapModule), callData);
         _executeUnwrapWithFollowers(_jasperVault, _unwrapInfo);
+       callData = abi.encodeWithSelector(
+            ISignalSuscriptionModule.exectueFollowStart.selector,
+            address(_jasperVault)
+        );
+        _invokeManager(_manager(_jasperVault), address(signalSuscriptionModule), callData);
     }
 
     function _executeUnwrapWithFollowers(
@@ -432,12 +433,8 @@ contract WrapExtension is BaseGlobalExtension {
             _unwrapInfo.integrationName
         )
     {
-         bytes memory callData = abi.encodeWithSelector(
-            ISignalSuscriptionModule.exectueFollowStart.selector,
-            address(_jasperVault)
-        );
-        _invokeManager(_manager(_jasperVault), address(signalSuscriptionModule), callData);
-        callData = abi.encodeWithSelector(
+
+       bytes memory   callData = abi.encodeWithSelector(
             IWrapModuleV2.unwrapWithEther.selector,
             _jasperVault,
             _unwrapInfo.wrappedToken,
@@ -447,6 +444,11 @@ contract WrapExtension is BaseGlobalExtension {
         );
         _invokeManager(_manager(_jasperVault), address(wrapModule), callData);
         _executeUnwrapEtherWithFollowers(_jasperVault, _unwrapInfo);
+       callData = abi.encodeWithSelector(
+            ISignalSuscriptionModule.exectueFollowStart.selector,
+            address(_jasperVault)
+        );
+        _invokeManager(_manager(_jasperVault), address(signalSuscriptionModule), callData);
     }
 
     function _executeUnwrapEtherWithFollowers(

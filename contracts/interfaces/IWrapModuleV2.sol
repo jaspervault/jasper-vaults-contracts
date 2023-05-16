@@ -31,7 +31,7 @@ interface IWrapModuleV2 {
         IJasperVault _jasperVault,
         address _underlyingToken,
         address _wrappedToken,
-        uint256 _underlyingUnits,
+        int256 _underlyingUnits,
         string calldata _integrationName,
         bytes memory _wrapData
     ) external;
@@ -39,7 +39,7 @@ interface IWrapModuleV2 {
     function wrapWithEther(
         IJasperVault _jasperVault,
         address _wrappedToken,
-        uint256 _underlyingUnits,
+        int256 _underlyingUnits,
         string calldata _integrationName,
         bytes memory _wrapData
     ) external;
@@ -48,7 +48,7 @@ interface IWrapModuleV2 {
         IJasperVault _jasperVault,
         address _underlyingToken,
         address _wrappedToken,
-        uint256 _wrappedUnits,
+        int256 _wrappedUnits,
         string calldata _integrationName,
         bytes memory _unwrapData
     ) external;
@@ -56,7 +56,7 @@ interface IWrapModuleV2 {
     function unwrapWithEther(
         IJasperVault _jasperVault,
         address _wrappedToken,
-        uint256 _wrappedUnits,
+        int256 _wrappedUnits,
         string calldata _integrationName,
         bytes memory _unwrapData
     ) external;

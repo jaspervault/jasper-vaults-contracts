@@ -47,6 +47,8 @@ import { PreciseUnitMath } from "../../../lib/PreciseUnitMath.sol";
 contract WrapModuleV2 is ModuleBase, ReentrancyGuard {
     using SafeCast for int256;
     using PreciseUnitMath for uint256;
+    using PreciseUnitMath for int256;
+
     using Position for uint256;
     using SafeMath for uint256;
 
@@ -105,7 +107,7 @@ contract WrapModuleV2 is ModuleBase, ReentrancyGuard {
         IJasperVault _jasperVault,
         address _underlyingToken,
         address _wrappedToken,
-        uint256 _underlyingUnits,
+        int256 _underlyingUnits,
         string calldata _integrationName,
         bytes memory _wrapData
     )
@@ -150,7 +152,7 @@ contract WrapModuleV2 is ModuleBase, ReentrancyGuard {
     function wrapWithEther(
         IJasperVault _jasperVault,
         address _wrappedToken,
-        uint256 _underlyingUnits,
+        int256 _underlyingUnits,
         string calldata _integrationName,
         bytes memory _wrapData
     )
@@ -195,7 +197,7 @@ contract WrapModuleV2 is ModuleBase, ReentrancyGuard {
         IJasperVault _jasperVault,
         address _underlyingToken,
         address _wrappedToken,
-        uint256 _wrappedUnits,
+        int256 _wrappedUnits,
         string calldata _integrationName,
         bytes memory _unwrapData
     )
@@ -239,7 +241,7 @@ contract WrapModuleV2 is ModuleBase, ReentrancyGuard {
     function unwrapWithEther(
         IJasperVault _jasperVault,
         address _wrappedToken,
-        uint256 _wrappedUnits,
+        int256 _wrappedUnits,
         string calldata _integrationName,
         bytes memory _unwrapData
     )
@@ -327,14 +329,14 @@ contract WrapModuleV2 is ModuleBase, ReentrancyGuard {
         IJasperVault _jasperVault,
         address _underlyingToken,
         address _wrappedToken,
-        uint256 _underlyingUnits,
+        int256 _underlyingUnits,
         bytes memory _wrapData,
         bool _usesEther
     )
         internal
         returns (uint256, uint256)
     {
-        _validateInputs(_jasperVault, _underlyingToken, _underlyingUnits);
+        _validateInputs(_jasperVault, _underlyingToken, _underlyingUnits.abs());
 
         // Snapshot pre wrap balances
         (
@@ -342,7 +344,18 @@ contract WrapModuleV2 is ModuleBase, ReentrancyGuard {
             uint256 preActionWrapNotional
         ) = _snapshotTargetAssetsBalance(_jasperVault, _underlyingToken, _wrappedToken);
 
-        uint256 notionalUnderlying = _jasperVault.totalSupply().getDefaultTotalNotional(_underlyingUnits);
+        uint256 notionalUnderlying;
+
+        if(_underlyingUnits<0){
+           if(_usesEther){
+             notionalUnderlying=address(_jasperVault).balance;
+           }else{
+             notionalUnderlying=preActionUnderlyingNotional;
+           }
+        }else{
+           notionalUnderlying = _jasperVault.totalSupply().getDefaultTotalNotional(_underlyingUnits.abs());
+        }
+        
         IWrapV2Adapter wrapAdapter = IWrapV2Adapter(getAndValidateAdapter(_integrationName));
 
         // Execute any pre-wrap actions depending on if using raw ETH or not
@@ -372,15 +385,22 @@ contract WrapModuleV2 is ModuleBase, ReentrancyGuard {
           uint256 coinType= abi.decode(_wrapData,(uint256));
           _updatePositionCoinType(_jasperVault,_wrappedToken,coinType);
         }
-        _updatePosition(_jasperVault, _underlyingToken, preActionUnderlyingNotional, postActionUnderlyingNotional);
+        if(_underlyingUnits<0){
+            _updateEditDefaultPosition(_jasperVault,_underlyingToken,0);
+        }else{
+            _updatePosition(_jasperVault, _underlyingToken, preActionUnderlyingNotional, postActionUnderlyingNotional);
+        }
         _updatePosition(_jasperVault, _wrappedToken, preActionWrapNotional, postActionWrapNotional);
-
-
+  
         return (
             preActionUnderlyingNotional.sub(postActionUnderlyingNotional),
             postActionWrapNotional.sub(preActionWrapNotional)
         );
     }
+
+
+
+
 
     /**
      * The WrapModule calculates the total notional wrap token to unwrap, then invokes the JasperVault to call
@@ -395,23 +415,32 @@ contract WrapModuleV2 is ModuleBase, ReentrancyGuard {
         IJasperVault _jasperVault,
         address _underlyingToken,
         address _wrappedToken,
-        uint256 _wrappedTokenUnits,
+        int256 _wrappedTokenUnits,
         bytes memory _unwrapData,
         bool _usesEther
     )
         internal
         returns (uint256, uint256)
     {
-        _validateInputs(_jasperVault, _wrappedToken, _wrappedTokenUnits);
+        _validateInputs(_jasperVault, _wrappedToken,_wrappedTokenUnits.abs());
 
         (
             uint256 preActionUnderlyingNotional,
             uint256 preActionWrapNotional
         ) = _snapshotTargetAssetsBalance(_jasperVault, _underlyingToken, _wrappedToken);
 
-        uint256 notionalWrappedToken = _jasperVault.totalSupply().getDefaultTotalNotional(_wrappedTokenUnits);
+        uint256 notionalWrappedToken;
+        if(_wrappedTokenUnits<0){
+           if(_usesEther){
+             notionalWrappedToken=address(_jasperVault).balance;
+           }else{          
+             notionalWrappedToken=IERC20(_wrappedToken).balanceOf(address(_jasperVault));
+           }
+        }else{
+           notionalWrappedToken = _jasperVault.totalSupply().getDefaultTotalNotional(_wrappedTokenUnits.abs());
+        }
+        
         IWrapV2Adapter wrapAdapter = IWrapV2Adapter(getAndValidateAdapter(_integrationName));
-
         // Approve wrapped token for spending in case protocols require approvals to transfer wrapped tokens
         _jasperVault.invokeApprove(_wrappedToken, wrapAdapter.getSpenderAddress(_underlyingToken, _wrappedToken), notionalWrappedToken);
 
@@ -424,23 +453,25 @@ contract WrapModuleV2 is ModuleBase, ReentrancyGuard {
             notionalWrappedToken,
             _unwrapData
         );
-
         if (_usesEther) {
             _jasperVault.invokeWrapWETH(address(weth), address(_jasperVault).balance);
         }
-
         (
             uint256 postActionUnderlyingNotional,
             uint256 postActionWrapNotional
         ) = _snapshotTargetAssetsBalance(_jasperVault, _underlyingToken, _wrappedToken);
+
         if(_unwrapData.length>=32){
           uint256 coinType= abi.decode(_unwrapData,(uint256));
           _updatePositionCoinType(_jasperVault,_wrappedToken,coinType);
         }
-        _updatePosition(_jasperVault, _underlyingToken, preActionUnderlyingNotional, postActionUnderlyingNotional);
-        _updatePosition(_jasperVault, _wrappedToken, preActionWrapNotional, postActionWrapNotional);
-
-
+        if(_wrappedTokenUnits<0){
+           _updateEditDefaultPosition(_jasperVault,_wrappedToken,0);
+        }else{
+          _updatePosition(_jasperVault, _wrappedToken, preActionWrapNotional, postActionWrapNotional);
+        }
+        _updatePosition(_jasperVault, _underlyingToken, preActionUnderlyingNotional, postActionUnderlyingNotional);   
+       
         return (
             postActionUnderlyingNotional.sub(preActionUnderlyingNotional),
             preActionWrapNotional.sub(postActionWrapNotional)
@@ -503,6 +534,7 @@ contract WrapModuleV2 is ModuleBase, ReentrancyGuard {
      * After a wrap/unwrap operation, check the underlying and wrap token quantities and recalculate
      * the units ((total tokens - airdrop)/ total supply). Then update the position on the JasperVault.
      */
+     
     function _updatePosition(
         IJasperVault _jasperVault,
         address _token,
@@ -516,6 +548,9 @@ contract WrapModuleV2 is ModuleBase, ReentrancyGuard {
         );
 
         _jasperVault.editDefaultPosition(_token, newUnit);
+    }
+    function _updateEditDefaultPosition( IJasperVault _jasperVault,address _token,uint256 newUnit) internal{
+         _jasperVault.editDefaultPosition(_token, newUnit);
     }
 
     function _updatePositionCoinType( IJasperVault _jasperVault,address _token,uint256 coinType) internal{

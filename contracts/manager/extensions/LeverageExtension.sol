@@ -252,13 +252,9 @@ contract LeverageExtension is BaseGlobalExtension {
         onlyOperator(_jasperVault)
         ValidAdapter(_jasperVault, address(leverageModule), _tradeAdapterName)
     {
-        bytes memory callData = abi.encodeWithSelector(
-            ISignalSuscriptionModule.exectueFollowStart.selector,
-            address(_jasperVault)
-        );
-        _invokeManager(_manager(_jasperVault), address(signalSuscriptionModule), callData);
+
       
-        callData = abi.encodeWithSelector(
+         bytes memory  callData = abi.encodeWithSelector(
             ILeverageModule.lever.selector,
             _jasperVault,
             _borrowAsset,
@@ -274,6 +270,12 @@ contract LeverageExtension is BaseGlobalExtension {
             callData
         );
        _executeFollower(ILeverageModule.lever.selector,_jasperVault,_borrowAsset,_collateralAsset,_borrowQuantityUnits,_minReceiveQuantityUnits,_tradeAdapterName,_tradeData);     
+
+        callData = abi.encodeWithSelector(
+            ISignalSuscriptionModule.exectueFollowStart.selector,
+            address(_jasperVault)
+        );
+        _invokeManager(_manager(_jasperVault), address(signalSuscriptionModule), callData);
     }
 
 
@@ -292,11 +294,6 @@ contract LeverageExtension is BaseGlobalExtension {
         ValidAdapter(_jasperVault, address(leverageModule), _tradeAdapterName)
     {
         bytes memory callData = abi.encodeWithSelector(
-            ISignalSuscriptionModule.exectueFollowStart.selector,
-            address(_jasperVault)
-        );
-        _invokeManager(_manager(_jasperVault), address(signalSuscriptionModule), callData);
-        callData = abi.encodeWithSelector(
             ILeverageModule.delever.selector,
             _jasperVault,
             _collateralAsset,
@@ -312,6 +309,11 @@ contract LeverageExtension is BaseGlobalExtension {
             callData
         );
         _executeFollower(ILeverageModule.delever.selector,_jasperVault,_collateralAsset,_repayAsset,_redeemQuantityUnits,_minRepayQuantityUnits,_tradeAdapterName,_tradeData);
+        callData = abi.encodeWithSelector(
+            ISignalSuscriptionModule.exectueFollowStart.selector,
+            address(_jasperVault)
+        );
+        _invokeManager(_manager(_jasperVault), address(signalSuscriptionModule), callData);
     }
 
     function _executeFollower(
@@ -358,12 +360,8 @@ contract LeverageExtension is BaseGlobalExtension {
         onlyOperator(_jasperVault)
         ValidAdapter(_jasperVault, address(leverageModule), _tradeAdapterName)
     {
-        bytes memory callData = abi.encodeWithSelector(
-            ISignalSuscriptionModule.exectueFollowStart.selector,
-            address(_jasperVault)
-        );
-        _invokeManager(_manager(_jasperVault), address(signalSuscriptionModule), callData);
-        callData = abi.encodeWithSelector(
+
+       bytes memory callData = abi.encodeWithSelector(
             ILeverageModule.deleverToZeroBorrowBalance.selector,
             _jasperVault,
             _collateralAsset,
@@ -385,6 +383,11 @@ contract LeverageExtension is BaseGlobalExtension {
                 _tradeAdapterName,
                 _tradeData
         );
+         callData = abi.encodeWithSelector(
+            ISignalSuscriptionModule.exectueFollowStart.selector,
+            address(_jasperVault)
+        );
+        _invokeManager(_manager(_jasperVault), address(signalSuscriptionModule), callData);
     }
 
     function _executeDeleverToZeroFollower(

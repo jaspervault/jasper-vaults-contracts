@@ -81,6 +81,7 @@ contract DebtIssuanceModuleV2 is DebtIssuanceModule {
         override
         nonReentrant
         onlyValidAndInitializedSet(_jasperVault)
+        ValidIROwer(_jasperVault)
     {
         require(_quantity > 0, "Issue quantity must be > 0");
 
@@ -148,6 +149,7 @@ contract DebtIssuanceModuleV2 is DebtIssuanceModule {
         override
         nonReentrant
         onlyValidAndInitializedSet(_jasperVault)
+        ValidIROwer(_jasperVault)
     {
         require(_quantity > 0, "Redeem quantity must be > 0");
 

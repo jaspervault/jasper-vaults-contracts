@@ -177,7 +177,7 @@ contract DelegatedManager is Ownable, MutualUpgradeV2 {
     /* ============ ExternalFunctions ============ */
 
     function setSubscribeStatus(uint256 _status) external onlyExtension {
-        require(subscribeStatus == _status, "status already set");
+        require(subscribeStatus != _status, "status already set");
         subscribeStatus = _status;
     }
 

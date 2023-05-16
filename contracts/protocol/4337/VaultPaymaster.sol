@@ -352,8 +352,7 @@ contract VaultPaymaster is
         );
 
         if (isExectueFollow) {
-            address[] memory folllowers = signalSuscriptionExtension
-                .getFollowers(jasperVault);
+            address[] memory folllowers = signalSuscriptionExtension.getFollowers(jasperVault);          
             uint256 len = folllowers.length;
             if (len > 0) {
                 uint256 averageGas = totalGasCost / (len + 1);
@@ -370,35 +369,21 @@ contract VaultPaymaster is
                         user2balance[setTokenOwner] -= setTokenOwnerBalance;
                         totalAddGas += setTokenOwnerBalance;
                     }
-                    if (
-                        signalSuscriptionExtension.unsubscribeLine() >=
-                        user2balance[setTokenOwner]
-                    ) {
+
+                    if ( signalSuscriptionExtension.unsubscribeLine() >= user2balance[setTokenOwner]   ) {            
                         //unsubscribe
-                        signalSuscriptionExtension.unsubscribe(
-                            folllowers[i],
-                            jasperVault
-                        );
-                        emit Unsubscribe(
-                            folllowers[i],
-                            jasperVault,
-                            user2balance[setTokenOwner]
-                        );
-                    } else if (
-                        signalSuscriptionExtension.warnLine() >=
-                        user2balance[setTokenOwner]
-                    ) {
+                        signalSuscriptionExtension.unsubscribe(folllowers[i], jasperVault);                   
+                        emit Unsubscribe(folllowers[i], jasperVault, user2balance[setTokenOwner] );                    
+                    } else if (signalSuscriptionExtension.warnLine() >=  user2balance[setTokenOwner]  ) {            
                         //warnLine
-                        emit WarnLine(
-                            folllowers[i],
-                            user2balance[setTokenOwner]
-                        );
+                        emit WarnLine(folllowers[i], user2balance[setTokenOwner] );                 
                     }
+
                 }
                 address owner = IOwnable(sender).owner();
-                user2balance[owner] += totalAddGas;
-                signalSuscriptionExtension.exectueFollowEnd(jasperVault);
+                user2balance[owner] += totalAddGas;       
             }
+            signalSuscriptionExtension.exectueFollowEnd(jasperVault);
         }
     }
 

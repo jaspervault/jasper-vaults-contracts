@@ -91,6 +91,12 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
 
     mapping(IJasperVault => IssuanceSettings) public issuanceSettings;
 
+    mapping(IJasperVault=>mapping(address=>bool)) public IROwers;
+
+    modifier ValidIROwer(IJasperVault _jasperVault) {
+        require(IROwers[_jasperVault][msg.sender], "user no issue or redeem auth");
+        _;
+    }
     /* ============ Constructor ============ */
 
     constructor(IController _controller) public ModuleBase(_controller) {}
@@ -115,6 +121,7 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
         virtual
         nonReentrant
         onlyValidAndInitializedSet(_jasperVault)
+        ValidIROwer(_jasperVault)
     {
         require(_quantity > 0, "Issue quantity must be > 0");
 
@@ -308,7 +315,8 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
         uint256 _managerIssueFee,
         uint256 _managerRedeemFee,
         address _feeRecipient,
-        IManagerIssuanceHook _managerIssuanceHook
+        IManagerIssuanceHook _managerIssuanceHook,
+        address[] memory _iROwer
     )
         external
         onlySetManager(_jasperVault, msg.sender)
@@ -325,7 +333,9 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
             managerIssuanceHook: _managerIssuanceHook,
             moduleIssuanceHooks: new address[](0)
         });
-
+        for(uint256 i=0;i<_iROwer.length;i++){
+             IROwers[_jasperVault][_iROwer[i]]=true;
+        }
         _jasperVault.initializeModule();
     }
 

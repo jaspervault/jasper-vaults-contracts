@@ -23,7 +23,7 @@ import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 import { SafeMath } from "@openzeppelin/contracts/math/SafeMath.sol";
 
 import { IJasperVault } from "../../interfaces/IJasperVault.sol";
-import { IIssuanceModule } from "@setprotocol/set-protocol-v2/contracts/interfaces/IIssuanceModule.sol";
+import { IIssuanceModule } from "../../interfaces/IIssuanceModule.sol";
 import { PreciseUnitMath } from "@setprotocol/set-protocol-v2/contracts/lib/PreciseUnitMath.sol";
 
 import { BaseGlobalExtension } from "../lib/BaseGlobalExtension.sol";
@@ -122,7 +122,8 @@ contract IssuanceExtension is BaseGlobalExtension {
         uint256 _managerIssueFee,
         uint256 _managerRedeemFee,
         address _feeRecipient,
-        address _managerIssuanceHook
+        address _managerIssuanceHook,
+        address[] memory _iROwers
     )
         external
         onlyOwnerAndValidManager(_delegatedManager)
@@ -136,7 +137,8 @@ contract IssuanceExtension is BaseGlobalExtension {
             _managerIssueFee,
             _managerRedeemFee,
             _feeRecipient,
-            _managerIssuanceHook
+            _managerIssuanceHook,
+            _iROwers
         );
     }
 
@@ -171,7 +173,8 @@ contract IssuanceExtension is BaseGlobalExtension {
         uint256 _managerIssueFee,
         uint256 _managerRedeemFee,
         address _feeRecipient,
-        address _managerIssuanceHook
+        address _managerIssuanceHook,
+        address[] memory _iROwers
     )
         external
         onlyOwnerAndValidManager(_delegatedManager)
@@ -188,7 +191,8 @@ contract IssuanceExtension is BaseGlobalExtension {
             _managerIssueFee,
             _managerRedeemFee,
             _feeRecipient,
-            _managerIssuanceHook
+            _managerIssuanceHook,
+            _iROwers
         );
 
         emit IssuanceExtensionInitialized(address(jasperVault), address(_delegatedManager));
@@ -266,18 +270,20 @@ contract IssuanceExtension is BaseGlobalExtension {
         uint256 _managerIssueFee,
         uint256 _managerRedeemFee,
         address _feeRecipient,
-        address _managerIssuanceHook
+        address _managerIssuanceHook,
+        address[] memory _iROwers
     )
         internal
     {
         bytes memory callData = abi.encodeWithSignature(
-            "initialize(address,uint256,uint256,uint256,address,address)",
+            "initialize(address,uint256,uint256,uint256,address,address,address[])",
             _jasperVault,
             _maxManagerFee,
             _managerIssueFee,
             _managerRedeemFee,
             _feeRecipient,
-            _managerIssuanceHook
+            _managerIssuanceHook,
+            _iROwers
         );
         _invokeManager(_delegatedManager, address(issuanceModule), callData);
     }

@@ -148,7 +148,7 @@ contract UtilsModule is ModuleBase, ReentrancyGuard,IFlashLoanReceiver{
                 if(positions[i].component!=param.masterToken){    
                     _updatePosition(param.jasperVault,positions[i].component,0,0);
                 }    
-              
+               param.handleIndex++;    
            }   
        }   
       bytes memory params=abi.encode(param);
@@ -201,15 +201,14 @@ contract UtilsModule is ModuleBase, ReentrancyGuard,IFlashLoanReceiver{
             uint256  _callValue;
             bytes memory _callByteData;
             uint256 balance;
+
             for(uint256 i=0;i<param.handleAssets.length;i++){
                 balance=IERC20(param.handleAssets[i]).balanceOf(address(param.jasperVault));
-
                 if(balance>0&&param.handleAssets[i]!=param.masterToken){
                     param.jasperVault.invokeApprove(param.handleAssets[i],uniswapRouter,balance);                    
                     (_callContract,_callValue,_callByteData)=getUniswapTokenCallData(param.handleAssets[i],param.masterToken,balance,0,address(param.jasperVault));
                     param.jasperVault.invoke(_callContract, _callValue, _callByteData);
                 }
-
             }
             if(assets.length>0){
                 balance=IERC20(param.masterToken).balanceOf(address(param.jasperVault));
@@ -337,7 +336,6 @@ contract UtilsModule is ModuleBase, ReentrancyGuard,IFlashLoanReceiver{
               param.jasperVault.invoke(_callContract, _callValue, _callByteData);
             }
             for(uint i=0;i<param.handleAaveAssets.length;i++){
-
                (_callContract,_callValue,_callByteData)= getAaveBorrowCallData(param.handleAaveAssets[i],param.handleAaveAmounts[i],address(param.jasperVault));
                 param.jasperVault.invoke(_callContract, _callValue, _callByteData);
                  if(param.handleAaveAssets[i]!=param.masterToken){
@@ -358,15 +356,15 @@ contract UtilsModule is ModuleBase, ReentrancyGuard,IFlashLoanReceiver{
             uint256  _callValue;
             bytes memory _callByteData;
             uint256 balance=IERC20(param.masterToken).balanceOf(address(param.jasperVault));
+            param.jasperVault.invokeApprove(param.masterToken,uniswapRouter,balance);           
             for(uint256 i=0;i<param.handleAssets.length;i++){
-                  if(param.handleAssets[i]!=param.masterToken){
+                 if(param.handleAssets[i]!=param.masterToken){
                     (_callContract,_callValue,_callByteData)=getUniswapExactTokenCallData(param.masterToken,param.handleAssets[i], param.handleAmounts[i],balance,address(param.jasperVault));
                     param.jasperVault.invoke(_callContract, _callValue, _callByteData); 
                  }           
             }
-            if(assets.length>0){ 
-                param.jasperVault.invokeApprove(param.masterToken,uniswapRouter,balance);
 
+            if(assets.length>0){ 
                 for(uint i = 0; i < assets.length; i++){
                     if(assets[i]!=param.masterToken){
                         uint256 amountOwing = amounts[i]+premiums[i];

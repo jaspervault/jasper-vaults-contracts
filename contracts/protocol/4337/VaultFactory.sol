@@ -6,6 +6,9 @@ import "./proxy/ERC1967/ERC1967Proxy.sol";
 import "./Vault.sol";
 
 import "./interfaces/IDelegatedManagerFactory.sol";
+import "./interfaces/IJasperVault.sol";
+import "./interfaces/IDelegatedManager.sol";
+
 
 
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
@@ -44,6 +47,7 @@ contract VaultFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         address jasperVault;
         uint256 jasperVaultType;
         uint256 vaultIndex;
+        address manager;
     }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -80,6 +84,9 @@ contract VaultFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             info.jasperVault=delegatedManagerFactory.account2setToken(info.vault);
             info.jasperVaultType=delegatedManagerFactory.jasperVaultType(info.jasperVault);
             info.vaultIndex=account2Index[_account][info.vault];
+            if(info.jasperVault !=address(0x00)){
+              info.manager=IJasperVault(info.jasperVault).manager();
+            }
             return info;
     }
 
@@ -90,7 +97,22 @@ contract VaultFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             info.jasperVault=delegatedManagerFactory.account2setToken(info.vault);
             info.jasperVaultType=delegatedManagerFactory.jasperVaultType(info.jasperVault);
             info.vaultIndex=account2Index[_account][info.vault];
+            if(info.jasperVault !=address(0x00)){
+               info.manager=IJasperVault(info.jasperVault).manager();
+            }
             return info;  
+    }
+
+    function getAccountByManager(address _account,address _manager) external view returns(AccountInfo memory){
+            AccountInfo memory info;           
+            address _vault= IDelegatedManager(_manager).jasperVault();
+            uint256 salt=account2Index[_account][_vault];
+            info.vault=getAddress(_account,salt);
+            info.jasperVault=delegatedManagerFactory.account2setToken(info.vault);
+            info.jasperVaultType=delegatedManagerFactory.jasperVaultType(info.jasperVault);
+            info.vaultIndex=account2Index[_account][info.vault];
+            info.manager=_manager;
+            return info;        
     }
 
     function getAccountList(address _account,uint256 _page,uint256 _pageSize) external view returns(AccountInfo[] memory){
@@ -118,6 +140,9 @@ contract VaultFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
               info.jasperVault=delegatedManagerFactory.account2setToken(info.vault);
               info.jasperVaultType=delegatedManagerFactory.jasperVaultType(info.jasperVault);
               info.vaultIndex=account2Index[_account][info.vault];
+              if(info.jasperVault !=address(0x00)){
+                  info.manager=IJasperVault(info.jasperVault).manager();
+              }
               infos[i]=info;
         }
 
