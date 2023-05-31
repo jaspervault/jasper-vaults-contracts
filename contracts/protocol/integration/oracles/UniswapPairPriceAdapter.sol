@@ -63,6 +63,9 @@ contract UniswapPairPriceAdapter is Ownable {
     // Address of Uniswap factory
     address public uniswapFactory;
 
+    event AddPool(address);
+    event RemovePool(address);
+
     /* ============ Constructor ============ */
 
     /**
@@ -164,8 +167,8 @@ contract UniswapPairPriceAdapter is Ownable {
         uniswapPoolsToSettings[_poolAddress].isValid = true;
 
         allowedUniswapPools.push(_poolAddress);
+        emit AddPool(_poolAddress);
     }
-
     function removePool(address _poolAddress) external onlyOwner {
         require (
             uniswapPoolsToSettings[_poolAddress].isValid,
@@ -174,6 +177,7 @@ contract UniswapPairPriceAdapter is Ownable {
 
         allowedUniswapPools = allowedUniswapPools.remove(_poolAddress);
         delete uniswapPoolsToSettings[_poolAddress];
+        emit RemovePool(_poolAddress);
     }
 
     function getAllowedUniswapPools() external view returns (address[] memory) {

@@ -91,7 +91,7 @@ abstract contract BaseGlobalExtension {
     }
 
 
-    modifier onlySettle(IJasperVault _jasperVault) {
+    modifier onlyReset(IJasperVault _jasperVault) {
         require(
             _manager(_jasperVault).subscribeStatus()==0,
             "jasperVault not unsettle"
@@ -153,6 +153,13 @@ abstract contract BaseGlobalExtension {
             _manager(_jasperVault).isAllowedAsset(_asset),
             "Must be allowed asset"
         );
+        _;
+    }
+
+    modifier onlyExtension(IJasperVault _jasperVault) {
+       address[] memory extension= _manager(_jasperVault).getExtensions();
+       bool isExist=extension.contains(msg.sender);
+       require(isExist,"Only the extension can call");
         _;
     }
 

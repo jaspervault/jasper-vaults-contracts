@@ -19,22 +19,30 @@
 pragma solidity 0.6.10;
 pragma experimental "ABIEncoderV2";
 
-import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import { SafeCast } from "@openzeppelin/contracts/utils/SafeCast.sol";
-import { SafeMath } from "@openzeppelin/contracts/math/SafeMath.sol";
-import { SignedSafeMath } from "@openzeppelin/contracts/math/SignedSafeMath.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/SafeCast.sol";
+import {SafeMath} from "@openzeppelin/contracts/math/SafeMath.sol";
+import {SignedSafeMath} from "@openzeppelin/contracts/math/SignedSafeMath.sol";
 
-import { AddressArrayUtils } from "../../../lib/AddressArrayUtils.sol";
-import { IController } from "../../../interfaces/IController.sol";
-import { IManagerIssuanceHook } from "../../../interfaces/IManagerIssuanceHook.sol";
-import { IModuleIssuanceHook } from "../../../interfaces/IModuleIssuanceHook.sol";
-import { Invoke } from "../../lib/Invoke.sol";
-import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
-import { ModuleBase } from "../../lib/ModuleBase.sol";
-import { Position } from "../../lib/Position.sol";
-import { PreciseUnitMath } from "../../../lib/PreciseUnitMath.sol";
+import {AddressArrayUtils} from "../../../lib/AddressArrayUtils.sol";
+import {IController} from "../../../interfaces/IController.sol";
+import {IManagerIssuanceHook} from "../../../interfaces/IManagerIssuanceHook.sol";
+import {IModuleIssuanceHook} from "../../../interfaces/IModuleIssuanceHook.sol";
+import {Invoke} from "../../lib/Invoke.sol";
+import {IJasperVault} from "../../../interfaces/IJasperVault.sol";
+import {ModuleBase} from "../../lib/ModuleBase.sol";
+import {Position} from "../../lib/Position.sol";
+import {PreciseUnitMath} from "../../../lib/PreciseUnitMath.sol";
 
+interface ISignalSuscriptionModule {
+    function get_signal_provider(address) external view returns (address);
+    function get_followers(address) external view returns (address[] memory);
+}
+
+interface  Decimals{
+    function decimals() external view returns(uint256);
+}
 
 /**
  * @title DebtIssuanceModule
@@ -46,18 +54,17 @@ import { PreciseUnitMath } from "../../../lib/PreciseUnitMath.sol";
  * in the manager hook, as well as specify issue and redeem fees.
  */
 contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
-
     /* ============ Structs ============ */
 
     // NOTE: moduleIssuanceHooks uses address[] for compatibility with AddressArrayUtils library
     struct IssuanceSettings {
-        uint256 maxManagerFee;                          // Max issue/redeem fee defined on instantiation
-        uint256 managerIssueFee;                        // Current manager issuance fees in precise units (10^16 = 1%)
-        uint256 managerRedeemFee;                       // Current manager redeem fees in precise units (10^16 = 1%)
-        address feeRecipient;                           // Address that receives all manager issue and redeem fees
-        IManagerIssuanceHook managerIssuanceHook;       // Instance of manager defined hook, can hold arbitrary logic
-        address[] moduleIssuanceHooks;                  // Array of modules that are registered with this module
-        mapping(address => bool) isModuleHook;          // Mapping of modules to if they've registered a hook
+        uint256 maxManagerFee; // Max issue/redeem fee defined on instantiation
+        uint256 managerIssueFee; // Current manager issuance fees in precise units (10^16 = 1%)
+        uint256 managerRedeemFee; // Current manager redeem fees in precise units (10^16 = 1%)
+        address feeRecipient; // Address that receives all manager issue and redeem fees
+        IManagerIssuanceHook managerIssuanceHook; // Instance of manager defined hook, can hold arbitrary logic
+        address[] moduleIssuanceHooks; // Array of modules that are registered with this module
+        mapping(address => bool) isModuleHook; // Mapping of modules to if they've registered a hook
     }
 
     /* ============ Events ============ */
@@ -79,27 +86,51 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
         uint256 _managerFee,
         uint256 _protocolFee
     );
-    event FeeRecipientUpdated(IJasperVault indexed _jasperVault, address _newFeeRecipient);
-    event IssueFeeUpdated(IJasperVault indexed _jasperVault, uint256 _newIssueFee);
-    event RedeemFeeUpdated(IJasperVault indexed _jasperVault, uint256 _newRedeemFee);
+    event FeeRecipientUpdated(
+        IJasperVault indexed _jasperVault,
+        address _newFeeRecipient
+    );
+    event IssueFeeUpdated(
+        IJasperVault indexed _jasperVault,
+        uint256 _newIssueFee
+    );
+    event RedeemFeeUpdated(
+        IJasperVault indexed _jasperVault,
+        uint256 _newRedeemFee
+    );
 
     /* ============ Constants ============ */
 
     uint256 private constant ISSUANCE_MODULE_PROTOCOL_FEE_SPLIT_INDEX = 0;
-
+    ISignalSuscriptionModule public signalSuscriptionModule;
     /* ============ State ============ */
 
     mapping(IJasperVault => IssuanceSettings) public issuanceSettings;
 
-    mapping(IJasperVault=>mapping(address=>bool)) public IROwers;
+    mapping(IJasperVault => mapping(address => bool)) public IROwers;
 
     modifier ValidIROwer(IJasperVault _jasperVault) {
-        require(IROwers[_jasperVault][msg.sender], "user no issue or redeem auth");
+        require(
+            IROwers[_jasperVault][msg.sender] &&
+                signalSuscriptionModule.get_signal_provider(
+                    address(_jasperVault)
+                ) ==
+                address(0x00) && signalSuscriptionModule.get_followers(address(_jasperVault)).length==0,
+            "user does not have permission to issue or redeem"
+        );
         _;
     }
+
     /* ============ Constructor ============ */
 
-    constructor(IController _controller) public ModuleBase(_controller) {}
+    constructor(
+        IController _controller,
+        address _signalSuscriptionModule
+    ) public ModuleBase(_controller) {
+        signalSuscriptionModule = ISignalSuscriptionModule(
+            _signalSuscriptionModule
+        );
+    }
 
     /* ============ External Functions ============ */
 
@@ -125,7 +156,12 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
     {
         require(_quantity > 0, "Issue quantity must be > 0");
 
-        address hookContract = _callManagerPreIssueHooks(_jasperVault, _quantity, msg.sender, _to);
+        address hookContract = _callManagerPreIssueHooks(
+            _jasperVault,
+            _quantity,
+            msg.sender,
+            _to
+        );
 
         _callModulePreIssueHooks(_jasperVault, _quantity);
 
@@ -139,10 +175,27 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
             address[] memory components,
             uint256[] memory equityUnits,
             uint256[] memory debtUnits
-        ) = _calculateRequiredComponentIssuanceUnits(_jasperVault, quantityWithFees, true);
+        ) = _calculateRequiredComponentIssuanceUnits(
+                _jasperVault,
+                quantityWithFees,
+                true
+            );
 
-        _resolveEquityPositions(_jasperVault, quantityWithFees, _to, true, components, equityUnits);
-        _resolveDebtPositions(_jasperVault, quantityWithFees, true, components, debtUnits);
+        _resolveEquityPositions(
+            _jasperVault,
+            quantityWithFees,
+            _to,
+            true,
+            components,
+            equityUnits
+        );
+        _resolveDebtPositions(
+            _jasperVault,
+            quantityWithFees,
+            true,
+            components,
+            debtUnits
+        );
         _resolveFees(_jasperVault, managerFee, protocolFee);
 
         _jasperVault.mint(_to, _quantity);
@@ -177,6 +230,7 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
         virtual
         nonReentrant
         onlyValidAndInitializedSet(_jasperVault)
+        ValidIROwer(_jasperVault)
     {
         require(_quantity > 0, "Redeem quantity must be > 0");
 
@@ -195,11 +249,32 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
             address[] memory components,
             uint256[] memory equityUnits,
             uint256[] memory debtUnits
-        ) = _calculateRequiredComponentIssuanceUnits(_jasperVault, quantityNetFees, false);
+        ) = _calculateRequiredComponentIssuanceUnits(
+                _jasperVault,
+                quantityNetFees,
+                false
+            );
 
-        _resolveDebtPositions(_jasperVault, quantityNetFees, false, components, debtUnits);
-        _resolveEquityPositions(_jasperVault, quantityNetFees, _to, false, components, equityUnits);
+        _resolveDebtPositions(
+            _jasperVault,
+            quantityNetFees,
+            false,
+            components,
+            debtUnits
+        );
+        _resolveEquityPositions(
+            _jasperVault,
+            quantityNetFees,
+            _to,
+            false,
+            components,
+            equityUnits
+        );
         _resolveFees(_jasperVault, managerFee, protocolFee);
+        //
+        if(_jasperVault.totalSupply()==0){
+            resetPosition(_jasperVault);
+        }    
 
         emit SetTokenRedeemed(
             _jasperVault,
@@ -209,6 +284,15 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
             managerFee,
             protocolFee
         );
+    }
+    function resetPosition(IJasperVault _jasperVault) internal {
+           address masterToken= _jasperVault.masterToken();
+           uint256  jasperVaultValuation= controller.getSetValuer().calculateSetTokenValuation(_jasperVault, masterToken).preciseMul(1);
+           uint256 decimal=Decimals(masterToken).decimals();
+           uint256 newUnit=jasperVaultValuation.mul(10**decimal);
+           _jasperVault.removAllPosition();
+           _jasperVault.editCoinType(masterToken,0);
+           _jasperVault.editDefaultPosition(masterToken,newUnit);
     }
 
     /**
@@ -220,12 +304,15 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
     function updateFeeRecipient(
         IJasperVault _jasperVault,
         address _newFeeRecipient
-    )
-        external
-        onlyManagerAndValidSet(_jasperVault)
-    {
-        require(_newFeeRecipient != address(0), "Fee Recipient must be non-zero address.");
-        require(_newFeeRecipient != issuanceSettings[_jasperVault].feeRecipient, "Same fee recipient passed");
+    ) external onlyManagerAndValidSet(_jasperVault) {
+        require(
+            _newFeeRecipient != address(0),
+            "Fee Recipient must be non-zero address."
+        );
+        require(
+            _newFeeRecipient != issuanceSettings[_jasperVault].feeRecipient,
+            "Same fee recipient passed"
+        );
 
         issuanceSettings[_jasperVault].feeRecipient = _newFeeRecipient;
 
@@ -241,12 +328,15 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
     function updateIssueFee(
         IJasperVault _jasperVault,
         uint256 _newIssueFee
-    )
-        external
-        onlyManagerAndValidSet(_jasperVault)
-    {
-        require(_newIssueFee <= issuanceSettings[_jasperVault].maxManagerFee, "Issue fee can't exceed maximum");
-        require(_newIssueFee != issuanceSettings[_jasperVault].managerIssueFee, "Same issue fee passed");
+    ) external onlyManagerAndValidSet(_jasperVault) {
+        require(
+            _newIssueFee <= issuanceSettings[_jasperVault].maxManagerFee,
+            "Issue fee can't exceed maximum"
+        );
+        require(
+            _newIssueFee != issuanceSettings[_jasperVault].managerIssueFee,
+            "Same issue fee passed"
+        );
 
         issuanceSettings[_jasperVault].managerIssueFee = _newIssueFee;
 
@@ -262,12 +352,15 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
     function updateRedeemFee(
         IJasperVault _jasperVault,
         uint256 _newRedeemFee
-    )
-        external
-        onlyManagerAndValidSet(_jasperVault)
-    {
-        require(_newRedeemFee <= issuanceSettings[_jasperVault].maxManagerFee, "Redeem fee can't exceed maximum");
-        require(_newRedeemFee != issuanceSettings[_jasperVault].managerRedeemFee, "Same redeem fee passed");
+    ) external onlyManagerAndValidSet(_jasperVault) {
+        require(
+            _newRedeemFee <= issuanceSettings[_jasperVault].maxManagerFee,
+            "Redeem fee can't exceed maximum"
+        );
+        require(
+            _newRedeemFee != issuanceSettings[_jasperVault].managerRedeemFee,
+            "Same redeem fee passed"
+        );
 
         issuanceSettings[_jasperVault].managerRedeemFee = _newRedeemFee;
 
@@ -280,8 +373,17 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
      *
      * @param _jasperVault             Instance of the JasperVault to issue
      */
-    function registerToIssuanceModule(IJasperVault _jasperVault) external onlyModule(_jasperVault) onlyValidAndInitializedSet(_jasperVault) {
-        require(!issuanceSettings[_jasperVault].isModuleHook[msg.sender], "Module already registered.");
+    function registerToIssuanceModule(
+        IJasperVault _jasperVault
+    )
+        external
+        onlyModule(_jasperVault)
+        onlyValidAndInitializedSet(_jasperVault)
+    {
+        require(
+            !issuanceSettings[_jasperVault].isModuleHook[msg.sender],
+            "Module already registered."
+        );
         issuanceSettings[_jasperVault].moduleIssuanceHooks.push(msg.sender);
         issuanceSettings[_jasperVault].isModuleHook[msg.sender] = true;
     }
@@ -292,9 +394,20 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
      *
      * @param _jasperVault             Instance of the JasperVault to issue
      */
-    function unregisterFromIssuanceModule(IJasperVault _jasperVault) external onlyModule(_jasperVault) onlyValidAndInitializedSet(_jasperVault) {
-        require(issuanceSettings[_jasperVault].isModuleHook[msg.sender], "Module not registered.");
-        issuanceSettings[_jasperVault].moduleIssuanceHooks.removeStorage(msg.sender);
+    function unregisterFromIssuanceModule(
+        IJasperVault _jasperVault
+    )
+        external
+        onlyModule(_jasperVault)
+        onlyValidAndInitializedSet(_jasperVault)
+    {
+        require(
+            issuanceSettings[_jasperVault].isModuleHook[msg.sender],
+            "Module not registered."
+        );
+        issuanceSettings[_jasperVault].moduleIssuanceHooks.removeStorage(
+            msg.sender
+        );
         issuanceSettings[_jasperVault].isModuleHook[msg.sender] = false;
     }
 
@@ -322,8 +435,14 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
         onlySetManager(_jasperVault, msg.sender)
         onlyValidAndPendingSet(_jasperVault)
     {
-        require(_managerIssueFee <= _maxManagerFee, "Issue fee can't exceed maximum fee");
-        require(_managerRedeemFee <= _maxManagerFee, "Redeem fee can't exceed maximum fee");
+        require(
+            _managerIssueFee <= _maxManagerFee,
+            "Issue fee can't exceed maximum fee"
+        );
+        require(
+            _managerRedeemFee <= _maxManagerFee,
+            "Redeem fee can't exceed maximum fee"
+        );
 
         issuanceSettings[_jasperVault] = IssuanceSettings({
             maxManagerFee: _maxManagerFee,
@@ -333,8 +452,8 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
             managerIssuanceHook: _managerIssuanceHook,
             moduleIssuanceHooks: new address[](0)
         });
-        for(uint256 i=0;i<_iROwer.length;i++){
-             IROwers[_jasperVault][_iROwer[i]]=true;
+        for (uint256 i = 0; i < _iROwer.length; i++) {
+            IROwers[_jasperVault][_iROwer[i]] = true;
         }
         _jasperVault.initializeModule();
     }
@@ -343,7 +462,12 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
      * SET TOKEN ONLY: Allows removal of module (and deletion of state) if no other modules are registered.
      */
     function removeModule() external override {
-        require(issuanceSettings[IJasperVault(msg.sender)].moduleIssuanceHooks.length == 0, "Registered modules must be removed.");
+        require(
+            issuanceSettings[IJasperVault(msg.sender)]
+                .moduleIssuanceHooks
+                .length == 0,
+            "Registered modules must be removed."
+        );
         delete issuanceSettings[IJasperVault(msg.sender)];
     }
 
@@ -372,15 +496,24 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
         view
         returns (uint256 totalQuantity, uint256 managerFee, uint256 protocolFee)
     {
-        IssuanceSettings memory setIssuanceSettings = issuanceSettings[_jasperVault];
-        uint256 protocolFeeSplit = controller.getModuleFee(address(this), ISSUANCE_MODULE_PROTOCOL_FEE_SPLIT_INDEX);
-        uint256 totalFeeRate = _isIssue ? setIssuanceSettings.managerIssueFee : setIssuanceSettings.managerRedeemFee;
+        IssuanceSettings memory setIssuanceSettings = issuanceSettings[
+            _jasperVault
+        ];
+        uint256 protocolFeeSplit = controller.getModuleFee(
+            address(this),
+            ISSUANCE_MODULE_PROTOCOL_FEE_SPLIT_INDEX
+        );
+        uint256 totalFeeRate = _isIssue
+            ? setIssuanceSettings.managerIssueFee
+            : setIssuanceSettings.managerRedeemFee;
 
         uint256 totalFee = totalFeeRate.preciseMul(_quantity);
         protocolFee = totalFee.preciseMul(protocolFeeSplit);
         managerFee = totalFee.sub(protocolFee);
 
-        totalQuantity = _isIssue ? _quantity.add(totalFee) : _quantity.sub(totalFee);
+        totalQuantity = _isIssue
+            ? _quantity.add(totalFee)
+            : _quantity.sub(totalFee);
     }
 
     /**
@@ -403,11 +536,18 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
         virtual
         returns (address[] memory, uint256[] memory, uint256[] memory)
     {
-        (
-            uint256 totalQuantity,,
-        ) = calculateTotalFees(_jasperVault, _quantity, true);
+        (uint256 totalQuantity, , ) = calculateTotalFees(
+            _jasperVault,
+            _quantity,
+            true
+        );
 
-        return _calculateRequiredComponentIssuanceUnits(_jasperVault, totalQuantity, true);
+        return
+            _calculateRequiredComponentIssuanceUnits(
+                _jasperVault,
+                totalQuantity,
+                true
+            );
     }
 
     /**
@@ -430,18 +570,30 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
         virtual
         returns (address[] memory, uint256[] memory, uint256[] memory)
     {
-        (
-            uint256 totalQuantity,,
-        ) = calculateTotalFees(_jasperVault, _quantity, false);
+        (uint256 totalQuantity, , ) = calculateTotalFees(
+            _jasperVault,
+            _quantity,
+            false
+        );
 
-        return _calculateRequiredComponentIssuanceUnits(_jasperVault, totalQuantity, false);
+        return
+            _calculateRequiredComponentIssuanceUnits(
+                _jasperVault,
+                totalQuantity,
+                false
+            );
     }
 
-    function getModuleIssuanceHooks(IJasperVault _jasperVault) external view returns(address[] memory) {
+    function getModuleIssuanceHooks(
+        IJasperVault _jasperVault
+    ) external view returns (address[] memory) {
         return issuanceSettings[_jasperVault].moduleIssuanceHooks;
     }
 
-    function isModuleIssuanceHook(IJasperVault _jasperVault, address _hook) external view returns(bool) {
+    function isModuleIssuanceHook(
+        IJasperVault _jasperVault,
+        address _hook
+    ) external view returns (bool) {
         return issuanceSettings[_jasperVault].isModuleHook[_hook];
     }
 
@@ -481,13 +633,13 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
         for (uint256 i = 0; i < components.length; i++) {
             // Use preciseMulCeil to round up to ensure overcollateration when small issue quantities are provided
             // and preciseMul to round down to ensure overcollateration when small redeem quantities are provided
-            totalEquityUnits[i] = _isIssue ?
-                equityUnits[i].preciseMulCeil(_quantity) :
-                equityUnits[i].preciseMul(_quantity);
+            totalEquityUnits[i] = _isIssue
+                ? equityUnits[i].preciseMulCeil(_quantity)
+                : equityUnits[i].preciseMul(_quantity);
 
-            totalDebtUnits[i] = _isIssue ?
-                debtUnits[i].preciseMul(_quantity) :
-                debtUnits[i].preciseMulCeil(_quantity);
+            totalDebtUnits[i] = _isIssue
+                ? debtUnits[i].preciseMul(_quantity)
+                : debtUnits[i].preciseMulCeil(_quantity);
         }
 
         return (components, totalEquityUnits, totalDebtUnits);
@@ -517,19 +669,30 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
 
         for (uint256 i = 0; i < components.length; i++) {
             address component = components[i];
-            int256 cumulativeEquity = _jasperVault.getDefaultPositionRealUnit(component);
+            int256 cumulativeEquity = _jasperVault.getDefaultPositionRealUnit(
+                component
+            );
             int256 cumulativeDebt = 0;
-            address[] memory externalPositions = _jasperVault.getExternalPositionModules(component);
+            address[] memory externalPositions = _jasperVault
+                .getExternalPositionModules(component);
 
             if (externalPositions.length > 0) {
                 for (uint256 j = 0; j < externalPositions.length; j++) {
-                    int256 externalPositionUnit = _jasperVault.getExternalPositionRealUnit(component, externalPositions[j]);
+                    int256 externalPositionUnit = _jasperVault
+                        .getExternalPositionRealUnit(
+                            component,
+                            externalPositions[j]
+                        );
 
                     // If positionUnit <= 0 it will be "added" to debt position
                     if (externalPositionUnit > 0) {
-                        cumulativeEquity = cumulativeEquity.add(externalPositionUnit);
+                        cumulativeEquity = cumulativeEquity.add(
+                            externalPositionUnit
+                        );
                     } else {
-                        cumulativeDebt = cumulativeDebt.add(externalPositionUnit);
+                        cumulativeDebt = cumulativeDebt.add(
+                            externalPositionUnit
+                        );
                     }
                 }
             }
@@ -554,9 +717,7 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
         bool _isIssue,
         address[] memory _components,
         uint256[] memory _componentEquityQuantities
-    )
-        internal
-    {
+    ) internal {
         for (uint256 i = 0; i < _components.length; i++) {
             address component = _components[i];
             uint256 componentQuantity = _componentEquityQuantities[i];
@@ -569,9 +730,21 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
                         componentQuantity
                     );
 
-                    _executeExternalPositionHooks(_jasperVault, _quantity, IERC20(component), true, true);
+                    _executeExternalPositionHooks(
+                        _jasperVault,
+                        _quantity,
+                        IERC20(component),
+                        true,
+                        true
+                    );
                 } else {
-                    _executeExternalPositionHooks(_jasperVault, _quantity, IERC20(component), false, true);
+                    _executeExternalPositionHooks(
+                        _jasperVault,
+                        _quantity,
+                        IERC20(component),
+                        false,
+                        true
+                    );
 
                     _jasperVault.strictInvokeTransfer(
                         component,
@@ -594,15 +767,19 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
         bool _isIssue,
         address[] memory _components,
         uint256[] memory _componentDebtQuantities
-    )
-        internal
-    {
+    ) internal {
         for (uint256 i = 0; i < _components.length; i++) {
             address component = _components[i];
             uint256 componentQuantity = _componentDebtQuantities[i];
             if (componentQuantity > 0) {
                 if (_isIssue) {
-                    _executeExternalPositionHooks(_jasperVault, _quantity, IERC20(component), true, false);
+                    _executeExternalPositionHooks(
+                        _jasperVault,
+                        _quantity,
+                        IERC20(component),
+                        true,
+                        false
+                    );
                     _jasperVault.strictInvokeTransfer(
                         component,
                         msg.sender,
@@ -615,7 +792,13 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
                         address(_jasperVault),
                         componentQuantity
                     );
-                    _executeExternalPositionHooks(_jasperVault, _quantity, IERC20(component), false, false);
+                    _executeExternalPositionHooks(
+                        _jasperVault,
+                        _quantity,
+                        IERC20(component),
+                        false,
+                        false
+                    );
                 }
             }
         }
@@ -625,9 +808,16 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
      * If any manager fees mints Sets to the defined feeRecipient. If protocol fee is enabled mints Sets to protocol
      * feeRecipient.
      */
-    function _resolveFees(IJasperVault _jasperVault, uint256 managerFee, uint256 protocolFee) internal {
+    function _resolveFees(
+        IJasperVault _jasperVault,
+        uint256 managerFee,
+        uint256 protocolFee
+    ) internal {
         if (managerFee > 0) {
-            _jasperVault.mint(issuanceSettings[_jasperVault].feeRecipient, managerFee);
+            _jasperVault.mint(
+                issuanceSettings[_jasperVault].feeRecipient,
+                managerFee
+            );
 
             // Protocol fee check is inside manager fee check because protocol fees are only collected on manager fees
             if (protocolFee > 0) {
@@ -645,13 +835,16 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
         uint256 _quantity,
         address _caller,
         address _to
-    )
-        internal
-        returns(address)
-    {
-        IManagerIssuanceHook preIssueHook = issuanceSettings[_jasperVault].managerIssuanceHook;
+    ) internal returns (address) {
+        IManagerIssuanceHook preIssueHook = issuanceSettings[_jasperVault]
+            .managerIssuanceHook;
         if (address(preIssueHook) != address(0)) {
-            preIssueHook.invokePreIssueHook(_jasperVault, _quantity, _caller, _to);
+            preIssueHook.invokePreIssueHook(
+                _jasperVault,
+                _quantity,
+                _caller,
+                _to
+            );
             return address(preIssueHook);
         }
 
@@ -661,20 +854,34 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
     /**
      * Calls all modules that have registered with the DebtIssuanceModule that have a moduleIssueHook.
      */
-    function _callModulePreIssueHooks(IJasperVault _jasperVault, uint256 _quantity) internal {
-        address[] memory issuanceHooks = issuanceSettings[_jasperVault].moduleIssuanceHooks;
+    function _callModulePreIssueHooks(
+        IJasperVault _jasperVault,
+        uint256 _quantity
+    ) internal {
+        address[] memory issuanceHooks = issuanceSettings[_jasperVault]
+            .moduleIssuanceHooks;
         for (uint256 i = 0; i < issuanceHooks.length; i++) {
-            IModuleIssuanceHook(issuanceHooks[i]).moduleIssueHook(_jasperVault, _quantity);
+            IModuleIssuanceHook(issuanceHooks[i]).moduleIssueHook(
+                _jasperVault,
+                _quantity
+            );
         }
     }
 
     /**
      * Calls all modules that have registered with the DebtIssuanceModule that have a moduleRedeemHook.
      */
-    function _callModulePreRedeemHooks(IJasperVault _jasperVault, uint256 _quantity) internal {
-        address[] memory issuanceHooks = issuanceSettings[_jasperVault].moduleIssuanceHooks;
+    function _callModulePreRedeemHooks(
+        IJasperVault _jasperVault,
+        uint256 _quantity
+    ) internal {
+        address[] memory issuanceHooks = issuanceSettings[_jasperVault]
+            .moduleIssuanceHooks;
         for (uint256 i = 0; i < issuanceHooks.length; i++) {
-            IModuleIssuanceHook(issuanceHooks[i]).moduleRedeemHook(_jasperVault, _quantity);
+            IModuleIssuanceHook(issuanceHooks[i]).moduleRedeemHook(
+                _jasperVault,
+                _quantity
+            );
         }
     }
 
@@ -690,18 +897,29 @@ contract DebtIssuanceModule is ModuleBase, ReentrancyGuard {
         IERC20 _component,
         bool _isIssue,
         bool _isEquity
-    )
-        internal
-    {
-        address[] memory externalPositionModules = _jasperVault.getExternalPositionModules(address(_component));
+    ) internal {
+        address[] memory externalPositionModules = _jasperVault
+            .getExternalPositionModules(address(_component));
         uint256 modulesLength = externalPositionModules.length;
         if (_isIssue) {
             for (uint256 i = 0; i < modulesLength; i++) {
-                IModuleIssuanceHook(externalPositionModules[i]).componentIssueHook(_jasperVault, _setTokenQuantity, _component, _isEquity);
+                IModuleIssuanceHook(externalPositionModules[i])
+                    .componentIssueHook(
+                        _jasperVault,
+                        _setTokenQuantity,
+                        _component,
+                        _isEquity
+                    );
             }
         } else {
             for (uint256 i = 0; i < modulesLength; i++) {
-                IModuleIssuanceHook(externalPositionModules[i]).componentRedeemHook(_jasperVault, _setTokenQuantity, _component, _isEquity);
+                IModuleIssuanceHook(externalPositionModules[i])
+                    .componentRedeemHook(
+                        _jasperVault,
+                        _setTokenQuantity,
+                        _component,
+                        _isEquity
+                    );
             }
         }
     }

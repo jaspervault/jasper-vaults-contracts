@@ -70,6 +70,9 @@ contract SignalSuscriptionModule is ModuleBase, Ownable, ReentrancyGuard {
 
     ISubscribeFeePool public  subscribeFeePool;
 
+    event SetPlatformAndPlatformFee(ISubscribeFeePool _subscribeFeePool,uint256 _fee,address _platform_vault,uint256 _warningLine,uint256 _unsubscribeLine);
+    event RemoveFollower(address target,address follower);
+
 
     /* ============ Constructor ============ */
 
@@ -92,7 +95,7 @@ contract SignalSuscriptionModule is ModuleBase, Ownable, ReentrancyGuard {
 
     function exectueFollowStart(
         address _jasperVault
-    ) external nonReentrant onlyManagerAndValidSet(IJasperVault(_jasperVault)) {
+    ) external nonReentrant  onlyManagerAndValidSet(IJasperVault(_jasperVault)) {
         require(
             !isExectueFollow[_jasperVault],
             "exectueFollow  status not false"
@@ -115,11 +118,14 @@ contract SignalSuscriptionModule is ModuleBase, Ownable, ReentrancyGuard {
         uint256 _unsubscribeLine,
         uint256 _fee
     ) external nonReentrant onlyOwner {
+        require(_fee<=10**18,"fee can not be more than 1e18");
         subscribeFeePool = _subscribeFeePool;
         platformFee = _fee;
         platform_vault = _platform_vault;
+
         warningLine = _warningLine;
         unsubscribeLine = _unsubscribeLine;
+        emit SetPlatformAndPlatformFee(_subscribeFeePool,_fee,_platform_vault,_warningLine,_unsubscribeLine);
     }
 
     /**
@@ -168,9 +174,14 @@ contract SignalSuscriptionModule is ModuleBase, Ownable, ReentrancyGuard {
         IJasperVault _jasperVault,
         address target
     ) external nonReentrant onlyManagerAndValidSet(_jasperVault) {
-        followers[target].removeStorage(address(_jasperVault));
-      
+        followers[target].removeStorage(address(_jasperVault));      
     }
+
+    function unsubscribeByMaster(address target) external nonReentrant onlyManagerAndValidSet(IJasperVault(target)) {
+        delete followers[target];
+    }
+
+
 
     function removeFollower(
         address target,
@@ -178,6 +189,7 @@ contract SignalSuscriptionModule is ModuleBase, Ownable, ReentrancyGuard {
     ) external nonReentrant onlyOwner {
         followers[target].removeStorage(follower);
         delete Signal_provider[follower];
+        emit RemoveFollower(target,follower);
     }
 
     function get_followers(

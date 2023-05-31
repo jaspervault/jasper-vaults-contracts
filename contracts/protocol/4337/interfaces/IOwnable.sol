@@ -2,5 +2,5 @@
 pragma solidity ^0.8.12;
 
 interface IOwnable{
-    function owner() external returns(address);
+    function owner() external view returns(address);
 }

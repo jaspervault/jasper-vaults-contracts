@@ -249,7 +249,7 @@ contract CopyTradingExtension is BaseGlobalExtension {
      */
     function batchTrade(IJasperVault _jasperVault, TradeInfo[] memory _trades)
         external
-        onlySettle(_jasperVault)
+        onlyReset(_jasperVault)
         onlyOperator(_jasperVault)
     {
         _checkAdapterAndAssets(_jasperVault,_trades);
@@ -266,7 +266,7 @@ contract CopyTradingExtension is BaseGlobalExtension {
         IJasperVault _jasperVault,
         TradeInfo[] memory _trades
     ) external
-       onlySettle(_jasperVault)
+       onlyReset(_jasperVault)
        onlyOperator(_jasperVault) {
         _checkAdapterAndAssets(_jasperVault,_trades);
         address[] memory followers = signalSuscriptionModule.get_followers(

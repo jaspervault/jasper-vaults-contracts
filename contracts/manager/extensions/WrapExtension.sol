@@ -152,7 +152,7 @@ contract WrapExtension is BaseGlobalExtension {
         WrapInfo memory _wrapInfo
     )
         external
-        onlySettle(_jasperVault)
+        onlyReset(_jasperVault)
         onlyOperator(_jasperVault)
         onlyAllowedAsset(_jasperVault, _wrapInfo.wrappedToken)
         ValidAdapter(
@@ -178,7 +178,7 @@ contract WrapExtension is BaseGlobalExtension {
         WrapInfo memory _wrapInfo
     )
         external
-        onlySettle(_jasperVault)
+        onlyReset(_jasperVault)
         onlyOperator(_jasperVault)
         ValidAdapter(
             _jasperVault,
@@ -202,7 +202,7 @@ contract WrapExtension is BaseGlobalExtension {
         UnwrapInfo memory _unwrapInfo
     )
         external
-        onlySettle(_jasperVault)
+        onlyReset(_jasperVault)
         onlyOperator(_jasperVault)
         onlyAllowedAsset(_jasperVault, _unwrapInfo.underlyingToken)
         ValidAdapter(
@@ -228,7 +228,7 @@ contract WrapExtension is BaseGlobalExtension {
         UnwrapInfo memory _unwrapInfo
     )
         external
-        onlySettle(_jasperVault)
+        onlyReset(_jasperVault)
         onlyOperator(_jasperVault)
         onlyAllowedAsset(_jasperVault, address(wrapModule.weth()))
         ValidAdapter(
@@ -253,7 +253,7 @@ contract WrapExtension is BaseGlobalExtension {
         WrapInfo memory _wrapInfo
     )
         external
-        onlySettle(_jasperVault)
+        onlyReset(_jasperVault)
         onlyOperator(_jasperVault)
         onlyAllowedAsset(_jasperVault, _wrapInfo.wrappedToken)
         ValidAdapter(
@@ -312,7 +312,7 @@ contract WrapExtension is BaseGlobalExtension {
         WrapInfo memory _wrapInfo
     )
         external
-        onlySettle(_jasperVault)
+        onlyReset(_jasperVault)
         onlyOperator(_jasperVault)
         ValidAdapter(
             _jasperVault,
@@ -367,7 +367,7 @@ contract WrapExtension is BaseGlobalExtension {
         UnwrapInfo memory _unwrapInfo
     )
         external
-        onlySettle(_jasperVault)
+        onlyReset(_jasperVault)
         onlyOperator(_jasperVault)
         onlyAllowedAsset(_jasperVault, _unwrapInfo.underlyingToken)
         ValidAdapter(
@@ -424,7 +424,7 @@ contract WrapExtension is BaseGlobalExtension {
         UnwrapInfo memory _unwrapInfo
     )
         external
-        onlySettle(_jasperVault)
+        onlyReset(_jasperVault)
         onlyOperator(_jasperVault)
         onlyAllowedAsset(_jasperVault, address(wrapModule.weth()))
         ValidAdapter(

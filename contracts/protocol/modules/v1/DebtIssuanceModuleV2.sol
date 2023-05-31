@@ -28,6 +28,12 @@ import { Invoke } from "../../lib/Invoke.sol";
 import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
 import { IssuanceValidationUtils } from "../../lib/IssuanceValidationUtils.sol";
 import { Position } from "../../lib/Position.sol";
+import {ISignalSuscriptionModule} from "../../../interfaces/ISignalSuscriptionModule.sol";
+
+interface  Decimals{
+    function decimals() external view returns(uint256);
+}
+
 
 /**
  * @title DebtIssuanceModuleV2
@@ -55,7 +61,7 @@ contract DebtIssuanceModuleV2 is DebtIssuanceModule {
 
     /* ============ Constructor ============ */
 
-    constructor(IController _controller) public DebtIssuanceModule(_controller) {}
+    constructor(IController _controller,address _signalSuscriptionModule) public DebtIssuanceModule(_controller,_signalSuscriptionModule) {}
 
     /* ============ External Functions ============ */
 
@@ -180,7 +186,9 @@ contract DebtIssuanceModuleV2 is DebtIssuanceModule {
             _resolveEquityPositions(_jasperVault, quantityNetFees, _to, false, components, equityUnits, initialSetSupply, finalSetSupply);
             _resolveFees(_jasperVault, managerFee, protocolFee);
         }
-
+        if(_jasperVault.totalSupply()==0){
+            resetPosition(_jasperVault);
+        }  
         emit SetTokenRedeemed(
             _jasperVault,
             msg.sender,
@@ -190,6 +198,7 @@ contract DebtIssuanceModuleV2 is DebtIssuanceModule {
             protocolFee
         );
     }
+
 
     /* ============ External View Functions ============ */
 

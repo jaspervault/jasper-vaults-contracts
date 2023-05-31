@@ -157,7 +157,7 @@ contract JasperVault is ERC20 {
     // Position quantities are represented as virtual units; Default positions are on the top-level,
     // while external positions are stored in a module array and accessed through its externalPositions mapping
     mapping(address => IJasperVault.ComponentPosition)
-        private componentPositions;
+        private componentPositions;  
 
     // The multiplier applied to the virtual position unit to achieve the real/actual unit.
     // This multiplier is used for efficiently modifying the entire position units (e.g. streaming fee)
@@ -313,7 +313,12 @@ contract JasperVault is ERC20 {
 
         emit ComponentRemoved(_component);
     }
-
+    function removAllPosition() external onlyModule whenLockedOnlyLocker {
+        for(uint256 i=components.length;i>0;i--){
+             delete  componentPositions[components[i-1]];
+             components.pop();
+        }
+    }
     /**
      * PRIVELEGED MODULE FUNCTION. Low level function that edits a component's virtual unit. Takes a real unit
      * and converts it to virtual before committing.

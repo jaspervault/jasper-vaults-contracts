@@ -58,7 +58,7 @@ contract StakingExtension is BaseGlobalExtension {
         uint256 _componentPositionUnits
     )
         external
-        onlySettle(_jasperVault)
+        onlyReset(_jasperVault)
         onlyOperator(_jasperVault)
         ValidAdapter(_jasperVault, address(stakingModule), _adapterName)
     {
@@ -85,7 +85,7 @@ contract StakingExtension is BaseGlobalExtension {
         uint256 _componentPositionUnits
     )
         external
-        onlySettle(_jasperVault)
+        onlyReset(_jasperVault)
         onlyOperator(_jasperVault)
         ValidAdapter(_jasperVault, address(stakingModule), _adapterName)
     {
@@ -112,7 +112,7 @@ contract StakingExtension is BaseGlobalExtension {
         uint256 _componentPositionUnits
     )
         external
-        onlySettle(_jasperVault)
+        onlyReset(_jasperVault)
         onlyOperator(_jasperVault)
         ValidAdapter(_jasperVault, address(stakingModule), _adapterName)
     {
@@ -164,7 +164,7 @@ contract StakingExtension is BaseGlobalExtension {
         uint256 _componentPositionUnits
     )
         external
-        onlySettle(_jasperVault)
+        onlyReset(_jasperVault)
         onlyOperator(_jasperVault)
         ValidAdapter(_jasperVault, address(stakingModule), _adapterName)
     {

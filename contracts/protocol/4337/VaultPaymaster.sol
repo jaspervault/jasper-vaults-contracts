@@ -39,9 +39,10 @@ contract VaultPaymaster is
     mapping(address => uint256) public user2balance;
 
     IUniswapV2Router public router;
+
     uint256 internal DIVISOR;
 
-    address public eth;
+    address public weth;
 
     ISignalSuscriptionExtension internal signalSuscriptionExtension;
 
@@ -56,6 +57,9 @@ contract VaultPaymaster is
     event WarnLine(address jasperVault, uint256 balance);
 
     event Unsubscribe(address target, address jasperVault, uint256 balance);
+
+    event  SetSetting(IEntryPoint _entryPoint,IUniswapV2Router _router,uint256 _fee,address _weth,address _eth,ISignalSuscriptionExtension _signalSuscriptionExtension,IDelegatedManagerFactory _delegatedManagerFactory);
+
 
     address public ETH_TOKEN_ADDRESS;
 
@@ -79,7 +83,7 @@ contract VaultPaymaster is
     ) public initializer {
         entryPoint = _entryPoint;
         router = _router;
-        eth = _weth;
+        weth = _weth;
         fee = _fee;
         signalSuscriptionExtension = _signalSuscriptionExtension;
         delegatedManagerFactory = _delegatedManagerFactory;
@@ -94,17 +98,23 @@ contract VaultPaymaster is
     ) internal override onlyOwner {}
 
     function setSetting(
+        IEntryPoint _entryPoint,
+        IUniswapV2Router _router,
         uint256 _fee,
         address _weth,
         address _eth,
         ISignalSuscriptionExtension _signalSuscriptionExtension,
         IDelegatedManagerFactory _delegatedManagerFactory
     ) external onlyOwner {
+        entryPoint = _entryPoint;
+        router = _router;
         fee = _fee;
         signalSuscriptionExtension = _signalSuscriptionExtension;
         delegatedManagerFactory = _delegatedManagerFactory;
-        eth = _weth;
+        weth = _weth;
         ETH_TOKEN_ADDRESS = _eth;
+        emit SetSetting(_entryPoint,_router,_fee,_weth,_eth,_signalSuscriptionExtension,_delegatedManagerFactory);
+       
     }
 
     function setTokenToPath(
@@ -112,6 +122,7 @@ contract VaultPaymaster is
         address[] calldata _path
     ) external onlyOwner {
         require(_path.length > 0, "path length greater than zero");
+        require(_token==_path[0],"token not equal to path[0]");
         token2path[_token] = _path;
         emit SetTokenPath(_token, _path);
     }
@@ -123,14 +134,15 @@ contract VaultPaymaster is
     function depositBalance(
         address _to,
         address _token,
-        uint256 _amount
+        uint256 _amount,
+        uint256 _minAmount
     ) external payable {
         if (address(_token) == ETH_TOKEN_ADDRESS) {
             depositEth(_to);
         } else {
             address[] memory _path = token2path[_token];
             require(_path.length > 0, "path is not exist");
-            depositToken(_to, IERC20(_token), _path, _amount);
+            depositToken(_to, IERC20(_token), _path, _amount,_minAmount);
         }
     }
 
@@ -151,7 +163,7 @@ contract VaultPaymaster is
         require(msg.value > 0, "deposit balance less than zero");
         deposit(msg.value);
         user2balance[_to] += msg.value;
-        emit Deposit(msg.sender, _to, eth, msg.value);
+        emit Deposit(msg.sender, _to, weth, msg.value);
     }
 
     //deposit  Token
@@ -159,12 +171,14 @@ contract VaultPaymaster is
         address _to,
         IERC20 _token,
         address[] memory _path,
-        uint256 _amount
+        uint256 _amount,
+        uint256 _minAmount
     ) internal {
         require(_amount > 0, "amount less than zero");
         _token.transferFrom(msg.sender, address(this), _amount);
         _token.approve(address(router), _amount);
         uint256 swapNum = _swapExactTokensForETH(_path, _amount);
+        require(swapNum>=_minAmount,"swap balance less than minAmount");
         deposit(swapNum);
         user2balance[_to] += swapNum;
         emit Deposit(msg.sender, _to, address(_token), _amount);
@@ -172,16 +186,17 @@ contract VaultPaymaster is
 
     function withdrawEth(address _to, uint256 _amount) external {
         uint256 preBalance = user2balance[msg.sender];
-        require(preBalance >= _amount, "withdraw eth greater than balance");
+        require(preBalance >= _amount, "withdraw weth greater than balance");
         user2balance[msg.sender] = preBalance - _amount;
         withdrawTo(payable(_to), _amount);
-        emit Withdraw(msg.sender, _to, eth, _amount);
+        emit Withdraw(msg.sender, _to, weth, _amount);
     }
 
     function withdrawToken(
         address _to,
         IERC20 _receiveToken,
-        uint256 _balance
+        uint256 _balance,
+        uint256 _minReceiveToken
     ) external {
         uint256 preBalance = user2balance[msg.sender];
         require(preBalance >= _balance, "amount greater than balance ");
@@ -189,19 +204,26 @@ contract VaultPaymaster is
         require(_path.length > 0, "path is not exist");
         user2balance[msg.sender] = preBalance - _balance;
         withdrawTo(payable(this), _balance);
-        _swapExactETHForTokens(_to, _path, _balance);
-        emit Withdraw(msg.sender, _to, eth, _balance);
+        address[] memory newPath=reversalArray(_path);
+        uint256 swapNum=_swapExactETHForTokens(_to, newPath, _balance);
+        require(swapNum>=_minReceiveToken,"swap balance less than minReceiveToken");
+        emit Withdraw(msg.sender, _to, weth, _balance);
     }
 
-    function get_path(address _token) external view returns (address[] memory) {
-        address[] memory _path = token2path[address(_token)];
-        uint256 len = _path.length;
-        address[] memory path = new address[](len + 1);
-        for (uint256 i = 0; i < len; i++) {
-            path[i] = _path[i];
-        }
-        path[len] = eth;
+    function getPath(address _token) external view returns (address[] memory) {
+        address[] memory path=token2path[_token];
         return path;
+    }
+
+    function reversalArray(address[] memory list) internal pure returns(address[] memory){
+         uint256 len=list.length;
+         address[] memory newList=new address[](len);
+         uint256 index=0;
+         for(uint256 i=len;i>0;i--){
+             newList[index]=list[i-1];
+             index++;
+         }
+         return newList;
     }
 
     //swap
@@ -209,22 +231,17 @@ contract VaultPaymaster is
         address[] memory _path,
         uint256 _amountIn
     ) internal returns (uint256) {
-        uint256 len = _path.length;
-        address[] memory path = new address[](len + 1);
-        for (uint256 i = 0; i < len; i++) {
-            path[i] = _path[i];
-        }
-        path[len] = eth;
-
         uint deadline = block.timestamp + 300;
+        address _weth=_path[_path.length-1];
+        require(_weth==weth,"swap path incorrectness");
         uint[] memory amounts = router.swapExactTokensForETH(
             _amountIn,
             0,
-            path,
+            _path,
             address(this),
             deadline
         );
-        return amounts[1];
+        return amounts[amounts.length-1];
     }
 
     function _swapExactETHForTokens(
@@ -232,22 +249,16 @@ contract VaultPaymaster is
         address[] memory _path,
         uint256 _amountIn
     ) internal returns (uint256) {
-        uint256 len = _path.length;
-        address[] memory path = new address[](len + 1);
-        path[0] = eth;
-        uint256 index = 1;
-        for (uint256 i = 0; i < len; i++) {
-            path[index] = _path[len - 1 - i];
-            index += 1;
-        }
         uint deadline = block.timestamp + 300;
+        address _weth=_path[0];
+        require(_weth==weth,"swap path incorrectness");
         uint[] memory amounts = router.swapExactETHForTokens{value: _amountIn}(
             0,
-            path,
+            _path,
             _to,
             deadline
         );
-        return amounts[1];
+        return amounts[amounts.length-1];
     }
 
     function unlockStake() external onlyOwner {
@@ -290,7 +301,7 @@ contract VaultPaymaster is
         UserOperation calldata userOp,
         bytes32 /*userOpHash*/,
         uint256 requiredPreFund
-    ) internal returns (bytes memory context, uint256 validationData) {
+    ) internal view returns (bytes memory context, uint256 validationData) {
         // verificationGasLimit is dual-purposed, as gas limit for postOp. make sure it is high enough
         // make sure that verificationGasLimit is high enough to handle postOp
         uint256 opFee = (requiredPreFund * fee) / DIVISOR;
@@ -335,11 +346,11 @@ contract VaultPaymaster is
         address owner = IOwnable(sender).owner();
         uint256 charge = actualGasCost + COST_OF_POST;
         uint256 balance = user2balance[owner];
-        require(balance >= charge, "Paymaster Post:not sufficient funds");
         uint256 opFee = (charge * fee) / DIVISOR;
+        require(balance >= (charge+opFee), "Paymaster Post:not sufficient funds");
         address manager = IOwnable(address(this)).owner();
         user2balance[manager] += opFee;
-        user2balance[owner] = balance - charge - opFee;
+        user2balance[owner] = balance - charge - opFee;   
         //compensate caller
         settleFollowers(sender, charge + opFee);
     }
@@ -372,9 +383,9 @@ contract VaultPaymaster is
 
                     if ( signalSuscriptionExtension.unsubscribeLine() >= user2balance[setTokenOwner]   ) {            
                         //unsubscribe
-                        signalSuscriptionExtension.unsubscribe(folllowers[i], jasperVault);                   
+                        signalSuscriptionExtension.unsubscribeByExtension(folllowers[i], jasperVault);                   
                         emit Unsubscribe(folllowers[i], jasperVault, user2balance[setTokenOwner] );                    
-                    } else if (signalSuscriptionExtension.warnLine() >=  user2balance[setTokenOwner]  ) {            
+                    } else if (signalSuscriptionExtension.warningLine() >=  user2balance[setTokenOwner]  ) {            
                         //warnLine
                         emit WarnLine(folllowers[i], user2balance[setTokenOwner] );                 
                     }

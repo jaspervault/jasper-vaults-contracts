@@ -218,7 +218,7 @@ contract BatchTradeExtension is BaseGlobalExtension {
         TradeInfo[] memory _trades
     )
         external
-        onlySettle(_jasperVault)
+        onlyReset(_jasperVault)
         onlyOperator(_jasperVault)
     {
         uint256 tradesLength = _trades.length;

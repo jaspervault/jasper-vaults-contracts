@@ -4,7 +4,6 @@ pragma solidity ^0.8.12;
 
 /* solhint-disable reason-string */
 
-// import "../proxy/access/Ownable.sol";
 import "../interfaces/IPaymaster.sol";
 import "../interfaces/IEntryPoint.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
@@ -63,7 +62,7 @@ abstract contract BasePaymaster is IPaymaster, OwnableUpgradeable {
     /**
      * add a deposit for this paymaster, used for paying for transaction fees
      */
-    function deposit() internal {
+    function deposit() public payable {
         entryPoint.depositTo{value : msg.value}(address(this));
     }
 
@@ -72,7 +71,7 @@ abstract contract BasePaymaster is IPaymaster, OwnableUpgradeable {
      * @param withdrawAddress target to send to
      * @param amount to withdraw
      */
-    function withdrawTo(address payable withdrawAddress, uint256 amount) internal  {
+    function withdrawTo(address payable withdrawAddress, uint256 amount) public onlyOwner {
         entryPoint.withdrawTo(withdrawAddress, amount);
     }
     /**

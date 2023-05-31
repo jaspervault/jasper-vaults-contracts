@@ -46,23 +46,24 @@ contract DelegatedManagerFactory {
     mapping(address => address) public account2setToken;
     mapping(address => address) public setToken2account;
     mapping(address => uint256) public jasperVaultType;
+    mapping(address => bool) public  jasperVaultInitial;
 
-    struct CreateInfo{
+    struct CreateInfo {
         uint256 vaultType;
         uint256 followFee;
         uint256 profitShareFee;
-        address[]  components;
-        int256[]  units;
-        string  name;
-        string  symbol;
+        address[] components;
+        int256[] units;
+        string name;
+        string symbol;
         address owner;
         address methodologist;
-        uint256 delay;
-        address[]  modules;
-        address[]  adapters;
-        address[]  operators;
-        address[]  assets;
-        address[]  extensions;
+        uint256 delay;  
+        address[] modules;
+        address[] adapters;
+        address[] operators;
+        address[] assets;
+        address[] extensions;
     }
 
     /* ============ Structs ============ */
@@ -134,10 +135,16 @@ contract DelegatedManagerFactory {
     /* ============ External Functions ============ */
 
     function createSetAndManager(
-      CreateInfo memory _info
+        CreateInfo memory _info
     ) external returns (IJasperVault, address) {
         // require(account2setToken[msg.sender] == address(0x0000000000000000000000000000000000000000), "sender has a jasperVault");
-        _validateManagerParameters(_info.components,_info.extensions, _info.assets);
+        require(_info.owner != address(0x00),"owner invalid address");
+        require(_info.methodologist != address(0x00),"methodologist invalid address");
+        _validateManagerParameters(
+            _info.components,
+            _info.extensions,
+            _info.assets
+        );
         IJasperVault jasperVault = _deploySet(
             _info.components,
             _info.units,
@@ -166,7 +173,7 @@ contract DelegatedManagerFactory {
 
         account2setToken[msg.sender] = address(jasperVault);
         setToken2account[address(jasperVault)] = msg.sender;
-        jasperVaultType[address(jasperVault)] =_info.vaultType;
+        jasperVaultType[address(jasperVault)] = _info.vaultType;
         return (jasperVault, address(manager));
     }
 
@@ -270,7 +277,7 @@ contract DelegatedManagerFactory {
         );
 
         delete initializeState[_jasperVault];
-
+        jasperVaultInitial[address(_jasperVault)]=true;     
         emit DelegatedManagerInitialized(_jasperVault, manager);
     }
 
@@ -294,8 +301,8 @@ contract DelegatedManagerFactory {
         address[] memory _modules,
         string memory _name,
         string memory _symbol,
-        uint256  _followFee,
-        uint256  _profitShareFee
+        uint256 _followFee,
+        uint256 _profitShareFee
     ) internal returns (IJasperVault) {
         address jasperVault = setTokenFactory.create(
             _components,
@@ -333,7 +340,7 @@ contract DelegatedManagerFactory {
         // If asset array is empty, manager's useAssetAllowList will be set to false
         // and the asset allow list is not enforced
         bool useAssetAllowlist = _assets.length > 0;
-        bool useAdapterAllowlist=_adapters.length>0;
+        bool useAdapterAllowlist = _adapters.length > 0;
         DelegatedManager newManager = new DelegatedManager(
             _jasperVault,
             address(this),

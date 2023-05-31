@@ -23,6 +23,8 @@ interface ISignalSuscriptionModule {
 
     function unsubscribe(IJasperVault _jasperVault, address target) external;
 
+    function unsubscribeByMaster(address target) external;
+
     function exectueFollowStart(address _jasperVault) external;
     function exectueFollowEnd(address _jasperVault) external;
     

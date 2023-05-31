@@ -1,4 +1,3 @@
-
 /*
     Copyright 2020 Set Labs Inc.
 
@@ -37,6 +36,13 @@ import {ModuleBase} from "../../lib/ModuleBase.sol";
 import {Position} from "../../lib/Position.sol";
 import {PreciseUnitMath} from "../../../lib/PreciseUnitMath.sol";
 import {ResourceIdentifier} from "../../lib/ResourceIdentifier.sol";
+
+interface ISignalSuscriptionModule {
+    function get_signal_provider(address) external view returns (address);
+    function get_followers(address) external view returns (address[] memory);
+        
+    
+}
 
 /**
  * @title NavIssuanceModule
@@ -171,10 +177,20 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
     // 3 index stores the direct protocol fee % on the controller, charged in the redeem function
     uint256 internal constant PROTOCOL_REDEEM_DIRECT_FEE_INDEX = 3;
 
-    mapping(IJasperVault=>mapping(address=>bool)) public IROwers;
+    mapping(IJasperVault => mapping(address => bool)) public IROwers;
+
+    ISignalSuscriptionModule public signalSuscriptionModule;
 
     modifier ValidIROwer(IJasperVault _jasperVault) {
-        require(IROwers[_jasperVault][msg.sender], "user no issue or redeem auth");
+
+        require(
+            IROwers[_jasperVault][msg.sender] &&
+                signalSuscriptionModule.get_signal_provider(
+                    address(_jasperVault)
+                ) ==
+                address(0x00) && signalSuscriptionModule.get_followers(address(_jasperVault)).length==0,
+            "Not authorized user"
+        );
         _;
     }
 
@@ -184,11 +200,15 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
      * @param _controller               Address of controller contract
      * @param _weth                     Address of wrapped eth
      */
-    constructor(IController _controller, IWETH _weth)
-        public
-        ModuleBase(_controller)
-    {
+    constructor(
+        IController _controller,
+        address _signalSuscriptionModule,
+        IWETH _weth
+    ) public ModuleBase(_controller) {
         weth = _weth;
+        signalSuscriptionModule = ISignalSuscriptionModule(
+            _signalSuscriptionModule
+        );
     }
 
     /* ============ External Functions ============ */
@@ -209,7 +229,12 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
         uint256 _reserveAssetQuantity,
         uint256 _minSetTokenReceiveQuantity,
         address _to
-    ) external nonReentrant onlyValidAndInitializedSet(_jasperVault) ValidIROwer(_jasperVault){
+    )
+        external
+        nonReentrant
+        onlyValidAndInitializedSet(_jasperVault)
+        ValidIROwer(_jasperVault)
+    {
         _validateCommon(_jasperVault, _reserveAsset, _reserveAssetQuantity);
 
         _callPreIssueHooks(
@@ -253,7 +278,13 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
         IJasperVault _jasperVault,
         uint256 _minSetTokenReceiveQuantity,
         address _to
-    ) external payable nonReentrant onlyValidAndInitializedSet(_jasperVault) ValidIROwer(_jasperVault){
+    )
+        external
+        payable
+        nonReentrant
+        onlyValidAndInitializedSet(_jasperVault)
+        ValidIROwer(_jasperVault)
+    {
         weth.deposit{value: msg.value}();
 
         _validateCommon(_jasperVault, address(weth), msg.value);
@@ -299,7 +330,12 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
         uint256 _setTokenQuantity,
         uint256 _minReserveReceiveQuantity,
         address _to
-    ) external nonReentrant onlyValidAndInitializedSet(_jasperVault) ValidIROwer(_jasperVault){
+    )
+        external
+        nonReentrant
+        onlyValidAndInitializedSet(_jasperVault)
+        ValidIROwer(_jasperVault)
+    {
         _validateCommon(_jasperVault, _reserveAsset, _setTokenQuantity);
 
         _callPreRedeemHooks(_jasperVault, _setTokenQuantity, msg.sender, _to);
@@ -344,7 +380,12 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
         uint256 _setTokenQuantity,
         uint256 _minReserveReceiveQuantity,
         address payable _to
-    ) external nonReentrant onlyValidAndInitializedSet(_jasperVault) ValidIROwer(_jasperVault){
+    )
+        external
+        nonReentrant
+        onlyValidAndInitializedSet(_jasperVault)
+        ValidIROwer(_jasperVault)
+    {
         _validateCommon(_jasperVault, address(weth), _setTokenQuantity);
 
         _callPreRedeemHooks(_jasperVault, _setTokenQuantity, msg.sender, _to);
@@ -385,10 +426,10 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
      * @param _jasperVault                     Instance of the JasperVault
      * @param _reserveAsset                 Address of the reserve asset to add
      */
-    function addReserveAsset(IJasperVault _jasperVault, address _reserveAsset)
-        external
-        onlyManagerAndValidSet(_jasperVault)
-    {
+    function addReserveAsset(
+        IJasperVault _jasperVault,
+        address _reserveAsset
+    ) external onlyManagerAndValidSet(_jasperVault) {
         require(
             !isReserveAsset[_jasperVault][_reserveAsset],
             "Reserve asset already exists"
@@ -406,10 +447,10 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
      * @param _jasperVault                     Instance of the JasperVault
      * @param _reserveAsset                 Address of the reserve asset to remove
      */
-    function removeReserveAsset(IJasperVault _jasperVault, address _reserveAsset)
-        external
-        onlyManagerAndValidSet(_jasperVault)
-    {
+    function removeReserveAsset(
+        IJasperVault _jasperVault,
+        address _reserveAsset
+    ) external onlyManagerAndValidSet(_jasperVault) {
         require(
             isReserveAsset[_jasperVault][_reserveAsset],
             "Reserve asset does not exist"
@@ -429,17 +470,18 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
      * @param _jasperVault                     Instance of the JasperVault
      * @param _premiumPercentage            Premium percentage in 10e16 (e.g. 10e16 = 1%)
      */
-    function editPremium(IJasperVault _jasperVault, uint256 _premiumPercentage)
-        external
-        onlyManagerAndValidSet(_jasperVault)
-    {
+    function editPremium(
+        IJasperVault _jasperVault,
+        uint256 _premiumPercentage
+    ) external onlyManagerAndValidSet(_jasperVault) {
         require(
             _premiumPercentage <=
                 navIssuanceSettings[_jasperVault].maxPremiumPercentage,
             "Premium must be less than maximum allowed"
         );
 
-        navIssuanceSettings[_jasperVault].premiumPercentage = _premiumPercentage;
+        navIssuanceSettings[_jasperVault]
+            .premiumPercentage = _premiumPercentage;
 
         emit PremiumEdited(_jasperVault, _premiumPercentage);
     }
@@ -479,10 +521,10 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
      * @param _jasperVault                     Instance of the JasperVault
      * @param _managerFeeRecipient          Manager fee recipient
      */
-    function editFeeRecipient(IJasperVault _jasperVault, address _managerFeeRecipient)
-        external
-        onlyManagerAndValidSet(_jasperVault)
-    {
+    function editFeeRecipient(
+        IJasperVault _jasperVault,
+        address _managerFeeRecipient
+    ) external onlyManagerAndValidSet(_jasperVault) {
         require(
             _managerFeeRecipient != address(0),
             "Fee recipient must not be 0 address"
@@ -505,7 +547,6 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
         IJasperVault _jasperVault,
         NAVIssuanceSettings memory _navIssuanceSettings,
         address[] memory _iROwer
-        
     )
         external
         onlySetManager(_jasperVault, msg.sender)
@@ -566,8 +607,8 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
         }
 
         navIssuanceSettings[_jasperVault] = _navIssuanceSettings;
-        for(uint256 i=0;i<_iROwer.length;i++){
-             IROwers[_jasperVault][_iROwer[i]]=true;
+        for (uint256 i = 0; i < _iROwer.length; i++) {
+            IROwers[_jasperVault][_iROwer[i]] = true;
         }
         _jasperVault.initializeModule();
     }
@@ -595,11 +636,9 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
 
     /* ============ External Getter Functions ============ */
 
-    function getReserveAssets(IJasperVault _jasperVault)
-        external
-        view
-        returns (address[] memory)
-    {
+    function getReserveAssets(
+        IJasperVault _jasperVault
+    ) external view returns (address[] memory) {
         return navIssuanceSettings[_jasperVault].reserveAssets;
     }
 
@@ -609,7 +648,11 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
         uint256 _reserveAssetQuantity
     ) external view returns (uint256) {
         return
-            _getIssuePremium(_jasperVault, _reserveAsset, _reserveAssetQuantity);
+            _getIssuePremium(
+                _jasperVault,
+                _reserveAsset,
+                _reserveAssetQuantity
+            );
     }
 
     function getRedeemPremium(
@@ -617,14 +660,14 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
         address _reserveAsset,
         uint256 _setTokenQuantity
     ) external view returns (uint256) {
-        return _getRedeemPremium(_jasperVault, _reserveAsset, _setTokenQuantity);
+        return
+            _getRedeemPremium(_jasperVault, _reserveAsset, _setTokenQuantity);
     }
 
-    function getManagerFee(IJasperVault _jasperVault, uint256 _managerFeeIndex)
-        external
-        view
-        returns (uint256)
-    {
+    function getManagerFee(
+        IJasperVault _jasperVault,
+        uint256 _managerFeeIndex
+    ) external view returns (uint256) {
         return navIssuanceSettings[_jasperVault].managerFees[_managerFeeIndex];
     }
 
@@ -711,7 +754,8 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
         return
             _reserveAssetQuantity != 0 &&
             isReserveAsset[_jasperVault][_reserveAsset] &&
-            setTotalSupply >= navIssuanceSettings[_jasperVault].minSetTokenSupply;
+            setTotalSupply >=
+            navIssuanceSettings[_jasperVault].minSetTokenSupply;
     }
 
     /**
@@ -1042,7 +1086,7 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
      */
     function _getIssuePremium(
         IJasperVault _jasperVault,
-        address, /* _reserveAsset */
+        address /* _reserveAsset */,
         uint256 /* _reserveAssetQuantity */
     ) internal view virtual returns (uint256) {
         return navIssuanceSettings[_jasperVault].premiumPercentage;
@@ -1054,7 +1098,7 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
      */
     function _getRedeemPremium(
         IJasperVault _jasperVault,
-        address, /* _reserveAsset */
+        address /* _reserveAsset */,
         uint256 /* _setTokenQuantity */
     ) internal view virtual returns (uint256) {
         return navIssuanceSettings[_jasperVault].premiumPercentage;
@@ -1082,15 +1126,7 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
         uint256 _protocolManagerFeeIndex,
         uint256 _protocolDirectFeeIndex,
         uint256 _managerFeeIndex
-    )
-        internal
-        view
-        returns (
-            uint256,
-            uint256,
-            uint256
-        )
-    {
+    ) internal view returns (uint256, uint256, uint256) {
         (
             uint256 protocolFeePercentage,
             uint256 managerFeePercentage
@@ -1131,9 +1167,8 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
             address(this),
             _protocolManagerFeeIndex
         );
-        uint256 managerFeePercent = navIssuanceSettings[_jasperVault].managerFees[
-            _managerFeeIndex
-        ];
+        uint256 managerFeePercent = navIssuanceSettings[_jasperVault]
+            .managerFees[_managerFeeIndex];
 
         // Calculate revenue share split percentage
         uint256 protocolRevenueSharePercentage = protocolManagerShareFeePercent
@@ -1170,10 +1205,10 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
         // Get reserve asset decimals
         uint256 reserveAssetDecimals = ERC20(_reserveAsset).decimals();
         uint256 normalizedTotalReserveQuantityNetFees = _netReserveFlows
-            .preciseDiv(10**reserveAssetDecimals);
+            .preciseDiv(10 ** reserveAssetDecimals);
         uint256 normalizedTotalReserveQuantityNetFeesAndPremium = _netReserveFlows
                 .sub(premiumValue)
-                .preciseDiv(10**reserveAssetDecimals);
+                .preciseDiv(10 ** reserveAssetDecimals);
 
         // Calculate SetTokens to mint to issuer
         uint256 denominator = _setTotalSupply
@@ -1203,7 +1238,7 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
         // Get reserve asset decimals
         uint256 reserveAssetDecimals = ERC20(_reserveAsset).decimals();
         uint256 prePremiumReserveQuantity = totalRedeemValueInPreciseUnits
-            .preciseMul(10**reserveAssetDecimals);
+            .preciseMul(10 ** reserveAssetDecimals);
 
         uint256 premiumPercentage = _getRedeemPremium(
             _jasperVault,

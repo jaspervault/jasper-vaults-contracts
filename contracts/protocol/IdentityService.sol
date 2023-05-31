@@ -47,6 +47,11 @@ contract IdentityService is Ownable {
     address[] public accounts;
     mapping(address => uint8) public account_type;
     mapping(address => address[]) public funds;
+    event SetAccountType(address account,uint8 value);
+    event NewFund(address account,address fund);
+    event RemoveFund(address account,address fund);
+    event RemoveAccount(address account);
+
 
     /* ============ Constructor ============ */
 
@@ -63,6 +68,7 @@ contract IdentityService is Ownable {
     function set_account_type(address account, uint8 value) public onlyOwner {
         require(account != address(0), "Account address must exist.");
         account_type[account] = value;
+        emit SetAccountType(account,value);
     }
 
     function newFund(address account, address fund)
@@ -76,6 +82,7 @@ contract IdentityService is Ownable {
         if (accounts.contains(account) == false) {
             accounts.push(account);
         }
+        emit NewFund(account,fund);
     }
 
     function removeFund(address account, address fund)
@@ -86,11 +93,13 @@ contract IdentityService is Ownable {
         require(account != address(0), "Account address must exist.");
         require(funds[account].contains(fund), "fund doesn't exist.");
         funds[account] = funds[account].remove(fund);
+        emit RemoveFund(account,fund);
     }
 
     function removeAccount(address account) public onlyOwner {
         require(account != address(0), "Account address must exist.");
         accounts = accounts.remove(account);
+        emit RemoveAccount(account);
     }
 
     function batchSet_account_type(

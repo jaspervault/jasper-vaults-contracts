@@ -24,6 +24,12 @@ import {ISignalSuscriptionModule} from "../../interfaces/ISignalSuscriptionModul
 import {BaseGlobalExtension} from "../lib/BaseGlobalExtension.sol";
 import {IDelegatedManager} from "../interfaces/IDelegatedManager.sol";
 import {IManagerCore} from "../interfaces/IManagerCore.sol";
+import {AddressArrayUtils} from "@setprotocol/set-protocol-v2/contracts/lib/AddressArrayUtils.sol";
+
+interface IOwnable{
+    function owner() external returns(address);
+}
+
 
 /**
  * @title TradeExtension
@@ -34,16 +40,17 @@ import {IManagerCore} from "../interfaces/IManagerCore.sol";
  */
 contract SignalSuscriptionExtension is BaseGlobalExtension {
     /* ============ Events ============ */
-
+    using AddressArrayUtils for address[];
     event SignalSuscriptionExtensionInitialized(
         address indexed _jasperVault,
         address indexed _delegatedManager
     );
 
-    event SetFee(
+    event EditFeeAndInfo(
         IJasperVault indexed _jasperVault,
         uint256 _followFee,
-        uint256 _profitShareFee
+        uint256 _profitShareFee,
+        uint256 _delay
     );
 
     // event SetSubscribeTarget(
@@ -62,25 +69,13 @@ contract SignalSuscriptionExtension is BaseGlobalExtension {
 
     // Instance of SignalSuscriptionModule
     ISignalSuscriptionModule public immutable signalSuscriptionModule;
-
-    //whiteList
-    mapping(IJasperVault => mapping(address => bool)) public whiteList;
-
+ 
+    mapping(IJasperVault=>address[]) public  whiteList;
     mapping(IJasperVault => bool) public allowSubscribe;
+
+    mapping(IJasperVault=>uint256) public allowMaxSubscribe;
+    mapping(IJasperVault=>uint256) public currentSubscribeNumber;
     
-    
-    /* ============ Modifiers ============ */
-    modifier ValidWhitelist(IJasperVault _jasperVault) {
-        require(
-            allowSubscribe[_jasperVault],
-            "jasperVault not allow subscribe"
-        );
-        require(
-            whiteList[_jasperVault][msg.sender],
-            "user is not in the whitelist"
-        );
-        _;
-    }
 
     /* ============ Constructor ============ */
 
@@ -96,16 +91,26 @@ contract SignalSuscriptionExtension is BaseGlobalExtension {
         IJasperVault _jasperVault,
         address[] memory _addList,
         address[] memory _delList,
+        uint256 _allowMaxSubscribe,
         bool _status
     ) external onlyOperator(_jasperVault) {
         allowSubscribe[_jasperVault] = _status;
+        address[] memory currentWhiteList=whiteList[_jasperVault];
+        allowMaxSubscribe[_jasperVault]=_allowMaxSubscribe;
         for (uint256 i = 0; i < _addList.length; i++) {
-            whiteList[_jasperVault][_addList[i]] = true;
-            emit SetWhiteList(_jasperVault, _addList[i], true);
+            bool isExist=currentWhiteList.contains(_addList[i]);
+            if(!isExist){
+                whiteList[_jasperVault].push(_addList[i]);
+                emit SetWhiteList(_jasperVault, _addList[i], true);
+            }
+          
         }
         for (uint256 i = 0; i < _delList.length; i++) {
-            whiteList[_jasperVault][_delList[i]] = false;
-            emit SetWhiteList(_jasperVault, _delList[i], false);
+            bool isExist=currentWhiteList.contains(_delList[i]);
+            if(isExist){
+               whiteList[_jasperVault].removeStorage(_delList[i]); 
+               emit SetWhiteList(_jasperVault, _delList[i], false);
+            }
         }
     }
 
@@ -182,12 +187,13 @@ contract SignalSuscriptionExtension is BaseGlobalExtension {
         _removeExtension(jasperVault, delegatedManager);
     }
 
-    function editSubscribeFee(
+    function editFeeAndInfo(
         IJasperVault _jasperVault,
         address _masterToken,
         uint256 _followFee,
-        uint256 _profitShareFee
-    ) external onlySettle(_jasperVault) onlyOperator(_jasperVault) {
+        uint256 _profitShareFee,
+        uint256 _delay
+    ) external onlyReset(_jasperVault) onlyOperator(_jasperVault) {
         address[] memory followers = signalSuscriptionModule.get_followers(
             address(_jasperVault)
         );
@@ -208,9 +214,10 @@ contract SignalSuscriptionExtension is BaseGlobalExtension {
         _manager(_jasperVault).setBaseFeeAndToken(
             _masterToken,
             _followFee,
-            _profitShareFee
+            _profitShareFee,
+            _delay
         );
-        emit SetFee(_jasperVault, _followFee, _profitShareFee);
+        emit EditFeeAndInfo(_jasperVault, _followFee, _profitShareFee,_delay);
     }
 
     function subscribe(
@@ -218,10 +225,10 @@ contract SignalSuscriptionExtension is BaseGlobalExtension {
         address target
     )
         external
-        onlySettle(_jasperVault)
-        ValidWhitelist(IJasperVault(target))
+        onlyReset(_jasperVault)
         onlyOperator(_jasperVault)
     {
+        checkWhiteList(IJasperVault(target));
         bytes memory callData = abi.encodeWithSelector(
             ISignalSuscriptionModule.subscribe.selector,
             _jasperVault,
@@ -233,6 +240,7 @@ contract SignalSuscriptionExtension is BaseGlobalExtension {
             callData
         );
         _manager(_jasperVault).setSubscribeStatus(1);
+        currentSubscribeNumber[IJasperVault(target)]=currentSubscribeNumber[IJasperVault(target)]+1;
         emit SetSubscribeStatus(_jasperVault, 1);
     }
 
@@ -242,9 +250,19 @@ contract SignalSuscriptionExtension is BaseGlobalExtension {
     )
         external
         onlySubscribed(_jasperVault)
-        ValidWhitelist(IJasperVault(target))
         onlyOperator(_jasperVault)
     {
+        _unsubscribe(_jasperVault,target);
+    }
+
+
+
+    function unsubscribeByExtension(IJasperVault _jasperVault,address target)  external  onlySubscribed(_jasperVault) onlyExtension(IJasperVault(target)){
+        _unsubscribe(_jasperVault,target);
+    } 
+
+
+   function _unsubscribe(IJasperVault _jasperVault,address target) internal {
         bytes memory callData = abi.encodeWithSelector(
             ISignalSuscriptionModule.unsubscribe.selector,
             _jasperVault,
@@ -256,10 +274,49 @@ contract SignalSuscriptionExtension is BaseGlobalExtension {
             callData
         );
         _manager(_jasperVault).setSubscribeStatus(2);
+        currentSubscribeNumber[IJasperVault(target)]=currentSubscribeNumber[IJasperVault(target)]-1;
         emit SetSubscribeStatus(_jasperVault, 2);
-    }
-
-    function exectueFollowEnd(address _jasperVault) external {
+   }
+   //masterVault unsubscribe  followVault
+   function unsubscribeByMaster(IJasperVault _target,bool _isAll,address[] memory _followers) external     onlySubscribed(_target)  onlyOperator(_target){
+             address[] memory allFollower=signalSuscriptionModule.get_followers(address(_target));
+             if(_isAll){
+                    delete currentSubscribeNumber[_target];
+                    bytes memory callData = abi.encodeWithSelector(
+                        ISignalSuscriptionModule.unsubscribeByMaster.selector,
+                        _target
+                    );
+                    _invokeManager(
+                        _manager(_target),
+                        address(signalSuscriptionModule),
+                        callData
+                    );     
+                    //edit subscribeStatus              
+                    for(uint256 i=0;i<allFollower.length;i++){
+                          _manager(IJasperVault(allFollower[i])).setSubscribeStatus(2);
+                    }
+             }else{
+                    for(uint256 i=0;i<_followers.length;i++){
+                        if(allFollower.contains(_followers[i])){
+                            bytes memory callData = abi.encodeWithSelector(
+                                ISignalSuscriptionModule.unsubscribe.selector,
+                                IJasperVault(_followers[i]),
+                                _target
+                            );
+                            _invokeManager(
+                                _manager(IJasperVault(_followers[i])),
+                                address(signalSuscriptionModule),
+                                callData
+                            );
+                            _manager(IJasperVault(_followers[i])).setSubscribeStatus(2);  
+                            currentSubscribeNumber[_target]=currentSubscribeNumber[_target]-1; 
+                        }           
+                    }
+                
+                   
+             }       
+   }
+   function exectueFollowEnd(address _jasperVault) external onlyExtension(IJasperVault(_jasperVault)){
         bytes memory callData = abi.encodeWithSelector(
             ISignalSuscriptionModule.exectueFollowEnd.selector,
             _jasperVault
@@ -278,13 +335,23 @@ contract SignalSuscriptionExtension is BaseGlobalExtension {
         return signalSuscriptionModule.get_followers(_jasperVault);
     }
 
+    function isWhiteListByMaster(IJasperVault _target,address _user) external view returns(bool){
+            address[] memory list=whiteList[_target];
+            bool isSubscribe=list.contains(_user);
+            return isSubscribe;
+    }
+
+    function getWhiteList(IJasperVault _jasperVault) external view returns(address[] memory){
+         return  whiteList[_jasperVault];
+    }
+
     function getExectueFollow(
         address _jasperVault
     ) external view returns (bool) {
         return signalSuscriptionModule.isExectueFollow(_jasperVault);
     }
 
-    function warnLine() external view returns (uint256) {
+    function warningLine() external view returns (uint256) {
         return signalSuscriptionModule.warningLine();
     }
 
@@ -293,6 +360,18 @@ contract SignalSuscriptionExtension is BaseGlobalExtension {
     }
 
     /* ============ Internal Functions ============ */
+    function checkWhiteList(IJasperVault _jasperVault) internal  {
+        require(
+            allowSubscribe[_jasperVault],
+            "jasperVault not allow subscribe"
+        );
+        require(currentSubscribeNumber[_jasperVault]<allowMaxSubscribe[_jasperVault],"target subscribe number already full");
+        address owner=IOwnable(msg.sender).owner();
+        address[] memory list=whiteList[_jasperVault];
+        bool isExist=list.contains(owner);
+        require(isExist,"user is not in the whitelist");       
+    }
+
 
     /**
      * Internal function to initialize TradeModule on the JasperVault associated with the DelegatedManager.

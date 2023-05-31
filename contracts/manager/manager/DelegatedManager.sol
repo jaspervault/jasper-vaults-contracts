@@ -302,8 +302,9 @@ contract DelegatedManager is Ownable, MutualUpgradeV2 {
     }
 
 
-    function setAllowedAssets(address[] memory _addAssets,address[] memory _deleteAssets) external onlyOwner{ 
+    function setAllowedAssets(address[] memory _addAssets,address[] memory _deleteAssets,bool _status) external onlyOwner{ 
         require(subscribeStatus!=1,"not operable after subscription");
+        useAssetAllowlist = _status;
         _addAllowedAssets(_addAssets);
         for (uint256 i = 0; i < _deleteAssets.length; i++) {
             address asset = _deleteAssets[i];
@@ -311,19 +312,21 @@ contract DelegatedManager is Ownable, MutualUpgradeV2 {
                 allowedAssets.removeStorage(asset);
                 emit AllowedAssetRemoved(asset);
             }
-
         }
+        emit UseAssetAllowlistUpdated(_status);
     }
    
-    function setAdapters(address[] memory _addList,address[] memory _deleteList)  external onlyOwner{
+    function setAdapters(address[] memory _addList,address[] memory _deleteList,bool _status)  external onlyOwner{
             require(subscribeStatus!=1,"not operable after subscription");
             _addAllowAdapters(_addList);
+            useAdapterAllowlist=_status;
             for(uint256 i=0;i<_deleteList.length;i++){
                 if(adapters.contains(_deleteList[i])){
                    adapters.removeStorage(_deleteList[i]);         
                 }
             }
             emit SetAdapter(_addList,_deleteList);
+            emit UseAdapterAllowlistUpdated(_status);
     }
 
     function isAllowedAsset(address _asset) external view returns (bool) {
@@ -333,29 +336,15 @@ contract DelegatedManager is Ownable, MutualUpgradeV2 {
     function isAllowedAdapter(address _adapter) external view returns (bool) {
         return useAdapterAllowlist && adapters_timestamps[_adapter]<=block.timestamp && adapters.contains(_adapter);
     }
-    /**
-     * ONLY OWNER: Toggle useAssetAllowlist on and off. When false asset allowlist is ignored
-     * when true it is enforced.
-     *
-     * @param _useAssetAllowlist           Bool indicating whether to use asset allow list
-     */
-    function updateUseAssetAllowlist(bool _useAssetAllowlist) external onlyOwner {
-        useAssetAllowlist = _useAssetAllowlist;
-        emit UseAssetAllowlistUpdated(_useAssetAllowlist);
-    }
 
-    function updateUseAdapterAllowlist(bool _useAdapterAllowlist) external onlyOwner {
-        useAdapterAllowlist = _useAdapterAllowlist;
-        emit UseAdapterAllowlistUpdated(_useAdapterAllowlist);
-    }
- 
 
     function setBaseProperty(          
         string memory _name,
         string memory _symbol) external onlyOwner{
         jasperVault.setBaseProperty(_name,_symbol);
     }
-    function setBaseFeeAndToken(address _masterToken, uint256 _followFee,uint256 _profitShareFee) external  onlyExtension{
+    function setBaseFeeAndToken(address _masterToken, uint256 _followFee,uint256 _profitShareFee,uint256 _delay) external  onlyExtension{
+         delay=_delay;
          jasperVault.setBaseFeeAndToken(_masterToken,_followFee,_profitShareFee);
     }
    

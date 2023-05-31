@@ -211,4 +211,6 @@ interface IJasperVault is IERC20 {
      function followFee() external view returns(uint256);
      function profitShareFee() external view returns(uint256);
 
+     function removAllPosition() external;
+
 }

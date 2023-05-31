@@ -22,6 +22,6 @@ import { IJasperVault } from "./IJasperVault.sol";
 
 interface IUtilsModule {
     function initialize(IJasperVault _jasperVault) external;
-    function settle(IJasperVault _jasperVault) external;
+    function reset(IJasperVault _jasperVault) external;
     function rebalance(IJasperVault _target,IJasperVault _jasperVault,uint256 _ratio) external;  
 }

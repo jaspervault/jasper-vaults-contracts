@@ -157,7 +157,7 @@ contract LeverageExtension is BaseGlobalExtension {
         bytes memory _tradeData
     )
         external
-        onlySettle(_jasperVault)
+        onlyReset(_jasperVault)
         onlyOperator(_jasperVault)
         ValidAdapter(_jasperVault, address(leverageModule), _tradeAdapterName)
     {
@@ -188,7 +188,7 @@ contract LeverageExtension is BaseGlobalExtension {
         bytes memory _tradeData
     )
         external
-        onlySettle(_jasperVault)
+        onlyReset(_jasperVault)
         onlyOperator(_jasperVault)
         ValidAdapter(_jasperVault, address(leverageModule), _tradeAdapterName)
     {
@@ -218,7 +218,7 @@ contract LeverageExtension is BaseGlobalExtension {
         bytes memory _tradeData
     )
         external
-        onlySettle(_jasperVault)
+        onlyReset(_jasperVault)
         onlyOperator(_jasperVault)
         ValidAdapter(_jasperVault, address(leverageModule), _tradeAdapterName)
     {
@@ -248,7 +248,7 @@ contract LeverageExtension is BaseGlobalExtension {
         bytes memory _tradeData
     )
         external
-        onlySettle(_jasperVault)
+        onlyReset(_jasperVault)
         onlyOperator(_jasperVault)
         ValidAdapter(_jasperVault, address(leverageModule), _tradeAdapterName)
     {
@@ -289,7 +289,7 @@ contract LeverageExtension is BaseGlobalExtension {
         bytes memory _tradeData
     )
         external
-        onlySettle(_jasperVault)
+        onlyReset(_jasperVault)
         onlyOperator(_jasperVault)
         ValidAdapter(_jasperVault, address(leverageModule), _tradeAdapterName)
     {
@@ -356,7 +356,7 @@ contract LeverageExtension is BaseGlobalExtension {
         bytes memory _tradeData
     )
         external
-        onlySettle(_jasperVault)
+        onlyReset(_jasperVault)
         onlyOperator(_jasperVault)
         ValidAdapter(_jasperVault, address(leverageModule), _tradeAdapterName)
     {

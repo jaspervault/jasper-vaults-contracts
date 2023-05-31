@@ -39,7 +39,7 @@ contract UtilsModule is ModuleBase, ReentrancyGuard,IFlashLoanReceiver{
    address public uniswapRouter; 
    uint256 public positionMultiplier=10 ** 18;
    struct ParamInfo{
-       uint256 optionType;    //1.reBalance    2.settle
+       uint256 optionType;    //1.reBalance    2.reset
        uint256 protocolType;  //1 aave  2 compound 
        IJasperVault  target;
        IJasperVault  jasperVault;
@@ -77,7 +77,7 @@ contract UtilsModule is ModuleBase, ReentrancyGuard,IFlashLoanReceiver{
     }
 
 
-   function settle(IJasperVault _jasperVault) external nonReentrant onlyManagerAndValidSet(_jasperVault){
+   function reset(IJasperVault _jasperVault) external nonReentrant onlyManagerAndValidSet(_jasperVault){
         int256 totalSupply=int256(_jasperVault.totalSupply());
         address masterToken=_jasperVault.masterToken();
          ParamInfo memory param;
@@ -87,7 +87,7 @@ contract UtilsModule is ModuleBase, ReentrancyGuard,IFlashLoanReceiver{
          param.masterToken=masterToken;
          param.optionType=2;
          param.protocolType=1;
-        _settle(param);
+        _reset(param);
    }  
 
    function rebalance(IJasperVault _target,IJasperVault _jasperVault,uint256 _ratio) external nonReentrant onlyManagerAndValidSet(_jasperVault){ 
@@ -106,8 +106,8 @@ contract UtilsModule is ModuleBase, ReentrancyGuard,IFlashLoanReceiver{
    }
 
 
-   //settle assets
-   function _settle(ParamInfo memory param) internal {
+   //reset assets
+   function _reset(ParamInfo memory param) internal {
        IJasperVault.Position[] memory  positions=param.jasperVault.getPositions();
        //get length
        for(uint256 i=0;i<positions.length;i++){ 
@@ -156,7 +156,7 @@ contract UtilsModule is ModuleBase, ReentrancyGuard,IFlashLoanReceiver{
       if(param.flashLoanAssets.length>0){
         lendingPool.flashLoan(address(this), param.flashLoanAssets,param.flashLoanAmounts,param.flashLoanModes,address(this),params,0);
       }else{
-        _afterSettleToken(param,param.flashLoanAssets,param.flashLoanAmounts,param.flashLoanAmounts);
+        _afterresetToken(param,param.flashLoanAssets,param.flashLoanAmounts,param.flashLoanAmounts);
       }
 
    }  
@@ -166,7 +166,7 @@ contract UtilsModule is ModuleBase, ReentrancyGuard,IFlashLoanReceiver{
 
    
 
-   function _afterSettleAave(       
+   function _afterresetAave(       
         ParamInfo memory param,
         address[] memory assets,
         uint[] memory amounts,
@@ -192,7 +192,7 @@ contract UtilsModule is ModuleBase, ReentrancyGuard,IFlashLoanReceiver{
                  }
             }
    }
-   function _afterSettleToken(      
+   function _afterresetToken(      
         ParamInfo memory param,
         address[] memory assets,
         uint[] memory amounts,
@@ -307,8 +307,8 @@ contract UtilsModule is ModuleBase, ReentrancyGuard,IFlashLoanReceiver{
             _afterRebalanceToken(param,assets,amounts,premiums);
         }
         if(param.optionType==2){
-            _afterSettleAave(param,assets,amounts,premiums);
-            _afterSettleToken(param,assets,amounts,premiums);
+            _afterresetAave(param,assets,amounts,premiums);
+            _afterresetToken(param,assets,amounts,premiums);
         }     
 
         for(uint256 i=0;i<assets.length;i++){

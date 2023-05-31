@@ -38,7 +38,7 @@ import { IJasperVault } from "../../../interfaces/IJasperVault.sol";
  */
 contract SlippageIssuanceModule is DebtIssuanceModule {
 
-    constructor(IController _controller) public DebtIssuanceModule(_controller) {}
+    constructor(IController _controller,address _signalSuscriptionModule) public DebtIssuanceModule(_controller,_signalSuscriptionModule) {}
 
     /* ============ External Functions ============ */
 

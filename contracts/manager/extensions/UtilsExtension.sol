@@ -45,9 +45,9 @@ contract UtilsExtension is BaseGlobalExtension {
     }
 
 
-    function settleAndUnSubscribed(IJasperVault _jasperVault) external  onlyUnSubscribed(_jasperVault) onlyOperator(_jasperVault){
+    function resetAndUnSubscribed(IJasperVault _jasperVault) external  onlyUnSubscribed(_jasperVault) onlyOperator(_jasperVault){
             bytes memory callData = abi.encodeWithSelector(
-                IUtilsModule.settle.selector,
+                IUtilsModule.reset.selector,
                 _jasperVault
             );
             _invokeManager(_manager(_jasperVault), address(utilsModule), callData);
@@ -63,11 +63,11 @@ contract UtilsExtension is BaseGlobalExtension {
             emit SetSubscribeStatus( _jasperVault,0);
     }
 
-    function settle(IJasperVault _jasperVault) external    
+    function reset(IJasperVault _jasperVault) external    
     onlyOperator(_jasperVault) 
-    onlySettle(_jasperVault){
+    onlyReset(_jasperVault){
           bytes memory callData = abi.encodeWithSelector(
-                IUtilsModule.settle.selector,
+                IUtilsModule.reset.selector,
                 _jasperVault
             );
             _invokeManager(_manager(_jasperVault), address(utilsModule), callData);
@@ -76,7 +76,7 @@ contract UtilsExtension is BaseGlobalExtension {
 
     function rebalance(IJasperVault _target,IJasperVault _jasperVault,uint256 _ratio) external 
     onlyOperator(_jasperVault) 
-    onlySettle(_jasperVault){
+    onlyReset(_jasperVault){
             bytes memory callData = abi.encodeWithSelector(
                 IUtilsModule.rebalance.selector,
                 _target,

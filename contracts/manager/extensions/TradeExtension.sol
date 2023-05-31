@@ -123,7 +123,7 @@ contract TradeExtension is BaseGlobalExtension {
         TradeInfo memory _tradeInfo
     )
         external
-        onlySettle(_jasperVault)
+        onlyReset(_jasperVault)
         onlyOperator(_jasperVault)
         onlyAllowedAsset(_jasperVault, _tradeInfo.receiveToken)
         ValidAdapter(_jasperVault,address(tradeModule),_tradeInfo.exchangeName)
