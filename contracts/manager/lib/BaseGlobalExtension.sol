@@ -26,6 +26,7 @@ import {IManagerCore} from "../interfaces/IManagerCore.sol";
 
 import {IController} from "../../interfaces/IController.sol";
 import {ResourceIdentifier} from "../../protocol/lib/ResourceIdentifier.sol";
+import {IIdentityService} from "../../interfaces/IIdentityService.sol";
 
 /**
  * @title BaseGlobalExtension
@@ -53,6 +54,14 @@ abstract contract BaseGlobalExtension {
     mapping(IJasperVault => IDelegatedManager) public setManagers;
 
     /* ============ Modifiers ============ */
+    modifier onlyPrimeMember(IJasperVault _jasperVault, address _target) {
+        require(
+            _isPrimeMember(_jasperVault) &&
+                _isPrimeMember(IJasperVault(_target)),
+            "This feature is only available to Prime Members"
+        );
+        _;
+    }
 
     /**
      * Throws if the sender is not the JasperVault manager contract owner
@@ -75,34 +84,31 @@ abstract contract BaseGlobalExtension {
 
     modifier onlyUnSubscribed(IJasperVault _jasperVault) {
         require(
-            _manager(_jasperVault).subscribeStatus()==2,
+            _manager(_jasperVault).subscribeStatus() == 2,
             "jasperVault not unsubscribed"
         );
         _;
     }
 
-
     modifier onlySubscribed(IJasperVault _jasperVault) {
         require(
-            _manager(_jasperVault).subscribeStatus()==1,
+            _manager(_jasperVault).subscribeStatus() == 1,
             "jasperVault not subscribed"
         );
         _;
     }
 
-
     modifier onlyReset(IJasperVault _jasperVault) {
         require(
-            _manager(_jasperVault).subscribeStatus()==0,
+            _manager(_jasperVault).subscribeStatus() == 0,
             "jasperVault not unsettle"
         );
         _;
     }
 
-
     modifier onlyNotSubscribed(IJasperVault _jasperVault) {
         require(
-            _manager(_jasperVault).subscribeStatus()!=1,
+            _manager(_jasperVault).subscribeStatus() != 1,
             "jasperVault not unsettle"
         );
         _;
@@ -124,12 +130,14 @@ abstract contract BaseGlobalExtension {
         address _module,
         string memory _integrationName
     ) {
-        bool isValid = ValidAdapterByModule(
-            _jasperVault,
-            _module,
-            _integrationName
-        );
-        require(isValid, "Must be allowed adapter");
+        if (_isPrimeMember(_jasperVault)) {
+            bool isValid = ValidAdapterByModule(
+                _jasperVault,
+                _module,
+                _integrationName
+            );
+            require(isValid, "Must be allowed adapter");
+        }
         _;
     }
 
@@ -149,17 +157,19 @@ abstract contract BaseGlobalExtension {
      * Throws if asset is not allowed to be held by the Set
      */
     modifier onlyAllowedAsset(IJasperVault _jasperVault, address _asset) {
-        require(
-            _manager(_jasperVault).isAllowedAsset(_asset),
-            "Must be allowed asset"
-        );
+        if (_isPrimeMember(_jasperVault)) {
+            require(
+                _manager(_jasperVault).isAllowedAsset(_asset),
+                "Must be allowed asset"
+            );
+        }
         _;
     }
 
     modifier onlyExtension(IJasperVault _jasperVault) {
-       address[] memory extension= _manager(_jasperVault).getExtensions();
-       bool isExist=extension.contains(msg.sender);
-       require(isExist,"Only the extension can call");
+        bool isExist = _manager(_jasperVault).isPendingExtension(msg.sender) ||
+            _manager(_jasperVault).isInitializedExtension(msg.sender);
+        require(isExist, "Only the extension can call");
         _;
     }
 
@@ -254,5 +264,13 @@ abstract contract BaseGlobalExtension {
             address(_jasperVault),
             address(_delegatedManager)
         );
+    }
+
+    function _isPrimeMember(IJasperVault _jasperVault) internal returns (bool) {
+        address controller = _jasperVault.controller();
+        IIdentityService identityService = IIdentityService(
+            IController(controller).resourceId(3)
+        );
+        return identityService.isPrimeByJasperVault(address(_jasperVault));
     }
 }

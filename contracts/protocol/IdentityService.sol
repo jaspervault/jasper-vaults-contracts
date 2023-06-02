@@ -23,6 +23,14 @@ import {IController} from "../interfaces/IController.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {AddressArrayUtils} from "../lib/AddressArrayUtils.sol";
 
+interface IJasperVault {
+    function manager() external view returns (address);
+}
+
+interface IOwnable {
+    function owner() external view returns (address);
+}
+
 /**
 
 
@@ -33,12 +41,10 @@ import {AddressArrayUtils} from "../lib/AddressArrayUtils.sol";
 contract IdentityService is Ownable {
     using AddressArrayUtils for address[];
 
-    modifier onlyValidSet(address _jasperVault) {
-        _isSetValid(_jasperVault);
-        _;
-    }
-
     /* ============ Events ============ */
+    event SetAccountType(address account, uint8 value);
+
+    event RemoveAccount(address account);
 
     /* ============ State Variables ============ */
 
@@ -46,12 +52,6 @@ contract IdentityService is Ownable {
     IController public controller;
     address[] public accounts;
     mapping(address => uint8) public account_type;
-    mapping(address => address[]) public funds;
-    event SetAccountType(address account,uint8 value);
-    event NewFund(address account,address fund);
-    event RemoveFund(address account,address fund);
-    event RemoveAccount(address account);
-
 
     /* ============ Constructor ============ */
 
@@ -68,32 +68,8 @@ contract IdentityService is Ownable {
     function set_account_type(address account, uint8 value) public onlyOwner {
         require(account != address(0), "Account address must exist.");
         account_type[account] = value;
-        emit SetAccountType(account,value);
-    }
-
-    function newFund(address account, address fund)
-        public
-        onlyOwner
-        onlyValidSet(fund)
-    {
-        require(account != address(0), "Account address must exist.");
-        require(funds[account].contains(fund) == false, "fund exist.");
-        funds[account].push(fund);
-        if (accounts.contains(account) == false) {
-            accounts.push(account);
-        }
-        emit NewFund(account,fund);
-    }
-
-    function removeFund(address account, address fund)
-        public
-        onlyOwner
-        onlyValidSet(fund)
-    {
-        require(account != address(0), "Account address must exist.");
-        require(funds[account].contains(fund), "fund doesn't exist.");
-        funds[account] = funds[account].remove(fund);
-        emit RemoveFund(account,fund);
+        accounts.push(account);
+        emit SetAccountType(account, value);
     }
 
     function removeAccount(address account) public onlyOwner {
@@ -115,19 +91,16 @@ contract IdentityService is Ownable {
         }
     }
 
-    function getFundsByAccount(address account)
-        public
-        view
-        returns (address[] memory)
-    {
-        return funds[account];
-    }
-
     function getAccounts() external view returns (address[] memory) {
         return accounts;
     }
 
-    function _isSetValid(address _jasperVault) internal view returns (bool) {
-        return controller.isSet(_jasperVault);
+    function isPrimeByJasperVault(
+        address _jasperVault
+    ) external view returns (bool) {
+        address dm = IJasperVault(_jasperVault).manager();
+        address vault = IOwnable(dm).owner();
+        address wallet_addr = IOwnable(vault).owner();
+        return accounts.contains(wallet_addr) && account_type[wallet_addr] == 1;
     }
 }

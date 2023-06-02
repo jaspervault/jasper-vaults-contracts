@@ -302,17 +302,20 @@ contract CopyTradingExtension is BaseGlobalExtension {
 
 
     function _checkAdapterAndAssets(IJasperVault _jasperVault,TradeInfo[] memory _trades) internal {
-          IDelegatedManager manager = _manager(_jasperVault);
-          for(uint256 i=0;i<_trades.length;i++){          
-            require(
-                isIntegration[_trades[i].exchangeName],
-                "Must be allowed integration"
-            );
-            require(
-                manager.isAllowedAsset(_trades[i].receiveToken),
-                "Must be allowed asset"
-            );
-          }
+            IDelegatedManager manager = _manager(_jasperVault);
+            for(uint256 i=0;i<_trades.length;i++){          
+                require(
+                    isIntegration[_trades[i].exchangeName],
+                    "Must be allowed integration"
+                );
+                if(_isPrimeMember(_jasperVault)){
+                    require(
+                        manager.isAllowedAsset(_trades[i].receiveToken),
+                        "Must be allowed asset"
+                    ); 
+                } 
+            }
+        
     }
 
     /* ============ External Getter Functions ============ */

@@ -226,7 +226,9 @@ contract BatchTradeExtension is BaseGlobalExtension {
         for(uint256 i = 0; i < tradesLength; i++) {
 
             require(isIntegration[_trades[i].exchangeName], "Must be allowed integration");
-            require(manager.isAllowedAsset(_trades[i].receiveToken), "Must be allowed asset");          
+            if(_isPrimeMember(_jasperVault)){
+              require(manager.isAllowedAsset(_trades[i].receiveToken), "Must be allowed asset");  
+            }        
             bytes memory callData = abi.encodeWithSelector(
                 ITradeModule.trade.selector,
                 _jasperVault,
