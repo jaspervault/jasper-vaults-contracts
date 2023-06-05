@@ -21,8 +21,10 @@ contract VaultFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     Vault public  accountImplementation;
     IDelegatedManagerFactory  public delegatedManagerFactory;
     mapping(address=>address[]) public  acccount2Vault;
-    mapping(address=>uint256)  public  vault2Index;
-    event DeleteVaultRecord(address _account,address _vault);
+    mapping(address=>uint256)  public  vault2Salt;  
+    mapping(address=>uint256)  public account2Num;
+    mapping(address=>uint256)  public vault2Index;
+    event DeleteVaultRecord(address _account,address _vault);   
     event SetSetting(IEntryPoint _entryPoint,IDelegatedManagerFactory _delegatedManagerFactory);
     IEntryPoint public entryPoint;
     struct AccountInfo{
@@ -33,7 +35,8 @@ contract VaultFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         address manager;
         bool  isInitial;
     }
-    mapping(address=>uint256)  public account2Num;
+
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
       _disableInitializers();
@@ -64,35 +67,28 @@ contract VaultFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function  deleteVaultRecord(address _account,address[] memory _delList) external onlyOwner{   
+            uint256 total;
             for(uint256 i=0;i<_delList.length;i++){
-                  address[] memory vaultList=acccount2Vault[_account];
-                  (bool isExist,uint256 index)=contains(vaultList,_delList[i]);
-                  if(isExist){
-                        acccount2Vault[_account][index]=acccount2Vault[_account][vaultList.length-1];
+                  if(vault2Index[_delList[i]]!=0){
+                        uint256 len=acccount2Vault[_account].length;
+                        uint256 index=vault2Index[_delList[i]]-1;
+                        acccount2Vault[_account][index]=acccount2Vault[_account][len-1];
                         acccount2Vault[_account].pop();
+                        vault2Index[_delList[i]]=0;
+                        total+=1;
                         emit DeleteVaultRecord(_account,_delList[i]);
                   }
             }
+            if(total>0){
+                account2Num[_account]-=total;
+            }
     }
-
-    function contains(address[] memory _list,address _a) internal pure returns(bool,uint256){
-         bool isExist;
-         uint256 index;
-         for(uint256 i=0;i<_list.length;i++){
-                 if(_a==_list[i]){
-                     isExist=true;
-                     index=i;
-                 }
-         }
-         return (isExist,index);
-    }
-
     function getAccountByIndex(address _account,uint256 salt) external view returns (AccountInfo memory){
             AccountInfo memory info;
             info.vault=getAddress(_account,salt);
             info.jasperVault=delegatedManagerFactory.account2setToken(info.vault);
             info.jasperVaultType=delegatedManagerFactory.jasperVaultType(info.jasperVault);
-            info.vaultIndex=vault2Index[info.vault];
+            info.vaultIndex=vault2Salt[info.vault];
             info.isInitial=delegatedManagerFactory.jasperVaultInitial(info.jasperVault);
             if(info.jasperVault !=address(0x00)){
                info.manager=IJasperVault(info.jasperVault).manager();
@@ -102,7 +98,7 @@ contract VaultFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     function getAccountByVault(address _account,address _vault) external view returns(AccountInfo memory){
             AccountInfo memory info;
-            uint256 salt=vault2Index[_vault];
+            uint256 salt=vault2Salt[_vault];
             info.vault=getAddress(_account,salt);
             info.jasperVault=delegatedManagerFactory.account2setToken(info.vault);
             info.jasperVaultType=delegatedManagerFactory.jasperVaultType(info.jasperVault);
@@ -119,7 +115,7 @@ contract VaultFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             info.vault=IDelegatedManager(_manager).owner();
             info.jasperVault=delegatedManagerFactory.account2setToken(info.vault);
             info.jasperVaultType=delegatedManagerFactory.jasperVaultType(info.jasperVault);
-            info.vaultIndex=vault2Index[info.vault];
+            info.vaultIndex=vault2Salt[info.vault];
             info.isInitial=delegatedManagerFactory.jasperVaultInitial(info.jasperVault);
             info.manager=_manager;
             return info;        
@@ -127,24 +123,24 @@ contract VaultFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     function getAccountList(address _account,uint256 _page,uint256 _pageSize) external view returns(AccountInfo[] memory){
         require(_page> 0 && _pageSize>0, "_page and _pageSize  must greater than zero");     
-        address[] memory vaultList=acccount2Vault[_account];
+        uint256 listLen=acccount2Vault[_account].length;
         uint256 start=(_page-1)*_pageSize;
         uint256 end=_page*_pageSize;
-        if(start>=vaultList.length){
+        if(start>=listLen){
              AccountInfo[] memory zeroList=new AccountInfo[](0);
              return zeroList;
         }
-        if(end>=vaultList.length){
-             end=vaultList.length;
+        if(end>=listLen){
+             end=listLen;
         }
         uint256 len=end-start;
         AccountInfo[] memory infos=new AccountInfo[](len);
         for(uint256 i=0;i<len;i++) {
               AccountInfo memory info;
-              info.vault=vaultList[start+i];
+              info.vault=acccount2Vault[_account][start+i];
               info.jasperVault=delegatedManagerFactory.account2setToken(info.vault);
               info.jasperVaultType=delegatedManagerFactory.jasperVaultType(info.jasperVault);
-              info.vaultIndex=vault2Index[info.vault];
+              info.vaultIndex=vault2Salt[info.vault];
               info.isInitial=delegatedManagerFactory.jasperVaultInitial(info.jasperVault);
               if(info.jasperVault !=address(0x00)){
                   info.manager=IJasperVault(info.jasperVault).manager();
@@ -169,14 +165,12 @@ contract VaultFactory is Initializable, OwnableUpgradeable, UUPSUpgradeable {
                 address(accountImplementation),
                 abi.encodeCall(Vault.initialize, (managerAddr))
             )));
-        //save user info
-        address[] memory vaultList=acccount2Vault[managerAddr];     
-       (bool isExist,uint256 index)= contains(vaultList,address(ret));
-        if(!isExist){
+          //save user info
             acccount2Vault[managerAddr].push(address(ret));
-            vault2Index[address(ret)]=salt;
+            vault2Salt[address(ret)]=salt;
+            vault2Index[address(ret)]=acccount2Vault[managerAddr].length+1;
             account2Num[managerAddr]=account2Num[managerAddr]+1;
-        }
+
     }
 
     /**

@@ -41,9 +41,16 @@ contract SubscribeFeePool is Ownable,ReentrancyGuard{
     }
     mapping(address=>DespositInfo)  internal despositInfos;
 
+    mapping(address=>bool) public tokenWhiteList;
+
     event Desposit(address _sender, address _to,uint256  _amount);
     event Witdraw(address _sender,address _to,uint256  _amount);
     event WitdrawJasperVault(address _jasperVault,address _sender,address _to,uint256  _amount);
+    event SetTokenWhiteList(address[]  _addToken,address[] _delToken);
+    modifier onlyTokenWhiteList(address _token){
+        require(tokenWhiteList[_token],"token not in tokenWhiteList");
+        _;
+    }
     constructor(IController _controller,IDelegatedManagerFactory _delegatedManagerFactory) public {
         controller = _controller;
         delegatedManagerFactory=_delegatedManagerFactory;
@@ -53,19 +60,31 @@ contract SubscribeFeePool is Ownable,ReentrancyGuard{
         delegatedManagerFactory=_delegatedManagerFactory;
     }
 
+    function setTokenWhiteList(address[] calldata _addToken,address[] calldata _delToken) external onlyOwner{
+        for(uint256 i=0;i<_addToken.length;i++){
+            tokenWhiteList[_addToken[i]]=true;
+        }
+        for(uint256 i=0;i<_delToken.length;i++){
+            tokenWhiteList[_delToken[i]]=false;
+        }       
+        emit SetTokenWhiteList(_addToken,_delToken);
+    }
+
     //desposit
-    function desposit(address _token,address _to,uint256 _amount) external nonReentrant {
-       IERC20(_token).transferFrom(msg.sender, address(this), _amount);
-       address[] memory compounts=despositInfos[msg.sender].compounts;
-       (uint256 index,bool exist)=compounts.indexOf(_token);
-       if(exist){  
-            uint256 balance=despositInfos[_to].amounts[index];
-            despositInfos[_to].amounts[index]=balance.add(_amount); 
-       }else{
-           despositInfos[_to].compounts.push(_token);
-           despositInfos[_to].amounts.push(_amount);
-       }  
-       emit Desposit(msg.sender,_to,_amount);
+    function desposit(address _token,address _to,uint256 _amount) external onlyTokenWhiteList(_token) nonReentrant {
+       if(_amount>0){
+            IERC20(_token).transferFrom(msg.sender, address(this), _amount);
+            address[] memory compounts=despositInfos[_to].compounts;
+            (uint256 index,bool exist)=compounts.indexOf(_token);
+            if(exist){  
+                    uint256 balance=despositInfos[_to].amounts[index];
+                    despositInfos[_to].amounts[index]=balance.add(_amount); 
+            }else{
+                despositInfos[_to].compounts.push(_token);
+                despositInfos[_to].amounts.push(_amount);
+            }  
+            emit Desposit(msg.sender,_to,_amount);
+       }
     }
     //withdraw   JasperVault
     function witdrawAndJasperVault(address _token,address _jasperVault,address _to,uint256 _amount) external nonReentrant{

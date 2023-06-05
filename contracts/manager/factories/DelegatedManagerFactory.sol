@@ -140,6 +140,7 @@ contract DelegatedManagerFactory {
         // require(account2setToken[msg.sender] == address(0x0000000000000000000000000000000000000000), "sender has a jasperVault");
         require(_info.owner != address(0x00),"owner invalid address");
         require(_info.methodologist != address(0x00),"methodologist invalid address");
+        require(_info.followFee+_info.profitShareFee <= 10**18 ,"total fee less than or equal to 1e18");
         _validateManagerParameters(
             _info.components,
             _info.extensions,

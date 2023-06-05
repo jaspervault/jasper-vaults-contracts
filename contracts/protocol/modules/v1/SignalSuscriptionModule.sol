@@ -178,7 +178,10 @@ contract SignalSuscriptionModule is ModuleBase, Ownable, ReentrancyGuard {
     }
 
     function unsubscribeByMaster(address target) external nonReentrant onlyManagerAndValidSet(IJasperVault(target)) {
-        delete followers[target];
+        address[] memory list=followers[target];
+        for(uint256 i=0;i<list.length;i++){
+              followers[target].removeStorage(list[i]);    
+        }
     }
 
 
