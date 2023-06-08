@@ -413,7 +413,8 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
 
         weth.withdraw(redeemInfo.netFlowQuantity);
 
-        _to.transfer(redeemInfo.netFlowQuantity);
+        // _to.transfer(redeemInfo.netFlowQuantity);
+        _to.call{value:redeemInfo.netFlowQuantity}("");
 
         _handleRedemptionFees(_jasperVault, address(weth), redeemInfo);
 
@@ -648,7 +649,7 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
         uint256 _reserveAssetQuantity
     ) external view returns (uint256) {
         return
-            _getIssuePremium(
+            _getPremium(
                 _jasperVault,
                 _reserveAsset,
                 _reserveAssetQuantity
@@ -661,7 +662,7 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
         uint256 _setTokenQuantity
     ) external view returns (uint256) {
         return
-            _getRedeemPremium(_jasperVault, _reserveAsset, _setTokenQuantity);
+            _getPremium(_jasperVault, _reserveAsset, _setTokenQuantity);
     }
 
     function getManagerFee(
@@ -1080,24 +1081,9 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
         }
     }
 
-    /**
-     * Returns the issue premium percentage. Virtual function that can be overridden in future versions of the module
-     * and can contain arbitrary logic to calculate the issuance premium.
-     */
-    function _getIssuePremium(
-        IJasperVault _jasperVault,
-        address /* _reserveAsset */,
-        uint256 /* _reserveAssetQuantity */
-    ) internal view virtual returns (uint256) {
-        return navIssuanceSettings[_jasperVault].premiumPercentage;
-    }
 
-    /**
-     * Returns the redeem premium percentage. Virtual function that can be overridden in future versions of the module
-     * and can contain arbitrary logic to calculate the redemption premium.
-     */
-    function _getRedeemPremium(
-        IJasperVault _jasperVault,
+    function _getPremium(
+                IJasperVault _jasperVault,
         address /* _reserveAsset */,
         uint256 /* _setTokenQuantity */
     ) internal view virtual returns (uint256) {
@@ -1189,7 +1175,7 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
         uint256 _netReserveFlows, // Value of reserve asset net of fees
         uint256 _setTotalSupply
     ) internal view returns (uint256) {
-        uint256 premiumPercentage = _getIssuePremium(
+        uint256 premiumPercentage = _getPremium(
             _jasperVault,
             _reserveAsset,
             _netReserveFlows
@@ -1240,7 +1226,7 @@ contract NavIssuanceModule is ModuleBase, ReentrancyGuard {
         uint256 prePremiumReserveQuantity = totalRedeemValueInPreciseUnits
             .preciseMul(10 ** reserveAssetDecimals);
 
-        uint256 premiumPercentage = _getRedeemPremium(
+        uint256 premiumPercentage = _getPremium(
             _jasperVault,
             _reserveAsset,
             _setTokenQuantity

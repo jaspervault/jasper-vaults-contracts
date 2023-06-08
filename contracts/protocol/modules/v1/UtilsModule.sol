@@ -31,9 +31,10 @@ import { ILendingPool } from "../../../interfaces/external/aave-v2/ILendingPool.
 import { IFlashLoanReceiver } from "../../../interfaces/external/aave-v2/IFlashLoanReceiver.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { PreciseUnitMath } from "../../../lib/PreciseUnitMath.sol";
-
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 contract UtilsModule is ModuleBase, ReentrancyGuard,IFlashLoanReceiver{
    using PreciseUnitMath for int256;
+   using SafeERC20 for IERC20;
    uint256 internal constant BORROW_RATE_MODE = 2;
    ILendingPool public lendingPool;
    address public uniswapRouter; 
@@ -300,7 +301,7 @@ contract UtilsModule is ModuleBase, ReentrancyGuard,IFlashLoanReceiver{
     ) external override returns (bool) {   
          (ParamInfo memory param)= abi.decode(params,(ParamInfo)); 
          for(uint256 i=0;i<assets.length;i++){
-              IERC20(assets[i]).transfer(address(param.jasperVault),amounts[i]);
+              IERC20(assets[i]).safeTransfer(address(param.jasperVault),amounts[i]);
          }
         if(param.optionType==1){
             _afterRebalanceAave(param,assets,amounts,premiums);

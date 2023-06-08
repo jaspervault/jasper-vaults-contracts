@@ -145,7 +145,7 @@ contract DelegatedManagerFactory {
         );
         require(
             _info.profitShareFee <= 10 ** 18,
-            "profitShareFee fee must be  less than or equal to 1e18"
+            "profitShare fee must be less than or equal to 1e18"
         );
         _validateManagerParameters(
             _info.components,
@@ -217,6 +217,7 @@ contract DelegatedManagerFactory {
             "Must be controller-enabled JasperVault"
         );
         require(msg.sender == _jasperVault.manager(), "Must be manager");
+        require(_owner != address(0x00), "owner invalid address");
 
         _validateManagerParameters(
             _jasperVault.getComponents(),

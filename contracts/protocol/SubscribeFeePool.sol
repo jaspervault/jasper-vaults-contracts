@@ -26,6 +26,7 @@ import {SafeMath} from "@openzeppelin/contracts/math/SafeMath.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IDelegatedManagerFactory} from "../interfaces/IDelegatedManagerFactory.sol";
 import {AddressArrayUtils} from "../lib/AddressArrayUtils.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 interface IOwnable {
     function owner() external returns (address);
@@ -34,13 +35,15 @@ interface IOwnable {
 contract SubscribeFeePool is Ownable, ReentrancyGuard {
     using SafeMath for uint256;
     using AddressArrayUtils for address[];
+    using SafeERC20 for IERC20;
+
     IDelegatedManagerFactory public delegatedManagerFactory;
     IController public controller;
     struct DepositInfo {
         address[] compounts;
         uint256[] amounts;
     }
-    mapping(address => DepositInfo) internal DepositInfos;
+    mapping(address => DepositInfo) internal depositInfos;
 
     mapping(address => bool) public tokenWhiteList;
 
@@ -94,15 +97,15 @@ contract SubscribeFeePool is Ownable, ReentrancyGuard {
         uint256 _amount
     ) external onlyTokenWhiteList(_token) nonReentrant {
         if (_amount > 0) {
-            IERC20(_token).transferFrom(msg.sender, address(this), _amount);
-            address[] memory compounts = DepositInfos[_to].compounts;
+            IERC20(_token).safeTransferFrom(msg.sender, address(this), _amount);
+            address[] memory compounts = depositInfos[_to].compounts;
             (uint256 index, bool exist) = compounts.indexOf(_token);
             if (exist) {
-                uint256 balance = DepositInfos[_to].amounts[index];
-                DepositInfos[_to].amounts[index] = balance.add(_amount);
+                uint256 balance = depositInfos[_to].amounts[index];
+                depositInfos[_to].amounts[index] = balance.add(_amount);
             } else {
-                DepositInfos[_to].compounts.push(_token);
-                DepositInfos[_to].amounts.push(_amount);
+                depositInfos[_to].compounts.push(_token);
+                depositInfos[_to].amounts.push(_amount);
             }
             emit Deposit(msg.sender, _to, _amount);
         }
@@ -123,13 +126,13 @@ contract SubscribeFeePool is Ownable, ReentrancyGuard {
             account == msg.sender,
             "The caller is not the jasperVault owner"
         );
-        address[] memory compounts = DepositInfos[_jasperVault].compounts;
+        address[] memory compounts = depositInfos[_jasperVault].compounts;
         (uint256 index, bool exist) = compounts.indexOf(_token);
         require(exist, "token is not exist");
-        uint256 balance = DepositInfos[_jasperVault].amounts[index];
+        uint256 balance = depositInfos[_jasperVault].amounts[index];
         require(balance >= _amount, "witdraw balance not enough");
-        DepositInfos[_jasperVault].amounts[index] = balance.sub(_amount);
-        IERC20(_token).transfer(_to, _amount);
+        depositInfos[_jasperVault].amounts[index] = balance.sub(_amount);
+        IERC20(_token).safeTransfer(_to, _amount);
         emit WitdrawJasperVault(_jasperVault, msg.sender, _to, _amount);
     }
 
@@ -145,12 +148,12 @@ contract SubscribeFeePool is Ownable, ReentrancyGuard {
             account == msg.sender,
             "The caller is not the jasperVault owner"
         );
-        address[] memory compounts = DepositInfos[_jasperVault].compounts;
-        uint256[] memory amounts = DepositInfos[_jasperVault].amounts;
+        address[] memory compounts = depositInfos[_jasperVault].compounts;
+        uint256[] memory amounts = depositInfos[_jasperVault].amounts;
         for (uint256 i = 0; i < compounts.length; i++) {
             if (amounts[i] > 0) {
-                DepositInfos[_jasperVault].amounts[i] = 0;
-                IERC20(compounts[i]).transfer(_to, amounts[i]);
+                depositInfos[_jasperVault].amounts[i] = 0;
+                IERC20(compounts[i]).safeTransfer(_to, amounts[i]);
                 emit WitdrawJasperVault(
                     _jasperVault,
                     msg.sender,
@@ -167,24 +170,24 @@ contract SubscribeFeePool is Ownable, ReentrancyGuard {
         address _to,
         uint256 _amount
     ) external nonReentrant {
-        address[] memory compounts = DepositInfos[msg.sender].compounts;
+        address[] memory compounts = depositInfos[msg.sender].compounts;
         (uint256 index, bool exist) = compounts.indexOf(_token);
 
         require(exist, "token is not exist");
-        uint256 balance = DepositInfos[msg.sender].amounts[index];
+        uint256 balance = depositInfos[msg.sender].amounts[index];
         require(balance >= _amount, "witdraw balance not enough");
-        DepositInfos[msg.sender].amounts[index] = balance.sub(_amount);
-        IERC20(_token).transfer(_to, _amount);
+        depositInfos[msg.sender].amounts[index] = balance.sub(_amount);
+        IERC20(_token).safeTransfer(_to, _amount);
         emit Witdraw(msg.sender, _to, _amount);
     }
 
     function witdrawAll(address _to) external nonReentrant {
-        address[] memory compounts = DepositInfos[msg.sender].compounts;
-        uint256[] memory amounts = DepositInfos[msg.sender].amounts;
+        address[] memory compounts = depositInfos[msg.sender].compounts;
+        uint256[] memory amounts = depositInfos[msg.sender].amounts;
         for (uint256 i = 0; i < compounts.length; i++) {
             if (amounts[i] > 0) {
-                DepositInfos[msg.sender].amounts[i] = 0;
-                IERC20(compounts[i]).transfer(_to, amounts[i]);
+                depositInfos[msg.sender].amounts[i] = 0;
+                IERC20(compounts[i]).safeTransfer(_to, amounts[i]);
                 emit Witdraw(msg.sender, _to, amounts[i]);
             }
         }
@@ -193,6 +196,6 @@ contract SubscribeFeePool is Ownable, ReentrancyGuard {
     function getDepositInfo(
         address _user
     ) external view returns (DepositInfo memory) {
-        return DepositInfos[_user];
+        return depositInfos[_user];
     }
 }
