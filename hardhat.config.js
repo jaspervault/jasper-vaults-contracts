@@ -54,7 +54,7 @@ module.exports = {
     },
     mainnet: {
       url: "https://mainnet.infura.io/v3/98904658bc4043d49e602fd1ba345f8a",
-      accounts: [`${process.env.ETHEREUM_DEPLOY_PRIVATE_KEY}`],
+      accounts: [`${process.env.PRODUCTION_MAINNET_DEPLOY_PRIVATE_KEY}`],
     },
     polygon: {
       url: `https://polygon-mainnet.infura.io/v3/${process.env.INFURA_TOKEN}`,

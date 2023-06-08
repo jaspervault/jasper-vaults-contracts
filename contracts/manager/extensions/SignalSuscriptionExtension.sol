@@ -94,8 +94,8 @@ contract SignalSuscriptionExtension is BaseGlobalExtension {
         bool _status
     ) external onlyOperator(_jasperVault) {
         allowSubscribe[_jasperVault] = _status;
-        address[] memory currentWhiteList=whiteList[_jasperVault];
-        allowMaxSubscribe[_jasperVault]=1;
+        address[] memory currentWhiteList = whiteList[_jasperVault];
+        allowMaxSubscribe[_jasperVault] = 1;
         for (uint256 i = 0; i < _addList.length; i++) {
             bool isExist = currentWhiteList.contains(_addList[i]);
             if (!isExist) {
@@ -192,7 +192,10 @@ contract SignalSuscriptionExtension is BaseGlobalExtension {
         uint256 _profitShareFee,
         uint256 _delay
     ) external onlyReset(_jasperVault) onlyOperator(_jasperVault) {
-        require(_followFee+_profitShareFee <= 10**18 ,"total fee less than or equal to 1e18");
+        require(
+            _profitShareFee <= 10 ** 18,
+            "profitShareFee must be less than or equal to 1e18"
+        );
         address[] memory followers = signalSuscriptionModule.get_followers(
             address(_jasperVault)
         );
@@ -207,7 +210,7 @@ contract SignalSuscriptionExtension is BaseGlobalExtension {
                 address(signalSuscriptionModule),
                 callData
             );
-            _manager(IJasperVault(followers[i])).setSubscribeStatus(2);   
+            _manager(IJasperVault(followers[i])).setSubscribeStatus(2);
             emit SetSubscribeStatus(IJasperVault(followers[i]), 2);
         }
         _manager(_jasperVault).setBaseFeeAndToken(
@@ -216,7 +219,7 @@ contract SignalSuscriptionExtension is BaseGlobalExtension {
             _profitShareFee,
             _delay
         );
-        currentSubscribeNumber[_jasperVault]=0;
+        currentSubscribeNumber[_jasperVault] = 0;
         emit EditFeeAndInfo(_jasperVault, _followFee, _profitShareFee, _delay);
     }
 
@@ -390,17 +393,21 @@ contract SignalSuscriptionExtension is BaseGlobalExtension {
                 allowMaxSubscribe[_jasperVault],
             "target subscribe number already full"
         );
-        require(isContract(msg.sender),"caller not contract");
+        require(isContract(msg.sender), "caller not contract");
         address owner = IOwnable(msg.sender).owner();
         address[] memory list = whiteList[_jasperVault];
         bool isExist = list.contains(owner);
         require(isExist, "user is not in the whitelist");
     }
+
     function isContract(address _addr) internal view returns (bool) {
         uint256 size;
-        assembly { size := extcodesize(_addr) }
+        assembly {
+            size := extcodesize(_addr)
+        }
         return size > 0;
     }
+
     /**
      * Internal function to initialize TradeModule on the JasperVault associated with the DelegatedManager.
      *

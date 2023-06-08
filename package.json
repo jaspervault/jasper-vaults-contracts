@@ -3,7 +3,6 @@
   "private": true,
   "version": "0.1",
   "description": "Jasper Vault Contracts",
-  "scripts": {},
   "devDependencies": {
     "@ethersproject/abi": "^5.7.0",
     "@ethersproject/providers": "^5.7.0",

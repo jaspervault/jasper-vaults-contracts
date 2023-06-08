@@ -46,7 +46,7 @@ contract DelegatedManagerFactory {
     mapping(address => address) public account2setToken;
     mapping(address => address) public setToken2account;
     mapping(address => uint256) public jasperVaultType;
-    mapping(address => bool) public  jasperVaultInitial;
+    mapping(address => bool) public jasperVaultInitial;
 
     struct CreateInfo {
         uint256 vaultType;
@@ -58,7 +58,7 @@ contract DelegatedManagerFactory {
         string symbol;
         address owner;
         address methodologist;
-        uint256 delay;  
+        uint256 delay;
         address[] modules;
         address[] adapters;
         address[] operators;
@@ -138,9 +138,15 @@ contract DelegatedManagerFactory {
         CreateInfo memory _info
     ) external returns (IJasperVault, address) {
         // require(account2setToken[msg.sender] == address(0x0000000000000000000000000000000000000000), "sender has a jasperVault");
-        require(_info.owner != address(0x00),"owner invalid address");
-        require(_info.methodologist != address(0x00),"methodologist invalid address");
-        require(_info.followFee+_info.profitShareFee <= 10**18 ,"total fee less than or equal to 1e18");
+        require(_info.owner != address(0x00), "owner invalid address");
+        require(
+            _info.methodologist != address(0x00),
+            "methodologist invalid address"
+        );
+        require(
+            _info.profitShareFee <= 10 ** 18,
+            "profitShareFee fee must be  less than or equal to 1e18"
+        );
         _validateManagerParameters(
             _info.components,
             _info.extensions,
@@ -278,7 +284,7 @@ contract DelegatedManagerFactory {
         );
 
         delete initializeState[_jasperVault];
-        jasperVaultInitial[address(_jasperVault)]=true;     
+        jasperVaultInitial[address(_jasperVault)] = true;
         emit DelegatedManagerInitialized(_jasperVault, manager);
     }
 
