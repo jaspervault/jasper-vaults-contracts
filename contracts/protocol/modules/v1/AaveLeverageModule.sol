@@ -195,13 +195,6 @@ contract AaveLeverageModule is
     // Used to fetch lendingPool address. This contract is immutable and its address will never change.
     ILendingPoolAddressesProvider public immutable lendingPoolAddressesProvider;
 
-    // Mapping to efficiently check if collateral asset is enabled in JasperVault
-    mapping(IJasperVault => mapping(IERC20 => bool))
-        public collateralAssetEnabled;
-
-    // Mapping to efficiently check if a borrow asset is enabled in JasperVault
-    mapping(IJasperVault => mapping(IERC20 => bool)) public borrowAssetEnabled;
-
     // Internal mapping of enabled collateral and borrow tokens for syncing positions
     mapping(IJasperVault => EnabledAssets) internal enabledAssets;
 
@@ -251,6 +244,69 @@ contract AaveLeverageModule is
     }
 
     /* ============ External Functions ============ */
+    function borrow(
+        IJasperVault _jasperVault,
+        IERC20 _borrowAsset,
+        uint256 _borrowQuantityUnits
+    ) external nonReentrant onlyManagerAndValidSet(_jasperVault) {
+        ILendingPool lendingPool = ILendingPool(
+            lendingPoolAddressesProvider.getLendingPool()
+        );
+        uint256 setTotalSupply = _jasperVault.totalSupply();
+        uint256 quantity = _borrowQuantityUnits.preciseMul(setTotalSupply);
+        require(quantity > 0, "Quantity is 0");
+        _borrow(_jasperVault, lendingPool, _borrowAsset, quantity);
+        uint256 newBorrowAsset = _borrowAsset.balanceOf(address(_jasperVault));
+        _updatePosition(
+            _jasperVault,
+            _borrowAsset,
+            newBorrowAsset.preciseDiv(setTotalSupply)
+        );
+        _updateBorrowPosition(
+            _jasperVault,
+            _borrowAsset,
+            _getBorrowPosition(_jasperVault, _borrowAsset, setTotalSupply)
+        );
+    }
+
+    function repay(
+        IJasperVault _jasperVault,
+        IERC20 _repayAsset,
+        uint256 _redeemQuantityUnits,
+        bool _isAllRepay
+    ) external nonReentrant onlyManagerAndValidSet(_jasperVault) {
+        ILendingPool lendingPool = ILendingPool(
+            lendingPoolAddressesProvider.getLendingPool()
+        );
+        uint256 setTotalSupply = _jasperVault.totalSupply();
+        uint256 repayUnit;
+        if (_isAllRepay) {
+            repayUnit = underlyingToReserveTokens[_repayAsset]
+                .variableDebtToken
+                .balanceOf(address(_jasperVault));
+        } else {
+            repayUnit = _redeemQuantityUnits.preciseMul(setTotalSupply);
+        }
+        uint256 preRepayAsset = _repayAsset.balanceOf(address(_jasperVault));
+        require(repayUnit > 0, "repayUnit is 0");
+        require(preRepayAsset >= repayUnit, "repayUnit exceeds balance");
+        _repayBorrow(_jasperVault, lendingPool, _repayAsset, repayUnit);
+        uint256 nextRepayAsset = _repayAsset.balanceOf(address(_jasperVault));
+        _updatePosition(
+            _jasperVault,
+            _repayAsset,
+            nextRepayAsset.preciseDiv(setTotalSupply)
+        );
+        if (_isAllRepay) {
+            _updateBorrowPosition(_jasperVault, _repayAsset, 0);
+        } else {
+            _updateBorrowPosition(
+                _jasperVault,
+                _repayAsset,
+                _getBorrowPosition(_jasperVault, _repayAsset, setTotalSupply)
+            );
+        }
+    }
 
     /**
      * @dev MANAGER ONLY: Increases leverage for a given collateral position using an enabled borrow asset.
@@ -438,11 +494,6 @@ contract AaveLeverageModule is
         uint256 notionalRedeemQuantity = _redeemQuantityUnits.preciseMul(
             setTotalSupply
         );
-
-        require(
-            borrowAssetEnabled[_jasperVault][_repayAsset],
-            "Borrow not enabled"
-        );
         uint256 notionalRepayQuantity = underlyingToReserveTokens[_repayAsset]
             .variableDebtToken
             .balanceOf(address(_jasperVault));
@@ -566,13 +617,9 @@ contract AaveLeverageModule is
      * or anySetAllowed needs to be true. Only callable by the JasperVault's manager.
      * Note: Managers can enable collateral and borrow assets that don't exist as positions on the JasperVault
      * @param _jasperVault             Instance of the JasperVault to initialize
-     * @param _collateralAssets     Underlying tokens to be enabled as collateral in the JasperVault
-     * @param _borrowAssets         Underlying tokens to be enabled as borrow in the JasperVault
      */
     function initialize(
-        IJasperVault _jasperVault,
-        IERC20[] memory _collateralAssets,
-        IERC20[] memory _borrowAssets
+        IJasperVault _jasperVault
     )
         external
         onlySetManager(_jasperVault, msg.sender)
@@ -602,10 +649,6 @@ contract AaveLeverageModule is
                 )
             {} catch {}
         }
-
-        // _collateralAssets and _borrowAssets arrays are validated in their respective internal functions
-        _addCollateralAssets(_jasperVault, _collateralAssets);
-        _addBorrowAssets(_jasperVault, _borrowAssets);
     }
 
     /**
@@ -632,8 +675,6 @@ contract AaveLeverageModule is
                     .balanceOf(address(jasperVault)) == 0,
                 "Variable debt remaining"
             );
-
-            delete borrowAssetEnabled[jasperVault][borrowAsset];
         }
 
         address[] memory collateralAssets = enabledAssets[jasperVault]
@@ -641,8 +682,6 @@ contract AaveLeverageModule is
         for (uint256 i = 0; i < collateralAssets.length; i++) {
             IERC20 collateralAsset = IERC20(collateralAssets[i]);
             _updateUseReserveAsCollateral(jasperVault, collateralAsset, false);
-
-            delete collateralAssetEnabled[jasperVault][collateralAsset];
         }
 
         delete enabledAssets[jasperVault];
@@ -696,95 +735,6 @@ contract AaveLeverageModule is
         require(isActive, "Invalid aave reserve");
 
         _addUnderlyingToReserveTokensMapping(_underlying);
-    }
-
-    /**
-     * @dev MANAGER ONLY: Add collateral assets. aTokens corresponding to collateral assets are tracked for syncing positions.
-     * Note: Reverts with "Collateral already enabled" if there are duplicate assets in the passed _newCollateralAssets array.
-     *
-     * NOTE: ALL ADDED COLLATERAL ASSETS CAN BE ADDED AS A POSITION ON THE SET TOKEN WITHOUT MANAGER'S EXPLICIT PERMISSION.
-     * UNWANTED EXTRA POSITIONS CAN BREAK EXTERNAL LOGIC, INCREASE COST OF MINT/REDEEM OF SET TOKEN, AMONG OTHER POTENTIAL UNINTENDED CONSEQUENCES.
-     * SO, PLEASE ADD ONLY THOSE COLLATERAL ASSETS WHOSE CORRESPONDING aTOKENS ARE NEEDED AS DEFAULT POSITIONS ON THE SET TOKEN.
-     *
-     * @param _jasperVault             Instance of the SetToken
-     * @param _newCollateralAssets  Addresses of new collateral underlying assets
-     */
-    function addCollateralAssets(
-        IJasperVault _jasperVault,
-        IERC20[] memory _newCollateralAssets
-    ) external onlyManagerAndValidSet(_jasperVault) {
-        _addCollateralAssets(_jasperVault, _newCollateralAssets);
-    }
-
-    /**
-     * @dev MANAGER ONLY: Remove collateral assets. Disable deposited assets to be used as collateral on Aave market.
-     * @param _jasperVault             Instance of the SetToken
-     * @param _collateralAssets     Addresses of collateral underlying assets to remove
-     */
-    function removeCollateralAssets(
-        IJasperVault _jasperVault,
-        IERC20[] memory _collateralAssets
-    ) external onlyManagerAndValidSet(_jasperVault) {
-        for (uint256 i = 0; i < _collateralAssets.length; i++) {
-            IERC20 collateralAsset = _collateralAssets[i];
-            require(
-                collateralAssetEnabled[_jasperVault][collateralAsset],
-                "Collateral not enabled"
-            );
-
-            _updateUseReserveAsCollateral(_jasperVault, collateralAsset, false);
-
-            delete collateralAssetEnabled[_jasperVault][collateralAsset];
-            enabledAssets[_jasperVault].collateralAssets.removeStorage(
-                address(collateralAsset)
-            );
-        }
-        emit CollateralAssetsUpdated(_jasperVault, false, _collateralAssets);
-    }
-
-    /**
-     * @dev MANAGER ONLY: Add borrow assets. Debt tokens corresponding to borrow assets are tracked for syncing positions.
-     * Note: Reverts with "Borrow already enabled" if there are duplicate assets in the passed _newBorrowAssets array.
-     * @param _jasperVault             Instance of the SetToken
-     * @param _newBorrowAssets      Addresses of borrow underlying assets to add
-     */
-    function addBorrowAssets(
-        IJasperVault _jasperVault,
-        IERC20[] memory _newBorrowAssets
-    ) external onlyManagerAndValidSet(_jasperVault) {
-        _addBorrowAssets(_jasperVault, _newBorrowAssets);
-    }
-
-    /**
-     * @dev MANAGER ONLY: Remove borrow assets.
-     * Note: If there is a borrow balance, borrow asset cannot be removed
-     * @param _jasperVault             Instance of the SetToken
-     * @param _borrowAssets         Addresses of borrow underlying assets to remove
-     */
-    function removeBorrowAssets(
-        IJasperVault _jasperVault,
-        IERC20[] memory _borrowAssets
-    ) external onlyManagerAndValidSet(_jasperVault) {
-        for (uint256 i = 0; i < _borrowAssets.length; i++) {
-            IERC20 borrowAsset = _borrowAssets[i];
-
-            require(
-                borrowAssetEnabled[_jasperVault][borrowAsset],
-                "Borrow not enabled"
-            );
-            require(
-                underlyingToReserveTokens[borrowAsset]
-                    .variableDebtToken
-                    .balanceOf(address(_jasperVault)) == 0,
-                "Variable debt remaining"
-            );
-
-            delete borrowAssetEnabled[_jasperVault][borrowAsset];
-            enabledAssets[_jasperVault].borrowAssets.removeStorage(
-                address(borrowAsset)
-            );
-        }
-        emit BorrowAssetsUpdated(_jasperVault, false, _borrowAssets);
     }
 
     /**
@@ -951,7 +901,7 @@ contract AaveLeverageModule is
             address(_asset),
             _notionalQuantity
         );
-        require(finalWithDrawn == _notionalQuantity, "withdraw fail");
+        require(finalWithDrawn == _notionalQuantity, "withdraw  fail");
     }
 
     /**
@@ -1161,6 +1111,15 @@ contract AaveLeverageModule is
         _jasperVault.editDefaultPosition(address(_aToken), _newPositionUnit);
     }
 
+    function _updatePosition(
+        IJasperVault _jasperVault,
+        IERC20 _token,
+        uint256 _newPositionUnit
+    ) internal {
+        _jasperVault.editCoinType(address(_token), 0);
+        _jasperVault.editDefaultPosition(address(_token), _newPositionUnit);
+    }
+
     /**
      * @dev Updates external position unit for given borrow asset on SetToken
      */
@@ -1265,47 +1224,6 @@ contract AaveLeverageModule is
     }
 
     /**
-     * @dev Add collateral assets to SetToken. Updates the collateralAssetsEnabled and enabledAssets mappings.
-     * Emits CollateralAssetsUpdated event.
-     */
-    function _addCollateralAssets(
-        IJasperVault _jasperVault,
-        IERC20[] memory _newCollateralAssets
-    ) internal {
-        for (uint256 i = 0; i < _newCollateralAssets.length; i++) {
-            IERC20 collateralAsset = _newCollateralAssets[i];
-
-            _validateNewCollateralAsset(_jasperVault, collateralAsset);
-            _updateUseReserveAsCollateral(_jasperVault, collateralAsset, true);
-
-            collateralAssetEnabled[_jasperVault][collateralAsset] = true;
-            enabledAssets[_jasperVault].collateralAssets.push(
-                address(collateralAsset)
-            );
-        }
-        emit CollateralAssetsUpdated(_jasperVault, true, _newCollateralAssets);
-    }
-
-    /**
-     * @dev Add borrow assets to SetToken. Updates the borrowAssetsEnabled and enabledAssets mappings.
-     * Emits BorrowAssetsUpdated event.
-     */
-    function _addBorrowAssets(
-        IJasperVault _jasperVault,
-        IERC20[] memory _newBorrowAssets
-    ) internal {
-        for (uint256 i = 0; i < _newBorrowAssets.length; i++) {
-            IERC20 borrowAsset = _newBorrowAssets[i];
-
-            _validateNewBorrowAsset(_jasperVault, borrowAsset);
-
-            borrowAssetEnabled[_jasperVault][borrowAsset] = true;
-            enabledAssets[_jasperVault].borrowAssets.push(address(borrowAsset));
-        }
-        emit BorrowAssetsUpdated(_jasperVault, true, _newBorrowAssets);
-    }
-
-    /**
      * @dev Updates SetToken's ability to use an asset as collateral on Aave
      */
     function _updateUseReserveAsCollateral(
@@ -1388,102 +1306,12 @@ contract AaveLeverageModule is
     /**
      * @dev Validate common requirements for lever and delever
      */
-    function _validateCommon(ActionInfo memory _actionInfo) internal view {
-        require(
-            collateralAssetEnabled[_actionInfo.jasperVault][
-                _actionInfo.collateralAsset
-            ],
-            "Collateral not enabled"
-        );
-        require(
-            borrowAssetEnabled[_actionInfo.jasperVault][
-                _actionInfo.borrowAsset
-            ],
-            "Borrow not enabled"
-        );
+    function _validateCommon(ActionInfo memory _actionInfo) internal pure {
         require(
             _actionInfo.collateralAsset != _actionInfo.borrowAsset,
             "Collateral and borrow asset must be different"
         );
         require(_actionInfo.notionalSendQuantity > 0, "Quantity is 0");
-    }
-
-    /**
-     * @dev Validates if a new asset can be added as collateral asset for given SetToken
-     */
-    function _validateNewCollateralAsset(
-        IJasperVault _jasperVault,
-        IERC20 _asset
-    ) internal view {
-        require(
-            !collateralAssetEnabled[_jasperVault][_asset],
-            "Collateral already enabled"
-        );
-
-        (address aToken, , ) = protocolDataProvider.getReserveTokensAddresses(
-            address(_asset)
-        );
-        require(
-            address(underlyingToReserveTokens[_asset].aToken) == aToken,
-            "Invalid aToken address"
-        );
-
-        (
-            ,
-            ,
-            ,
-            ,
-            ,
-            bool usageAsCollateralEnabled,
-            ,
-            ,
-            bool isActive,
-            bool isFrozen
-        ) = protocolDataProvider.getReserveConfigurationData(address(_asset));
-        // An active reserve is an alias for a valid reserve on Aave.
-        // We are checking for the availability of the reserve directly on Aave rather than checking our internal `underlyingToReserveTokens` mappings,
-        // because our mappings can be out-of-date if a new reserve is added to Aave
-        require(isActive, "Invalid aave reserve");
-        // A frozen reserve doesn't allow any new deposit, borrow or rate swap but allows repayments, liquidations and withdrawals
-        require(!isFrozen, "Frozen aave reserve");
-        require(usageAsCollateralEnabled, "Collateral disabled on Aave");
-    }
-
-    /**
-     * @dev Validates if a new asset can be added as borrow asset for given SetToken
-     */
-    function _validateNewBorrowAsset(
-        IJasperVault _jasperVault,
-        IERC20 _asset
-    ) internal view {
-        require(
-            !borrowAssetEnabled[_jasperVault][_asset],
-            "Borrow already enabled"
-        );
-
-        (, , address variableDebtToken) = protocolDataProvider
-            .getReserveTokensAddresses(address(_asset));
-        require(
-            address(underlyingToReserveTokens[_asset].variableDebtToken) ==
-                variableDebtToken,
-            "Invalid variable debt token address"
-        );
-
-        (
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
-            bool borrowingEnabled,
-            ,
-            bool isActive,
-            bool isFrozen
-        ) = protocolDataProvider.getReserveConfigurationData(address(_asset));
-        require(isActive, "Invalid aave reserve");
-        require(!isFrozen, "Frozen aave reserve");
-        require(borrowingEnabled, "Borrowing disabled on Aave");
     }
 
     /**

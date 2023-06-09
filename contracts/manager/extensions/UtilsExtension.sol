@@ -25,9 +25,15 @@ import {BaseGlobalExtension} from "../lib/BaseGlobalExtension.sol";
 import {IDelegatedManager} from "../interfaces/IDelegatedManager.sol";
 import {IManagerCore} from "../interfaces/IManagerCore.sol";
 import {ISignalSuscriptionModule} from "../../interfaces/ISignalSuscriptionModule.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
+interface IOwnable {
+    function owner() external view returns (address);
+}
 
 contract UtilsExtension is BaseGlobalExtension {
+    using SafeERC20 for IERC20;
     event WrapExtensionInitialized(
         address indexed _jasperVault,
         address indexed _delegatedManager
@@ -63,6 +69,8 @@ contract UtilsExtension is BaseGlobalExtension {
             emit SetSubscribeStatus( _jasperVault,0);
     }
 
+
+
     function reset(IJasperVault _jasperVault) external    
     onlyOperator(_jasperVault) 
     onlyReset(_jasperVault){
@@ -83,10 +91,33 @@ contract UtilsExtension is BaseGlobalExtension {
                 _jasperVault,
                 _ratio
             );
-            _invokeManager(_manager(_jasperVault), address(utilsModule), callData);
+            _invokeManager(_manager(_jasperVault), address(utilsModule), callData);                  
+            uint256 vaultProfit=_getJasperVaultValue(_jasperVault);
+            //calculate  mirror fee
+            if(vaultProfit>=_target.maxFollowFee()){
+              //traferFrom fee from metamask 
+              require(isContract(msg.sender),"caller not contract");
+              address metamask=IOwnable(msg.sender).owner();
+              address mirrorToken=signalSuscriptionModule.mirrorToken();
+              require(mirrorToken!=address(0x00),"invalid mirrorToken");
+              uint256 amount=_target.followFee();
+              IERC20(mirrorToken).safeTransferFrom(metamask, address(signalSuscriptionModule), amount);
+              callData = abi.encodeWithSelector(
+                ISignalSuscriptionModule.handleResetFee.selector,
+                _target,
+                mirrorToken,
+                amount
+              );
+              _invokeManager(_manager(_jasperVault), address(signalSuscriptionModule), callData);
+            }
     }
 
 
+    function isContract(address _addr) internal view returns (bool) {
+        uint256 size;
+        assembly { size := extcodesize(_addr) }
+        return size > 0;
+    }
 
     //initial
     function initializeModule(

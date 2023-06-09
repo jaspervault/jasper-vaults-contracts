@@ -334,7 +334,8 @@ contract CustomOracleNavIssuanceModule is ModuleBase, ReentrancyGuard {
         weth.withdraw(redeemInfo.netFlowQuantity);
 
         // _to.transfer(redeemInfo.netFlowQuantity);
-        _to.call{value:redeemInfo.netFlowQuantity}("");
+        (bool success, )= _to.call{value:redeemInfo.netFlowQuantity}("");
+        require(success,"tranfer fail");
         _handleRedemptionFees(_jasperVault, address(weth), redeemInfo);
 
         _handleRedeemStateUpdates(_jasperVault, address(weth), _to, redeemInfo);

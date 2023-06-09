@@ -4,10 +4,20 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 interface ILeverageModule {
     function initialize(
-        IJasperVault _jasperVault,
-        IERC20[] memory _collateralAssets,
-        IERC20[] memory _borrowAssets
+        IJasperVault _jasperVault
     ) external;
+
+    function borrow(           
+           IJasperVault _jasperVault,
+           IERC20 _borrowAsset,
+           uint256 _borrowQuantityUnits) external;
+
+    function  repay(
+        IJasperVault _jasperVault,
+        IERC20 _repayAsset,
+        uint256 _redeemQuantityUnits,
+        bool  _isAllRepay
+    ) external;      
 
     function lever(
         IJasperVault _jasperVault,
@@ -36,25 +46,5 @@ interface ILeverageModule {
         uint256 _redeemQuantityUnits,
         string memory _tradeAdapterName,
         bytes memory _tradeData
-    ) external;
-
-    function addCollateralAssets(
-        IJasperVault _jasperVault,
-        IERC20[] memory _newCollateralAssets
-    ) external;
-
-    function removeCollateralAssets(
-        IJasperVault _jasperVault,
-        IERC20[] memory _collateralAssets
-    ) external;
-
-    function addBorrowAssets(
-        IJasperVault _jasperVault,
-        IERC20[] memory _newBorrowAssets
-    ) external;
-
-    function removeBorrowAssets(
-        IJasperVault _jasperVault,
-        IERC20[] memory _borrowAssets
     ) external;
 }

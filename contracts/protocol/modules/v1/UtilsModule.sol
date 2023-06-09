@@ -80,6 +80,7 @@ contract UtilsModule is ModuleBase, ReentrancyGuard,IFlashLoanReceiver{
 
    function reset(IJasperVault _jasperVault) external nonReentrant onlyManagerAndValidSet(_jasperVault){
         int256 totalSupply=int256(_jasperVault.totalSupply());
+        require(totalSupply>0,"totalSupply must greater than zero");
         address masterToken=_jasperVault.masterToken();
          ParamInfo memory param;
          param.target=_jasperVault;
@@ -91,9 +92,9 @@ contract UtilsModule is ModuleBase, ReentrancyGuard,IFlashLoanReceiver{
         _reset(param);
    }  
 
-   function rebalance(IJasperVault _target,IJasperVault _jasperVault,uint256 _ratio) external nonReentrant onlyManagerAndValidSet(_jasperVault){ 
-      
+   function rebalance(IJasperVault _target,IJasperVault _jasperVault,uint256 _ratio) external nonReentrant onlyManagerAndValidSet(_jasperVault){   
          int256 totalSupply=int256(_jasperVault.totalSupply());
+         require(totalSupply>0,"totalSupply must greater than zero");
          address masterToken=_jasperVault.masterToken();
          ParamInfo memory param;
          param.target=_target;
@@ -234,6 +235,7 @@ contract UtilsModule is ModuleBase, ReentrancyGuard,IFlashLoanReceiver{
    // 1%=1e16  100%=1e18
     function _rebalance(ParamInfo memory param) internal {
        IJasperVault.Position[] memory  positions=param.target.getPositions();
+       require(positions.length==1 && positions[0].component == param.masterToken,"jasperVault not reset");
        for(uint256 i=0;i<positions.length;i++){ 
            if(positions[i].positionState==0&&positions[i].coinType==1){
                 param.flashLoanLen++;

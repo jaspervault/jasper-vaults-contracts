@@ -26,7 +26,9 @@ interface ISetTokenCreator {
         address _manager,
         string memory _name,
         string memory _symbol,
+        address _masterToken,
         uint256 _followFee,
+        uint256 _maxFollowFee,
         uint256 _profitShareFee
     )
         external

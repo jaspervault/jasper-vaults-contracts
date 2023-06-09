@@ -59,6 +59,8 @@ contract SignalSuscriptionModule is ModuleBase, Ownable, ReentrancyGuard {
     uint256 public platformFee;
     address public platform_vault;
 
+    address public mirrorToken;
+
     mapping(address => address) public Signal_provider;
     mapping(IJasperVault => uint256) public jasperVaultPreBalance;
 
@@ -73,7 +75,8 @@ contract SignalSuscriptionModule is ModuleBase, Ownable, ReentrancyGuard {
         uint256 _fee,
         address _platform_vault,
         uint256 _warningLine,
-        uint256 _unsubscribeLine
+        uint256 _unsubscribeLine,
+        address _mirrorToken
     );
     event RemoveFollower(address target, address follower);
 
@@ -85,13 +88,15 @@ contract SignalSuscriptionModule is ModuleBase, Ownable, ReentrancyGuard {
         uint256 _warningLine,
         uint256 _unsubscribeLine,
         uint256 _platformFee,
-        address _platform_vault
+        address _platform_vault,
+        address _mirrorToken
     ) public ModuleBase(_controller) {
         warningLine = _warningLine;
         unsubscribeLine = _unsubscribeLine;
         platformFee = _platformFee;
         subscribeFeePool = _subscribeFeePool;
         platform_vault = _platform_vault;
+        mirrorToken = _mirrorToken;
     }
 
     /* ============ External Functions ============ */
@@ -119,7 +124,8 @@ contract SignalSuscriptionModule is ModuleBase, Ownable, ReentrancyGuard {
         address _platform_vault,
         uint256 _warningLine,
         uint256 _unsubscribeLine,
-        uint256 _fee
+        uint256 _fee,
+        address _mirrorToken
     ) external nonReentrant onlyOwner {
         require(_fee <= 10 ** 18, "fee can not be more than 1e18");
         subscribeFeePool = _subscribeFeePool;
@@ -128,12 +134,14 @@ contract SignalSuscriptionModule is ModuleBase, Ownable, ReentrancyGuard {
 
         warningLine = _warningLine;
         unsubscribeLine = _unsubscribeLine;
+        mirrorToken = _mirrorToken;
         emit SetPlatformAndPlatformFee(
             _subscribeFeePool,
             _fee,
             _platform_vault,
             _warningLine,
-            _unsubscribeLine
+            _unsubscribeLine,
+            _mirrorToken
         );
     }
 
@@ -176,7 +184,6 @@ contract SignalSuscriptionModule is ModuleBase, Ownable, ReentrancyGuard {
             .div(PreciseUnitMath.preciseUnit());
         followers[target].push(address(_jasperVault));
         Signal_provider[address(_jasperVault)] = target;
-        followFees[address(_jasperVault)] = IJasperVault(target).followFee();
         profitShareFees[address(_jasperVault)] = IJasperVault(target)
             .profitShareFee();
     }
@@ -224,25 +231,27 @@ contract SignalSuscriptionModule is ModuleBase, Ownable, ReentrancyGuard {
     ) external nonReentrant onlyManagerAndValidSet(_jasperVault) {
         address masterToken = _jasperVault.masterToken();
         uint256 preBalance = jasperVaultPreBalance[_jasperVault];
+        address target = Signal_provider[address(_jasperVault)];
         delete jasperVaultPreBalance[_jasperVault];
         delete Signal_provider[address(_jasperVault)];
         uint256 nextBalance = IERC20(masterToken).balanceOf(
             address(_jasperVault)
         );
-        uint256 strategistFeeBalance = preBalance.preciseMul(
-            followFees[address(_jasperVault)]
-        );
+        uint256 totalSupply = _jasperVault.totalSupply();
         if (nextBalance > preBalance) {
             //Calculated profit
             uint256 profit = nextBalance - preBalance;
+
             //calculate strategistsFee
             uint256 _strategistFee = profitShareFees[address(_jasperVault)];
-            uint256 shareFee = profit.preciseMul(_strategistFee);
-            if (shareFee > profit) {
-                shareFee = profit;
+            uint256 strategistFeeBalance = profit.preciseMul(_strategistFee);
+            if (strategistFeeBalance > profit) {
+                strategistFeeBalance = profit;
             }
             //calculate platformFee
-            uint256 platformFeeBalance = shareFee.preciseMul(platformFee);
+            uint256 platformFeeBalance = strategistFeeBalance.preciseMul(
+                platformFee
+            );
             if (platformFeeBalance > 0) {
                 //approve
                 _jasperVault.invokeApprove(
@@ -257,30 +266,40 @@ contract SignalSuscriptionModule is ModuleBase, Ownable, ReentrancyGuard {
                     platformFeeBalance
                 );
             }
-            strategistFeeBalance = strategistFeeBalance.add(
-                shareFee.sub(platformFeeBalance)
+            strategistFeeBalance = strategistFeeBalance.sub(platformFeeBalance);
+            if (strategistFeeBalance > 0) {
+                //approve
+                _jasperVault.invokeApprove(
+                    masterToken,
+                    address(subscribeFeePool),
+                    strategistFeeBalance
+                );
+                deposit(
+                    _jasperVault,
+                    masterToken,
+                    target,
+                    strategistFeeBalance
+                );
+            }
+
+            //update position
+            uint256 tokenBalance = IERC20(masterToken).balanceOf(
+                address(_jasperVault)
             );
+            tokenBalance = tokenBalance.preciseDiv(totalSupply);
+            _updatePosition(_jasperVault, masterToken, tokenBalance, 0);
         }
+    }
 
-        //approve
-        _jasperVault.invokeApprove(
-            masterToken,
-            address(subscribeFeePool),
-            strategistFeeBalance
-        );
-        deposit(
-            _jasperVault,
-            masterToken,
-            Signal_provider[address(_jasperVault)],
-            strategistFeeBalance
-        );
-
-        //update position
-        uint256 tokenBalance = IERC20(masterToken).balanceOf(
-            address(_jasperVault)
-        );
-        tokenBalance = tokenBalance.preciseDiv(_jasperVault.totalSupply());
-        _updatePosition(_jasperVault, masterToken, tokenBalance, 0);
+    function handleResetFee(
+        IJasperVault _target,
+        address _token,
+        uint256 _amount
+    ) external nonReentrant onlyManagerAndValidSet(_target) {
+        if (_amount > 0) {
+            IERC20(_token).approve(address(subscribeFeePool), _amount);
+            subscribeFeePool.deposit(_token, address(_target), _amount);
+        }
     }
 
     function deposit(

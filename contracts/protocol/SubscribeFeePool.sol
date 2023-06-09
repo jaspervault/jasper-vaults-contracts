@@ -36,7 +36,6 @@ contract SubscribeFeePool is Ownable, ReentrancyGuard {
     using SafeMath for uint256;
     using AddressArrayUtils for address[];
     using SafeERC20 for IERC20;
-
     IDelegatedManagerFactory public delegatedManagerFactory;
     IController public controller;
     struct DepositInfo {

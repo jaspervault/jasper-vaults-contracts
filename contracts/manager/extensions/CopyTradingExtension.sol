@@ -301,7 +301,7 @@ contract CopyTradingExtension is BaseGlobalExtension {
     }
 
 
-    function _checkAdapterAndAssets(IJasperVault _jasperVault,TradeInfo[] memory _trades) internal {
+    function _checkAdapterAndAssets(IJasperVault _jasperVault,TradeInfo[] memory _trades) internal view{
             IDelegatedManager manager = _manager(_jasperVault);
             for(uint256 i=0;i<_trades.length;i++){          
                 require(

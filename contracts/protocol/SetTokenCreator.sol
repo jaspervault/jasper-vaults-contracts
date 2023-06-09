@@ -70,7 +70,9 @@ contract SetTokenCreator {
         address _manager,
         string memory _name,
         string memory _symbol,
+        address _masterToken,
         uint256 _followFee,
+        uint256 _maxFollowFee,
         uint256 _profitShareFee
     )
         external
@@ -100,7 +102,9 @@ contract SetTokenCreator {
             _manager,
             _name,
             _symbol,
+            _masterToken,
             _followFee,
+            _maxFollowFee,
             _profitShareFee
         );
 

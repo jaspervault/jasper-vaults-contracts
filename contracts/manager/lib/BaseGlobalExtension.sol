@@ -166,6 +166,16 @@ abstract contract BaseGlobalExtension {
         _;
     }
 
+     modifier onlyAllowedAssetTwo(IJasperVault _jasperVault, address _assetone,address _assetTwo) {
+        if (_isPrimeMember(_jasperVault)) {
+            require(
+                _manager(_jasperVault).isAllowedAsset(_assetone) && _manager(_jasperVault).isAllowedAsset(_assetTwo),
+                "Must be allowed asset"
+            );
+        }
+        _;
+    }   
+
     modifier onlyExtension(IJasperVault _jasperVault) {
         bool isExist = _manager(_jasperVault).isPendingExtension(msg.sender) ||
             _manager(_jasperVault).isInitializedExtension(msg.sender);
@@ -185,6 +195,15 @@ abstract contract BaseGlobalExtension {
     }
 
     /* ============ External Functions ============ */
+    function ValidAssetsByModule(IJasperVault _jasperVault, address _assetone,address _assetTwo) internal view{
+        if (_isPrimeMember(_jasperVault)) {
+            require(
+                _manager(_jasperVault).isAllowedAsset(_assetone) && _manager(_jasperVault).isAllowedAsset(_assetTwo),
+                "Must be allowed asset"
+            );
+        }        
+    }
+
 
     function ValidAdapterByModule(
         IJasperVault _jasperVault,
@@ -266,11 +285,16 @@ abstract contract BaseGlobalExtension {
         );
     }
 
-    function _isPrimeMember(IJasperVault _jasperVault) internal returns (bool) {
+    function _isPrimeMember(IJasperVault _jasperVault) internal view returns (bool) {
         address controller = _jasperVault.controller();
         IIdentityService identityService = IIdentityService(
             IController(controller).resourceId(3)
         );
         return identityService.isPrimeByJasperVault(address(_jasperVault));
+    }
+
+    function _getJasperVaultValue(IJasperVault _jasperVault) internal view returns(uint256){     
+        address controller = _jasperVault.controller();
+        return IController(controller).getSetValuer().calculateSetTokenValuation(_jasperVault, _jasperVault.masterToken());
     }
 }

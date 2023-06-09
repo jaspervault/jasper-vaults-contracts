@@ -50,7 +50,9 @@ contract DelegatedManagerFactory {
 
     struct CreateInfo {
         uint256 vaultType;
+        address masterToken;
         uint256 followFee;
+        uint256 maxFollowFee;
         uint256 profitShareFee;
         address[] components;
         int256[] units;
@@ -158,7 +160,9 @@ contract DelegatedManagerFactory {
             _info.modules,
             _info.name,
             _info.symbol,
+            _info.masterToken,
             _info.followFee,
+            _info.maxFollowFee,
             _info.profitShareFee
         );
 
@@ -218,7 +222,6 @@ contract DelegatedManagerFactory {
         );
         require(msg.sender == _jasperVault.manager(), "Must be manager");
         require(_owner != address(0x00), "owner invalid address");
-
         _validateManagerParameters(
             _jasperVault.getComponents(),
             _extensions,
@@ -309,7 +312,9 @@ contract DelegatedManagerFactory {
         address[] memory _modules,
         string memory _name,
         string memory _symbol,
+        address _masterToken,
         uint256 _followFee,
+        uint256 _maxFollowFee,
         uint256 _profitShareFee
     ) internal returns (IJasperVault) {
         address jasperVault = setTokenFactory.create(
@@ -319,7 +324,9 @@ contract DelegatedManagerFactory {
             address(this),
             _name,
             _symbol,
+            _masterToken,
             _followFee,
+            _maxFollowFee,
             _profitShareFee
         );
 

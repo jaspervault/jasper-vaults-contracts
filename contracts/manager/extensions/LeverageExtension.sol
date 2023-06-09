@@ -50,6 +50,25 @@ contract LeverageExtension is BaseGlobalExtension {
         bytes _callData
     );
 
+    struct LeverInfo{
+        IJasperVault _jasperVault;
+        IERC20 borrowAsset;
+        IERC20 collateralAsset;
+        uint256 borrowQuantityUnits;
+        uint256 minReceiveQuantityUnits;
+        string  tradeAdapterName;
+        bytes  tradeData;
+    }
+
+    struct DeLeverInfo{
+        IERC20 collateralAsset;
+        IERC20 repayAsset;
+        uint256 redeemQuantityUnits;
+        uint256 minRepayQuantityUnits;
+        string  tradeAdapterName;
+        bytes  tradeData;
+    }
+
     /* ============ State Variables ============ */
 
     // Instance of LeverageModule
@@ -81,15 +100,11 @@ contract LeverageExtension is BaseGlobalExtension {
      * @param _delegatedManager     Instance of the DelegatedManager to initialize the LeverageModule for
      */
     function initializeModule(
-        IDelegatedManager _delegatedManager,
-        IERC20[] memory _collateralAssets,
-        IERC20[] memory _borrowAssets
+        IDelegatedManager _delegatedManager
     ) external onlyOwnerAndValidManager(_delegatedManager) {
         _initializeModule(
             _delegatedManager.jasperVault(),
-            _delegatedManager,
-            _collateralAssets,
-            _borrowAssets
+            _delegatedManager
         );
     }
 
@@ -117,18 +132,14 @@ contract LeverageExtension is BaseGlobalExtension {
      * @param _delegatedManager     Instance of the DelegatedManager to initialize
      */
     function initializeModuleAndExtension(
-        IDelegatedManager _delegatedManager,
-        IERC20[] memory _collateralAssets,
-        IERC20[] memory _borrowAssets
+        IDelegatedManager _delegatedManager
     ) external onlyOwnerAndValidManager(_delegatedManager) {
         IJasperVault jasperVault = _delegatedManager.jasperVault();
 
         _initializeExtension(jasperVault, _delegatedManager);
         _initializeModule(
             jasperVault,
-            _delegatedManager,
-            _collateralAssets,
-            _borrowAssets
+            _delegatedManager
         );
 
         emit LeverageExtensionInitialized(
@@ -147,29 +158,65 @@ contract LeverageExtension is BaseGlobalExtension {
         _removeExtension(jasperVault, delegatedManager);
     }
 
+    function borrow(           
+           IJasperVault _jasperVault,
+           IERC20 _borrowAsset,
+           uint256 _borrowQuantityUnits) external  
+    onlyReset(_jasperVault)  
+    onlyOperator(_jasperVault)
+    onlyAllowedAsset(_jasperVault, address(_borrowAsset))
+    {
+                    bytes memory callData = abi.encodeWithSelector(
+                        ILeverageModule.borrow.selector,
+                        _jasperVault,
+                        _borrowAsset,
+                        _borrowQuantityUnits
+                    );
+                    _invokeManager(
+                        _manager(_jasperVault),
+                        address(leverageModule),
+                        callData
+                    );
+           }
+
+    function  repay(
+        IJasperVault _jasperVault,
+        IERC20 _repayAsset,
+        uint256 _redeemQuantityUnits,
+        bool  _isAllRepay
+    ) external onlyReset(_jasperVault)  onlyOperator(_jasperVault)  onlyAllowedAsset(_jasperVault, address(_repayAsset)){
+        bytes memory callData = abi.encodeWithSelector(
+            ILeverageModule.repay.selector,
+            _jasperVault,
+            _repayAsset,
+            _redeemQuantityUnits,
+            _isAllRepay
+        );
+        _invokeManager(
+            _manager(_jasperVault),
+            address(leverageModule),
+            callData
+        );
+    }
     function lever(
         IJasperVault _jasperVault,
-        IERC20 _borrowAsset,
-        IERC20 _collateralAsset,
-        uint256 _borrowQuantityUnits,
-        uint256 _minReceiveQuantityUnits,
-        string memory _tradeAdapterName,
-        bytes memory _tradeData
+        LeverInfo memory  _leverInfo  
     )
         external
         onlyReset(_jasperVault)
         onlyOperator(_jasperVault)
-        ValidAdapter(_jasperVault, address(leverageModule), _tradeAdapterName)
+        ValidAdapter(_jasperVault, address(leverageModule), _leverInfo.tradeAdapterName)
     {
+        ValidAssetsByModule(_jasperVault,address(_leverInfo.borrowAsset),address(_leverInfo.collateralAsset));
         bytes memory callData = abi.encodeWithSelector(
             ILeverageModule.lever.selector,
             _jasperVault,
-            _borrowAsset,
-            _collateralAsset,
-            _borrowQuantityUnits,
-            _minReceiveQuantityUnits,
-            _tradeAdapterName,
-            _tradeData
+            _leverInfo.borrowAsset,
+            _leverInfo.collateralAsset,
+            _leverInfo.borrowQuantityUnits,
+            _leverInfo.minReceiveQuantityUnits,
+            _leverInfo.tradeAdapterName,
+            _leverInfo.tradeData
         );
         _invokeManager(
             _manager(_jasperVault),
@@ -180,27 +227,23 @@ contract LeverageExtension is BaseGlobalExtension {
 
     function delever(
         IJasperVault _jasperVault,
-        IERC20 _collateralAsset,
-        IERC20 _repayAsset,
-        uint256 _redeemQuantityUnits,
-        uint256 _minRepayQuantityUnits,
-        string memory _tradeAdapterName,
-        bytes memory _tradeData
+        DeLeverInfo memory _deLeverInfo
     )
         external
         onlyReset(_jasperVault)
         onlyOperator(_jasperVault)
-        ValidAdapter(_jasperVault, address(leverageModule), _tradeAdapterName)
+        ValidAdapter(_jasperVault, address(leverageModule), _deLeverInfo.tradeAdapterName)
     {
+        ValidAssetsByModule(_jasperVault,address(_deLeverInfo.collateralAsset),address(_deLeverInfo.repayAsset));
         bytes memory callData = abi.encodeWithSelector(
             ILeverageModule.delever.selector,
             _jasperVault,
-            _collateralAsset,
-            _repayAsset,
-            _redeemQuantityUnits,
-            _minRepayQuantityUnits,
-            _tradeAdapterName,
-            _tradeData
+            _deLeverInfo.collateralAsset,
+            _deLeverInfo.repayAsset,
+            _deLeverInfo.redeemQuantityUnits,
+            _deLeverInfo.minRepayQuantityUnits,
+            _deLeverInfo.tradeAdapterName,
+            _deLeverInfo.tradeData
         );
         _invokeManager(
             _manager(_jasperVault),
@@ -211,25 +254,22 @@ contract LeverageExtension is BaseGlobalExtension {
 
     function deleverToZeroBorrowBalance(
         IJasperVault _jasperVault,
-        IERC20 _collateralAsset,
-        IERC20 _repayAsset,
-        uint256 _redeemQuantityUnits,
-        string memory _tradeAdapterName,
-        bytes memory _tradeData
+        DeLeverInfo memory _deLeverInfo
     )
         external
         onlyReset(_jasperVault)
         onlyOperator(_jasperVault)
-        ValidAdapter(_jasperVault, address(leverageModule), _tradeAdapterName)
+        ValidAdapter(_jasperVault, address(leverageModule), _deLeverInfo.tradeAdapterName)
     {
+        ValidAssetsByModule(_jasperVault,address(_deLeverInfo.collateralAsset),address(_deLeverInfo.repayAsset));
         bytes memory callData = abi.encodeWithSelector(
             ILeverageModule.deleverToZeroBorrowBalance.selector,
             _jasperVault,
-            _collateralAsset,
-            _repayAsset,
-            _redeemQuantityUnits,
-            _tradeAdapterName,
-            _tradeData
+            _deLeverInfo.collateralAsset,
+            _deLeverInfo.repayAsset,
+            _deLeverInfo.redeemQuantityUnits,
+            _deLeverInfo.tradeAdapterName,
+            _deLeverInfo.tradeData
         );
         _invokeManager(
             _manager(_jasperVault),
@@ -238,38 +278,134 @@ contract LeverageExtension is BaseGlobalExtension {
         );
     }
 
-    function leverFollowers(
-        IJasperVault _jasperVault,
-        IERC20 _borrowAsset,
-        IERC20 _collateralAsset,
-        uint256 _borrowQuantityUnits,
-        uint256 _minReceiveQuantityUnits,
-        string memory _tradeAdapterName,
-        bytes memory _tradeData
+
+    function borrowFollowers(
+           IJasperVault _jasperVault,
+           IERC20 _borrowAsset,
+           uint256 _borrowQuantityUnits
     )
         external
         onlyReset(_jasperVault)
         onlyOperator(_jasperVault)
-        ValidAdapter(_jasperVault, address(leverageModule), _tradeAdapterName)
+        onlyAllowedAsset(_jasperVault, address(_borrowAsset))
     {
 
-      
-         bytes memory  callData = abi.encodeWithSelector(
-            ILeverageModule.lever.selector,
+            bytes memory callData = abi.encodeWithSelector(
+                    ILeverageModule.borrow.selector,
+                    _jasperVault,
+                    _borrowAsset,
+                    _borrowQuantityUnits
+                );
+            _invokeManager(
+                _manager(_jasperVault),
+                address(leverageModule),
+                callData
+            );
+            address[] memory followers = signalSuscriptionModule.get_followers(address(_jasperVault));           
+            for (uint256 i = 0; i < followers.length; i++) {
+                callData = abi.encodeWithSelector(        
+                    ILeverageModule.borrow.selector,
+                    IJasperVault(followers[i]),
+                    _borrowAsset,
+                    _borrowQuantityUnits
+                );
+                _execute(
+                    _manager(IJasperVault(followers[i])),
+                    address(leverageModule),
+                    callData
+                );
+            }
+            callData = abi.encodeWithSelector(
+              ISignalSuscriptionModule.exectueFollowStart.selector,
+              address(_jasperVault)
+            );
+            _invokeManager(_manager(_jasperVault), address(signalSuscriptionModule), callData);
+    }
+
+
+
+    function repayFollowers(
+        IJasperVault _jasperVault,
+        IERC20 _repayAsset,
+        uint256 _redeemQuantityUnits,
+        bool  _isAllRepay
+    )
+        external
+        onlyReset(_jasperVault)
+        onlyOperator(_jasperVault)
+        onlyAllowedAsset(_jasperVault, address(_repayAsset))
+    {
+
+        bytes memory callData = abi.encodeWithSelector(
+            ILeverageModule.repay.selector,
             _jasperVault,
-            _borrowAsset,
-            _collateralAsset,
-            _borrowQuantityUnits,
-            _minReceiveQuantityUnits,
-            _tradeAdapterName,
-            _tradeData
+            _repayAsset,
+            _redeemQuantityUnits,
+            _isAllRepay
         );
         _invokeManager(
             _manager(_jasperVault),
             address(leverageModule),
             callData
         );
-       _executeFollower(ILeverageModule.lever.selector,_jasperVault,_borrowAsset,_collateralAsset,_borrowQuantityUnits,_minReceiveQuantityUnits,_tradeAdapterName,_tradeData);     
+
+            address[] memory followers = signalSuscriptionModule.get_followers(address(_jasperVault));           
+            for (uint256 i = 0; i < followers.length; i++) {
+                 callData = abi.encodeWithSelector(        
+                    ILeverageModule.repay.selector,
+                    IJasperVault(followers[i]),
+                    _repayAsset,
+                    _redeemQuantityUnits,
+                    _isAllRepay
+                );
+                _execute(
+                    _manager(IJasperVault(followers[i])),
+                    address(leverageModule),
+                    callData
+                );
+            }
+            callData = abi.encodeWithSelector(
+              ISignalSuscriptionModule.exectueFollowStart.selector,
+              address(_jasperVault)
+            );
+            _invokeManager(_manager(_jasperVault), address(signalSuscriptionModule), callData);
+    }
+
+    function leverFollowers(
+        IJasperVault _jasperVault,
+        LeverInfo memory  _leverInfo  
+    )
+        external
+        onlyReset(_jasperVault)
+        onlyOperator(_jasperVault)
+        ValidAdapter(_jasperVault, address(leverageModule), _leverInfo.tradeAdapterName)
+    {
+
+        ValidAssetsByModule(_jasperVault,address(_leverInfo.borrowAsset),address(_leverInfo.collateralAsset));
+         bytes memory  callData = abi.encodeWithSelector(
+            ILeverageModule.lever.selector,
+            _jasperVault,
+            _leverInfo.borrowAsset,
+            _leverInfo.collateralAsset,
+            _leverInfo.borrowQuantityUnits,
+            _leverInfo.minReceiveQuantityUnits,
+            _leverInfo.tradeAdapterName,
+            _leverInfo.tradeData
+        );
+        _invokeManager(
+            _manager(_jasperVault),
+            address(leverageModule),
+            callData
+        );
+       _executeFollower(
+        ILeverageModule.lever.selector,
+        _jasperVault,
+        _leverInfo.borrowAsset,
+        _leverInfo.collateralAsset,
+        _leverInfo.borrowQuantityUnits,
+        _leverInfo.minReceiveQuantityUnits,
+        _leverInfo.tradeAdapterName,
+        _leverInfo.tradeData);     
 
         callData = abi.encodeWithSelector(
             ISignalSuscriptionModule.exectueFollowStart.selector,
@@ -281,34 +417,38 @@ contract LeverageExtension is BaseGlobalExtension {
 
     function deleverFollowers(
         IJasperVault _jasperVault,
-        IERC20 _collateralAsset,
-        IERC20 _repayAsset,
-        uint256 _redeemQuantityUnits,
-        uint256 _minRepayQuantityUnits,
-        string memory _tradeAdapterName,
-        bytes memory _tradeData
+        DeLeverInfo memory _deLeverInfo
     )
         external
         onlyReset(_jasperVault)
         onlyOperator(_jasperVault)
-        ValidAdapter(_jasperVault, address(leverageModule), _tradeAdapterName)
+        ValidAdapter(_jasperVault, address(leverageModule), _deLeverInfo.tradeAdapterName)
     {
+        ValidAssetsByModule(_jasperVault,address(_deLeverInfo.collateralAsset),address(_deLeverInfo.repayAsset));
         bytes memory callData = abi.encodeWithSelector(
             ILeverageModule.delever.selector,
             _jasperVault,
-            _collateralAsset,
-            _repayAsset,
-            _redeemQuantityUnits,
-            _minRepayQuantityUnits,
-            _tradeAdapterName,
-            _tradeData
+            _deLeverInfo.collateralAsset,
+            _deLeverInfo.repayAsset,
+            _deLeverInfo.redeemQuantityUnits,
+            _deLeverInfo.minRepayQuantityUnits,
+            _deLeverInfo.tradeAdapterName,
+            _deLeverInfo.tradeData
         );
         _invokeManager(
             _manager(_jasperVault),
             address(leverageModule),
             callData
         );
-        _executeFollower(ILeverageModule.delever.selector,_jasperVault,_collateralAsset,_repayAsset,_redeemQuantityUnits,_minRepayQuantityUnits,_tradeAdapterName,_tradeData);
+        _executeFollower(
+            ILeverageModule.delever.selector,
+            _jasperVault,
+            _deLeverInfo.collateralAsset,
+            _deLeverInfo.repayAsset,
+            _deLeverInfo.redeemQuantityUnits,
+            _deLeverInfo.minRepayQuantityUnits,
+            _deLeverInfo.tradeAdapterName,
+            _deLeverInfo.tradeData);
         callData = abi.encodeWithSelector(
             ISignalSuscriptionModule.exectueFollowStart.selector,
             address(_jasperVault)
@@ -349,26 +489,22 @@ contract LeverageExtension is BaseGlobalExtension {
 
     function deleverToZeroBorrowBalanceFollowers(
         IJasperVault _jasperVault,
-        IERC20 _collateralAsset,
-        IERC20 _repayAsset,
-        uint256 _redeemQuantityUnits,
-        string memory _tradeAdapterName,
-        bytes memory _tradeData
+        DeLeverInfo memory _deLeverInfo
     )
         external
         onlyReset(_jasperVault)
         onlyOperator(_jasperVault)
-        ValidAdapter(_jasperVault, address(leverageModule), _tradeAdapterName)
+        ValidAdapter(_jasperVault, address(leverageModule), _deLeverInfo.tradeAdapterName)
     {
-
+      ValidAssetsByModule(_jasperVault,address(_deLeverInfo.collateralAsset),address(_deLeverInfo.repayAsset));
        bytes memory callData = abi.encodeWithSelector(
             ILeverageModule.deleverToZeroBorrowBalance.selector,
             _jasperVault,
-            _collateralAsset,
-            _repayAsset,
-            _redeemQuantityUnits,
-            _tradeAdapterName,
-            _tradeData
+            _deLeverInfo.collateralAsset,
+            _deLeverInfo.repayAsset,
+            _deLeverInfo.redeemQuantityUnits,
+            _deLeverInfo.tradeAdapterName,
+            _deLeverInfo.tradeData
         );
         _invokeManager(
             _manager(_jasperVault),
@@ -377,11 +513,11 @@ contract LeverageExtension is BaseGlobalExtension {
         );
         _executeDeleverToZeroFollower(
                 _jasperVault,
-                _collateralAsset,
-                _repayAsset,
-                _redeemQuantityUnits,
-                _tradeAdapterName,
-                _tradeData
+                _deLeverInfo.collateralAsset,
+                _deLeverInfo.repayAsset,
+                _deLeverInfo.redeemQuantityUnits,
+                _deLeverInfo.tradeAdapterName,
+                _deLeverInfo.tradeData
         );
          callData = abi.encodeWithSelector(
             ISignalSuscriptionModule.exectueFollowStart.selector,
@@ -417,70 +553,6 @@ contract LeverageExtension is BaseGlobalExtension {
             }
      }
 
-    function addCollateralAssets(
-        IJasperVault _jasperVault,
-        IERC20[] memory _newCollateralAssets
-    ) external onlyOperator(_jasperVault) {
-        bytes memory callData = abi.encodeWithSelector(
-            ILeverageModule.addCollateralAssets.selector,
-            _jasperVault,
-            _newCollateralAssets
-        );
-        _invokeManager(
-            _manager(_jasperVault),
-            address(leverageModule),
-            callData
-        );
-    }
-
-    function removeCollateralAssets(
-        IJasperVault _jasperVault,
-        IERC20[] memory _collateralAssets
-    ) external onlyOperator(_jasperVault) {
-        bytes memory callData = abi.encodeWithSelector(
-            ILeverageModule.removeCollateralAssets.selector,
-            _jasperVault,
-            _collateralAssets
-        );
-        _invokeManager(
-            _manager(_jasperVault),
-            address(leverageModule),
-            callData
-        );
-    }
-
-    function addBorrowAssets(
-        IJasperVault _jasperVault,
-        IERC20[] memory _newBorrowAssets
-    ) external onlyOperator(_jasperVault) {
-        bytes memory callData = abi.encodeWithSelector(
-            ILeverageModule.addBorrowAssets.selector,
-            _jasperVault,
-            _newBorrowAssets
-        );
-        _invokeManager(
-            _manager(_jasperVault),
-            address(leverageModule),
-            callData
-        );
-    }
-
-    function removeBorrowAssets(
-        IJasperVault _jasperVault,
-        IERC20[] memory _borrowAssets
-    ) external onlyOperator(_jasperVault) {
-        bytes memory callData = abi.encodeWithSelector(
-            ILeverageModule.removeBorrowAssets.selector,
-            _jasperVault,
-            _borrowAssets
-        );
-        _invokeManager(
-            _manager(_jasperVault),
-            address(leverageModule),
-            callData
-        );
-    }
-
     /* ============ Internal Functions ============ */
     function _execute(
         IDelegatedManager manager,
@@ -502,15 +574,11 @@ contract LeverageExtension is BaseGlobalExtension {
      */
     function _initializeModule(
         IJasperVault _jasperVault,
-        IDelegatedManager _delegatedManager,
-        IERC20[] memory _collateralAssets,
-        IERC20[] memory _borrowAssets
+        IDelegatedManager _delegatedManager
     ) internal {
         bytes memory callData = abi.encodeWithSelector(
             ILeverageModule.initialize.selector,
-            _jasperVault,
-            _collateralAssets,
-            _borrowAssets
+            _jasperVault
         );
         _invokeManager(_delegatedManager, address(leverageModule), callData);
     }

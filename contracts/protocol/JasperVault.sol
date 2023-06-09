@@ -166,6 +166,8 @@ contract JasperVault is ERC20 {
     address public masterToken;
 
     uint256 public followFee;
+    uint256 public maxFollowFee;
+    
     uint256 public profitShareFee;
 
     string private jasperName;
@@ -194,7 +196,9 @@ contract JasperVault is ERC20 {
         address _manager,
         string memory _name,
         string memory _symbol,
+        address _masterToken,
         uint256 _followFee,
+        uint256 _maxFollowFee,
         uint256 _profitShareFee
     ) public ERC20(_name, _symbol) {
         require(
@@ -214,9 +218,8 @@ contract JasperVault is ERC20 {
         components = _components;
         followFee = _followFee;
         profitShareFee = _profitShareFee;
-        if (_components.length > 0) {
-            masterToken = _components[0];
-        }
+        masterToken=_masterToken;
+        maxFollowFee=_maxFollowFee;
         // Modules are put in PENDING state, as they need to be individually initialized by the Module
         for (uint256 i = 0; i < _modules.length; i++) {
             moduleStates[_modules[i]] = IJasperVault.ModuleState.PENDING;
@@ -271,10 +274,14 @@ contract JasperVault is ERC20 {
 
     function setBaseProperty(
         string memory _name,
-        string memory _symbol
+        string memory _symbol,
+        uint256 _followFee,
+        uint256 _maxFollowFee
     ) external onlyManager {
         jasperName = _name;
         jasperSymbol = _symbol;
+        followFee=_followFee;
+        maxFollowFee=_maxFollowFee;
     }
 
     function setBaseFeeAndToken(
@@ -283,15 +290,10 @@ contract JasperVault is ERC20 {
         uint256 _profitShareFee
     ) external onlyManager {
         require(
-            _followFee <= PreciseUnitMath.PRECISE_UNIT,
-            "subscribeFee too high"
-        );
-        require(
             _profitShareFee <= PreciseUnitMath.PRECISE_UNIT,
             "profitShareFee too high"
         );
         masterToken = _masterToken;
-        followFee = _followFee;
         profitShareFee = _profitShareFee;
     }
 

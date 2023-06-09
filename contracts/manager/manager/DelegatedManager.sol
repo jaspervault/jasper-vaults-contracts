@@ -340,12 +340,15 @@ contract DelegatedManager is Ownable, MutualUpgradeV2 {
 
     function setBaseProperty(          
         string memory _name,
-        string memory _symbol) external onlyOwner{
-        jasperVault.setBaseProperty(_name,_symbol);
+        string memory _symbol,
+        uint256  _followFee,
+        uint256  _maxFollowFee      
+      ) external onlyOwner{
+        jasperVault.setBaseProperty(_name,_symbol,_followFee,_maxFollowFee);
     }
-    function setBaseFeeAndToken(address _masterToken, uint256 _followFee,uint256 _profitShareFee,uint256 _delay) external  onlyExtension{
+    function setBaseFeeAndToken(address _masterToken,uint256 _profitShareFee,uint256 _delay) external  onlyExtension{
          delay=_delay;
-         jasperVault.setBaseFeeAndToken(_masterToken,_followFee,_profitShareFee);
+         jasperVault.setBaseFeeAndToken(_masterToken,_profitShareFee);
     }
    
     /**
