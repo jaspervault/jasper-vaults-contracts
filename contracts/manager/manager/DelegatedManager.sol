@@ -80,7 +80,7 @@ contract DelegatedManager is Ownable, MutualUpgradeV2 {
 
     event AllowedAdapterRemoved(address indexed _adapter);
 
-    event  SetAdapter(address[]  _addList,address[]  _deleteList);
+    event SetAdapter(address[] _addList, address[] _deleteList);
 
     /* ============ Modifiers ============ */
 
@@ -139,10 +139,8 @@ contract DelegatedManager is Ownable, MutualUpgradeV2 {
 
     bool public useAdapterAllowlist;
 
-    mapping(address=>uint256) public adapters_timestamps;
-    mapping(address=>uint256) public assets_timestamps;
-
-
+    mapping(address => uint256) public adapters_timestamps;
+    mapping(address => uint256) public assets_timestamps;
 
     uint256 public delay;
 
@@ -164,7 +162,7 @@ contract DelegatedManager is Ownable, MutualUpgradeV2 {
         factory = _factory;
         methodologist = _methodologist;
         useAssetAllowlist = _useAssetAllowlist;
-        useAdapterAllowlist=_useAdapterAllowlist;
+        useAdapterAllowlist = _useAdapterAllowlist;
         delay = _delay;
 
         _addExtensions(_extensions);
@@ -199,8 +197,6 @@ contract DelegatedManager is Ownable, MutualUpgradeV2 {
         );
         _module.functionCallWithValue(_data, 0);
     }
-
-    
 
     /**
      * EXTENSION ONLY: Transfers _tokens held by the manager to _destination. Can be used to
@@ -270,9 +266,10 @@ contract DelegatedManager is Ownable, MutualUpgradeV2 {
         }
     }
 
-    function updateDelay(uint256 _delay) external onlyOwner{
-           delay=_delay;
+    function updateDelay(uint256 _delay) external onlyOwner {
+        delay = _delay;
     }
+
     /**
      * ONLY OWNER: Add new operator(s) address(es)
      *
@@ -301,56 +298,73 @@ contract DelegatedManager is Ownable, MutualUpgradeV2 {
         }
     }
 
-
-    function setAllowedAssets(address[] memory _addAssets,address[] memory _deleteAssets,bool _status) external onlyOwner{ 
-        require(subscribeStatus!=1,"not operable after subscription");
+    function setAllowedAssets(
+        address[] memory _addAssets,
+        address[] memory _deleteAssets,
+        bool _status
+    ) external onlyOwner {
+        require(subscribeStatus != 1, "not operable after subscription");
         useAssetAllowlist = _status;
         _addAllowedAssets(_addAssets);
         for (uint256 i = 0; i < _deleteAssets.length; i++) {
             address asset = _deleteAssets[i];
-            if(allowedAssets.contains(asset)){
+            if (allowedAssets.contains(asset)) {
                 allowedAssets.removeStorage(asset);
                 emit AllowedAssetRemoved(asset);
             }
         }
         emit UseAssetAllowlistUpdated(_status);
     }
-   
-    function setAdapters(address[] memory _addList,address[] memory _deleteList,bool _status)  external onlyOwner{
-            require(subscribeStatus!=1,"not operable after subscription");
-            _addAllowAdapters(_addList);
-            useAdapterAllowlist=_status;
-            for(uint256 i=0;i<_deleteList.length;i++){
-                if(adapters.contains(_deleteList[i])){
-                   adapters.removeStorage(_deleteList[i]);         
-                }
+
+    function setAdapters(
+        address[] memory _addList,
+        address[] memory _deleteList,
+        bool _status
+    ) external onlyOwner {
+        require(subscribeStatus != 1, "not operable after subscription");
+        _addAllowAdapters(_addList);
+        useAdapterAllowlist = _status;
+        for (uint256 i = 0; i < _deleteList.length; i++) {
+            if (adapters.contains(_deleteList[i])) {
+                adapters.removeStorage(_deleteList[i]);
             }
-            emit SetAdapter(_addList,_deleteList);
-            emit UseAdapterAllowlistUpdated(_status);
+        }
+        emit SetAdapter(_addList, _deleteList);
+        emit UseAdapterAllowlistUpdated(_status);
     }
 
     function isAllowedAsset(address _asset) external view returns (bool) {
-        return useAssetAllowlist&&assets_timestamps[_asset]<=block.timestamp && allowedAssets.contains(_asset);
+        return
+            useAssetAllowlist &&
+            assets_timestamps[_asset] <= block.timestamp &&
+            allowedAssets.contains(_asset);
     }
 
     function isAllowedAdapter(address _adapter) external view returns (bool) {
-        return useAdapterAllowlist && adapters_timestamps[_adapter]<=block.timestamp && adapters.contains(_adapter);
+        return
+            useAdapterAllowlist &&
+            adapters_timestamps[_adapter] <= block.timestamp &&
+            adapters.contains(_adapter);
     }
 
-
-    function setBaseProperty(          
+    function setBaseProperty(
         string memory _name,
         string memory _symbol,
-        uint256  _followFee,
-        uint256  _maxFollowFee      
-      ) external onlyOwner{
-        jasperVault.setBaseProperty(_name,_symbol,_followFee,_maxFollowFee);
+        uint256 _followFee,
+        uint256 _maxFollowFee
+    ) external onlyOwner {
+        jasperVault.setBaseProperty(_name, _symbol, _followFee, _maxFollowFee);
     }
-    function setBaseFeeAndToken(address _masterToken,uint256 _profitShareFee,uint256 _delay) external  onlyExtension{
-         delay=_delay;
-         jasperVault.setBaseFeeAndToken(_masterToken,_profitShareFee);
+
+    function setBaseFeeAndToken(
+        address _masterToken,
+        uint256 _profitShareFee,
+        uint256 _delay
+    ) external onlyExtension {
+        delay = _delay;
+        jasperVault.setBaseFeeAndToken(_masterToken, _profitShareFee);
     }
-   
+
     /**
      * ONLY METHODOLOGIST: Update the methodologist address
      *
@@ -420,8 +434,8 @@ contract DelegatedManager is Ownable, MutualUpgradeV2 {
         return allowedAssets;
     }
 
-    function getAdapters() external view returns(address[] memory){
-         return adapters;
+    function getAdapters() external view returns (address[] memory) {
+        return adapters;
     }
 
     /* ============ Internal Functions ============ */
@@ -474,7 +488,7 @@ contract DelegatedManager is Ownable, MutualUpgradeV2 {
         for (uint256 i = 0; i < _assets.length; i++) {
             address asset = _assets[i];
             if (!allowedAssets.contains(asset)) {
-                assets_timestamps[asset]=block.timestamp+delay;
+                assets_timestamps[asset] = block.timestamp + delay;
                 allowedAssets.push(asset);
                 emit AllowedAssetAdded(asset);
             }
@@ -482,10 +496,10 @@ contract DelegatedManager is Ownable, MutualUpgradeV2 {
     }
 
     function _addAllowAdapters(address[] memory _adapters) internal {
-        for (uint256 i = 0; i < _adapters.length; i++) { 
+        for (uint256 i = 0; i < _adapters.length; i++) {
             address adapter = _adapters[i];
-            if(!adapters.contains(adapter)){
-                adapters_timestamps[adapter]=block.timestamp+delay;
+            if (!adapters.contains(adapter)) {
+                adapters_timestamps[adapter] = block.timestamp + delay;
                 adapters.push(adapter);
             }
             emit AllowedAdapterAdded(adapter);

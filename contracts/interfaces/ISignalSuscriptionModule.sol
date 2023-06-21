@@ -36,7 +36,7 @@ interface ISignalSuscriptionModule {
 
     function handleFee(IJasperVault _jasperVault) external;
 
-    function handleResetFee(IJasperVault _target,address _token,uint256 _amount) external;
+    function handleResetFee(IJasperVault _target,IJasperVault _jasperVault,address _token,uint256 _amount) external;
 
     function mirrorToken() external view returns(address);
 

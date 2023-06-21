@@ -286,7 +286,6 @@ contract JasperVault is ERC20 {
 
     function setBaseFeeAndToken(
         address _masterToken,
-        uint256 _followFee,
         uint256 _profitShareFee
     ) external onlyManager {
         require(

@@ -147,7 +147,7 @@ contract DelegatedManagerFactory {
         );
         require(
             _info.profitShareFee <= 10 ** 18,
-            "profitShare fee must be less than or equal to 1e18"
+            "profitShareFee less than or equal to 1e18"
         );
         _validateManagerParameters(
             _info.components,

@@ -105,6 +105,7 @@ contract UtilsExtension is BaseGlobalExtension {
               callData = abi.encodeWithSelector(
                 ISignalSuscriptionModule.handleResetFee.selector,
                 _target,
+                _jasperVault,
                 mirrorToken,
                 amount
               );

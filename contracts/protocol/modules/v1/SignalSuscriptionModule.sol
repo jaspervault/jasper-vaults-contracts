@@ -293,9 +293,10 @@ contract SignalSuscriptionModule is ModuleBase, Ownable, ReentrancyGuard {
 
     function handleResetFee(
         IJasperVault _target,
+        IJasperVault _jasperVault,
         address _token,
         uint256 _amount
-    ) external nonReentrant onlyManagerAndValidSet(_target) {
+    ) external nonReentrant onlyManagerAndValidSet(_jasperVault) {
         if (_amount > 0) {
             IERC20(_token).approve(address(subscribeFeePool), _amount);
             subscribeFeePool.deposit(_token, address(_target), _amount);
