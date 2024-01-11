@@ -1,0 +1,45 @@
+{
+    "safeBlock":1,
+    "chainId":1,
+    "name":"jasperVault",
+    "version":"2.0.0",
+    "entryPoint": "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+    "uniswapRouterV2":"0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",   
+    "uniswapRouterV3":"0xE592427A0AEce92De3Edee1F18E0157C05861564",
+    "eth":"0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+    "weth":"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+    "bundleUrl":"ethgo-eth.fly.dev",
+    "tokens":[
+        {    
+            "name":"usdc",
+            "address":"0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "type":1
+        },
+        {    
+            "name":"wbtc",
+            "address":"0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+            "type":1
+        },
+        {    
+            "name":"weth",
+            "address":"0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            "type":1
+        },        
+        {    
+            "name":"eth",
+            "address":"0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+            "type":1
+        },
+        {
+            "name":"stEth",
+            "address":"0xae7ab96520de3a18e5e111b5eaab095312d7fe84",
+            "type":5
+        },
+        {
+            "name":"uniswapNft",
+            "address":"0xC36442b4a4522E871399CD717aBDD847Ab11FE88",
+            "type":6
+        }
+
+    ]
+}

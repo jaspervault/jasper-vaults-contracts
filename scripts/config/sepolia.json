@@ -1,0 +1,28 @@
+{
+    "safeBlock":1,
+    "chainId":11155111,
+    "name":"jasperVault",
+    "version":"2.0.0",
+    "entryPoint": "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+    "uniswapRouterV2":"0x86dcd3293C53Cf8EFd7303B57beb2a3F671dDE98",
+    "eth":"0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+    "weth":"0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9",
+    "bundleUrl":"",
+    "tokens":[
+        {    
+            "name":"usdc",
+            "address":"0x8267cF9254734C6Eb452a7bb9AAF97B392258b21",
+            "type":1
+        },
+        {    
+            "name":"weth",
+            "address":"0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9",
+            "type":1
+        },        
+        {    
+            "name":"eth",
+            "address":"0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+            "type":1
+        }
+    ]
+}

@@ -1,100 +1,97 @@
 require("@nomicfoundation/hardhat-toolbox");
+require('@openzeppelin/hardhat-upgrades');
+require("hardhat-tracer");
+// require("hardhat-gas-reporter");
+// require('@openzeppelin/hardhat-upgrades');
+// require("@nomiclabs/hardhat-ganache");
 require("dotenv").config();
-require("@nomiclabs/hardhat-etherscan");
-require("@nomiclabs/hardhat-ethers");
+
 // const { ProxyAgent, setGlobalDispatcher } = require("undici");
 // const proxyAgent = new ProxyAgent('http://127.0.0.1:1081'); // change to yours
 // setGlobalDispatcher(proxyAgent);
 
-
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
-  solidity: {
-    compilers: [
+  solidity:{
+    compilers:[
       {
-        version: "0.4.18",
+       version:"0.8.12",
+       settings: { optimizer: { enabled: true, runs: 200 } },
+      },
+      {
+        version:"0.8.9",
         settings: { optimizer: { enabled: true, runs: 200 } },
-      },
-      {
-        version: "0.6.10",
-        settings: { optimizer: { enabled: true, runs: 200 } },
-      },
-      {
-        version: "0.6.12",
-        settings: { optimizer: { enabled: true, runs: 200 } },
-      },
-
-      {
-        version: "0.8.0",
-        settings: { optimizer: { enabled: true, runs: 200 } },
-      },
-
-      {
-        version: "0.8.11",
-        settings: {
-          optimizer: {
-            enabled: true,
-            runs: 200,
-          },
-        },
-      },
-      {
-        version: "0.8.12",
-        settings: { optimizer: { enabled: true, runs: 200 } },
-      },
-      { version: "0.8.6", settings: { optimizer: { enabled: true, runs: 200 } }, }
-    ],
+       }
+  ]
   },
-  networks: {
+  networks:{
     localhost: {
       url: "http://127.0.0.1:8545",
-      timeout: 200000,
-      gas: 12000000,
-      blockGasLimit: 12000000
     },
-    mainnet: {
-      url: "https://mainnet.infura.io/v3/98904658bc4043d49e602fd1ba345f8a",
-      accounts: [`${process.env.PRODUCTION_MAINNET_DEPLOY_PRIVATE_KEY}`],
+    mumbai:{
+      url: "https://polygon-mumbai.blockpi.network/v1/rpc/410ce73ca9c8eed378ea7f12ccc75189e04ddc77",
+      accounts: [`${process.env.PK}`],
+      gasPrice:2000000000
     },
-    polygon: {
-      url: `https://polygon-mainnet.infura.io/v3/${process.env.INFURA_TOKEN}`,
-      accounts: [`${process.env.PRODUCTION_MAINNET_DEPLOY_PRIVATE_KEY}`],
+    goerli:{
+      url:"https://goerli.blockpi.network/v1/rpc/public",
+      accounts: [`${process.env.PK}`],
+      gasPrice:500
+    },
+    polygon:{
+      url:"https://polygon.blockpi.network/v1/rpc/2f4a5449f8f37607cf884bad80c108d3fd7d88b3",
+      // url:"https://polygon.blockpi.network/v1/rpc/public",
+      // url:"https://polygon.llamarpc.com",
+      accounts: [`${process.env.PK}`],
+      gasPrice:180000000000
+    },
+    polygon_uat:{
+      // url:"https://polygon.blockpi.network/v1/rpc/public",
+      // url:"https://polygon.llamarpc.com",
+      // url:"http://192.168.3.30:8545",
+      // url:"HTTP://127.0.0.1:7545",
+      url:"https://polygon.blockpi.network/v1/rpc/2f4a5449f8f37607cf884bad80c108d3fd7d88b3",
+      accounts: [`${process.env.PK}`],
+      gasPrice:80000000000
+    },
+    polygon_uat_dev:{
+      // url:"https://polygon.blockpi.network/v1/rpc/public",
+      // url:"https://polygon.llamarpc.com",
+      url:"https://polygon.blockpi.network/v1/rpc/2f4a5449f8f37607cf884bad80c108d3fd7d88b3",
+      accounts: [`${process.env.PK}`],
+      gasPrice:110000000000
+    },  
+    ethereum:{
+      // url:"https://ethereum.blockpi.network/v1/rpc/public",
+      // url:"https://ethereum.blockpi.network/v1/rpc/08477cf97ef1a6e042db5304ee957d2598d739b5",
+      url:"https://eth-mainnet.g.alchemy.com/v2/bCy-dNQogPRmiiArmblIlEn8ViU_ns7D",
+      accounts: [`${process.env.PK}`],
+      gasPrice:14000000000,
+      timeout: 1000000
+    },
+    sepolia:{
+      url:"https://ethereum-sepolia.blockpi.network/v1/rpc/public",
+      accounts: [`${process.env.PK}`],
+      gasPrice:100000000  
+    },
+    ethFork:{
+      url:"http:/192.168.31.228:8645",
+      accounts:[`${process.env.PK}`],
+      gasPrice:45000000000,
+      timeout: 1000000
+    }
 
-    },
-    goerli: {
-      url: "https://eth-goerli.g.alchemy.com/v2/" + process.env.ALCHEMY_TOKEN,
-      accounts: [`${process.env.PRODUCTION_MAINNET_DEPLOY_PRIVATE_KEY}`],
-    },
-    coverage: {
-      url: "http://127.0.0.1:8555", // Coverage launches its own ganache-cli client
-      timeout: 200000,
-    },
   },
-  etherscan: {
+  etherscan:{
     //bsc
     // apiKey: "I5ZF72517II2FRPQRRHMWGN7PHCFGD3NNF"
     //eth
-    //apiKey: "R3CRF4YGIPI8MH6M37TTQHEH1B5SF4BI63"
-    //polygon
-    //apiKey: "1R2G1HDRWDX9JT1H8BRM8GXT4INUE8CN27"
+    // apiKey: "R3CRF4YGIPI8MH6M37TTQHEH1B5SF4BI63"
+    // polygon
+    apiKey: "1R2G1HDRWDX9JT1H8BRM8GXT4INUE8CN27"
     //base
-    apiKey: "92575c4a-2830-4a7c-a40f-d7c6ed460934",
-    customChains: [
-      {
-        network: "base-goerli",
-        chainId: 84531,
-        urls: {
-          // Pick a block explorer and uncomment those lines
-
-          // Blockscout
-          // apiURL: "https://base-goerli.blockscout.com/api",
-          // browserURL: "https://base-goerli.blockscout.com"
-
-          //Basescan by Etherscan
-          apiURL: "https://api-goerli.basescan.org/api",
-          browserURL: "https://goerli.basescan.org"
-        }
-      }
-    ]
-  },
+    // apiKey: "92575c4a-2830-4a7c-a40f-d7c6ed460934",
+    //arbitrum
+    //apiKey: "65PSNHIK3HDV9K88DNZQAM9GN8ZVCT288B"
+  }
 };
