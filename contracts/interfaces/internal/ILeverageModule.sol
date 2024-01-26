@@ -14,7 +14,7 @@ interface ILeverageModule {
         address _borrower,
         uint256 _type,
         uint256 liquidateAmount,
-        uint256 tradeFee
+        uint256 tradeFeeAmount
     );
 
     function submitLeveragePutOrder(

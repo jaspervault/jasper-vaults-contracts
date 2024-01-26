@@ -18,7 +18,7 @@ contract IssuanceModule is ModuleBase, IIssuanceModule, Initializable, UUPSUpgra
 	modifier onlyOwner() {
 		require(
 			msg.sender == IOwnable(diamond).owner(),
-			"TradeModule:only owner"
+			"IssuanceModule:only owner"
 		);
 		_;
 	}

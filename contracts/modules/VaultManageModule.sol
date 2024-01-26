@@ -23,7 +23,7 @@ contract VaultManageModule is ModuleBase,IVaultManageModule,Initializable, UUPSU
         override
     {}
     modifier onlyOwner{
-        require(msg.sender == IOwnable(diamond).owner(),"only owner");
+        require(msg.sender == IOwnable(diamond).owner(),"VaultManageModule:only owner");
         _;
     }
     function removeVault(address _vault) external onlyVault(_vault){

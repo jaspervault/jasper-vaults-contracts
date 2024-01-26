@@ -3,51 +3,51 @@ pragma solidity ^0.8.12;
 
 interface ILeverageFacet {
     struct LeveragePutOrder {
-        uint256 orderId;
+        uint256 orderID;
         uint256 startDate;
         uint256 expirationDate;
-        address lender;
-        address borrower;
-        address recipient;
-        address collateralAsset;
-        uint256 collateralAmount;
-        address borrowAsset;
-        uint256 borrowAmount;
-        uint256 lockedCollateralAmount;
-        uint256 debtAmount;
-        uint256 pledgeCount;
+        address optionWriter;
+        address optionHolder;
+        address recipientAddress;
+        address underlyingAsset;
+        uint256 underlyingAmount;
+        address receiveAsset;
+        uint256 receiveAmount;
+        uint256 lockedUnderlyingAmount;
+        uint256 positionValue;
+        uint256 stakeCount;
         uint256 slippage;
-        uint256 ltv;
+        uint256 hedgeRatio;
         uint256 platformFeeAmount;
         uint256 tradeFeeAmount;
-        uint256 loanFeeAmount;
+        uint256 optionPremiumAmount;
         uint256 platformFeeRate;
         uint256 tradeFeeRate;
-        uint256 interest;
+        uint256 interestRate;
         uint256 index;
     }
     struct LeveragePutLenderData {
-        address lender;
-        address collateralAsset;
-        address borrowAsset;
-        uint256 minCollateraAmount;
-        uint256 maxCollateraAmount;
-        uint256 ltv;
-        uint256 interest;
+        address optionWriter;
+        address underlyingAsset;
+        address receiveAsset;
+        uint256 minUnderlyingAmount;
+        uint256 maxUnderlyingAmount;
+        uint256 hedgeRatio;
+        uint256 interestRate;
         uint256 slippage;
-        uint256 pledgeCount;
+        uint256 stakeCount;
         uint256 startDate;
         uint256 expirationDate;
         uint256 platformFeeRate;
         uint256 tradeFeeRate;
     }
     struct FeeData {
-        uint collateralAmount;
-        uint interestAmount;
+        uint underlyingAmount;
+        uint optionPremiumAmount;
         uint tradeFeeAmount;
-        uint borrowAmount;
-        uint debtAmount;
-        uint lockedCollateralAmount;
+        uint receiveAmount;
+        uint positionValue;
+        uint lockedUnderlyingAmount;
     }
     event SetLendFeePlatformRecipient(address _recipient);
 
@@ -86,13 +86,13 @@ interface ILeverageFacet {
         uint256 _index
     ) external;
 
-    function setLeverageOrderByOrderId(
-        uint256 orderId,
+    function setLeverageOrderByOrderID(
+        uint256 orderID,
         LeveragePutOrder memory _order
     ) external;
 
-    function getLeverageOrderByOrderId(
-        uint256 orderId
+    function getLeverageOrderByOrderID(
+        uint256 orderID
     ) external view returns (LeveragePutOrder memory);
 
     function setLeverageFeeData(uint _orderID, FeeData memory _data) external;

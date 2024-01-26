@@ -8,7 +8,7 @@ contract VaultFacet is IVaultFacet {
         keccak256("diamond.vault.diamond.storage");
     struct Vault {
         bool lock;
-        //1 main  2 loaner  3 debtor  4 follow  5 mirror  6  lender  7 borrower 8 leveragelender 9 leverage borrower
+        //1 main  2 loaner  3 debtor  4 follow  5 mirror  6  optionWriter  7 optionHolder 8 leveragelender 9 leverage optionHolder
         uint256 vaultType;
         //platform 1  otherVault 2
         uint256 sourceType;

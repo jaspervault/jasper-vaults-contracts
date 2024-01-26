@@ -15,8 +15,7 @@ contract LeverageFacet is ILeverageFacet {
         address priceOracle;
         mapping(bytes => bool) borrowSignature;
         mapping(uint => FeeData) feeDataOrder;
-        address  leverageLendPlatformFeeRecipient;
-
+        address leverageLendPlatformFeeRecipient;
     }
 
     function setWhiteList(address _user, bool _type) external {
@@ -29,7 +28,6 @@ contract LeverageFacet is ILeverageFacet {
         ds.borrowSignature[_sign] = true;
     }
 
-
     function getBorrowSignature(
         bytes memory _sign
     ) external view returns (bool) {
@@ -41,16 +39,21 @@ contract LeverageFacet is ILeverageFacet {
         Leverage storage ds = diamondStorage();
         ds.priceOracle = _o;
     }
+
     function setleverageLendPlatformFeeRecipient(address _addr) external {
         Leverage storage ds = diamondStorage();
         ds.leverageLendPlatformFeeRecipient = _addr;
     }
 
-    function getleverageLendPlatformFeeRecipient(
-    ) external view returns (address) {
+    function getleverageLendPlatformFeeRecipient()
+        external
+        view
+        returns (address)
+    {
         Leverage storage ds = diamondStorage();
         return ds.leverageLendPlatformFeeRecipient;
     }
+
     function getPriceOracle() external view returns (address) {
         Leverage storage ds = diamondStorage();
         return ds.priceOracle;
@@ -141,18 +144,18 @@ contract LeverageFacet is ILeverageFacet {
         ds.lenderPutOrder[_lender].pop();
     }
 
-    function getLeverageOrderByOrderId(
-        uint256 orderId
+    function getLeverageOrderByOrderID(
+        uint256 orderID
     ) external view returns (LeveragePutOrder memory) {
         Leverage storage ds = diamondStorage();
-        return ds.leverageOrder[orderId];
+        return ds.leverageOrder[orderID];
     }
 
-    function setLeverageOrderByOrderId(
-        uint256 orderId,
+    function setLeverageOrderByOrderID(
+        uint256 orderID,
         LeveragePutOrder memory _order
     ) external {
         Leverage storage ds = diamondStorage();
-        ds.leverageOrder[orderId] = _order;
+        ds.leverageOrder[orderID] = _order;
     }
 }

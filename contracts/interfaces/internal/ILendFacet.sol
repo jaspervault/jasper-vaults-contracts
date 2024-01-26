@@ -8,48 +8,48 @@ interface ILendFacet {
     }
 
     struct PutOrder {
-        uint256 orderId;
-        address lender;
-        address borrower;
-        address recipient;
+        uint256 orderID;
+        address optionWriter;
+        address optionHolder;
+        address recipientAddress;
         /**
-          if collateralAssetType==0  collateralAsset is Token
-          if collateralAssetType==1  collateralAsset  is nft
+          if underlyingAssetType==0  underlyingAsset is Token
+          if underlyingAssetType==1  underlyingAsset  is nft
          */
-        address collateralAsset;
+        address underlyingAsset;
         /**
-          if collateralAssetType==0  collateralAmount is Token amount
-          if collateralAssetType==1  collateralAsset  is liquidity
+          if underlyingAssetType==0  underlyingAmount is Token amount
+          if underlyingAssetType==1  underlyingAsset  is liquidity
          */
-        uint256 collateralAmount;
-        address borrowAsset;
-        uint256 borrowMinAmount;
-        uint256 borrowAmount;
+        uint256 underlyingAmount;
+        address receiveAsset;
+        uint256 receiveMinAmount;
+        uint256 receiveAmount;
         uint256 expirationDate;
-        uint256 platformFee;
+        uint256 platformFeeAmount;
         uint256 index;
-        uint256 interestAmount;
-        uint256 collateralAssetType;
-        uint256 collateralNftId;
+        uint256 optionPremiumAmount;
+        uint256 underlyingAssetType;
+        uint256 underlyingNftID;
     }
     struct CallOrder {
-        uint256 orderId;
-        address borrower;
-        address lender;
-        address recipient;
-        address collateralAsset;
-        uint256 collateralAmount;
-        address borrowAsset;
-        uint256 borrowNowAmount;
-        uint256 borrowNowMinAmount;
-        uint256 interestAmount;
-        uint256 borrowLaterMinAmount;
-        uint256 borrowLaterAmount;
+        uint256 orderID;
+        address optionHolder;
+        address optionWriter;
+        address optionHolderWallet;
+        address underlyingAsset;
+        uint256 underlyingAmount;
+        address optionPremiumAsset;
+        uint256 optionPremiumAmount;
+        uint256 optionPremiumMinAmount;
+        uint256 xFeeAmount;
+        uint256 strikeNotionalMinAmount;
+        uint256 strikeNotionalAmount;
         uint256 expirationDate;
-        uint256 platformFee;
+        uint256 platformFeeAmount;
         uint256 index;
-        uint256 collateralAssetType;
-        uint256 collateralNftId;
+        uint256 underlyingAssetType;
+        uint256 underlyingNftID;
     }
     event SetCollateralNft(address _nft, CollateralNftType _type);
     event SetLendFeePlatformRecipient(address _recipient);

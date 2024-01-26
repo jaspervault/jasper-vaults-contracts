@@ -27,7 +27,7 @@ contract LeverageModule is
     modifier onlyOwner() {
         require(
             msg.sender == IOwnable(diamond).owner(),
-            "TradeModule:only owner"
+            "LeverageModule:only owner"
         );
         _;
     }
@@ -55,29 +55,29 @@ contract LeverageModule is
     ) internal view {
         IVaultFacet vaultFacet = IVaultFacet(diamond);
         require(
-            !vaultFacet.getVaultLock(_order.borrower),
-            "LeverageModule:borrower is locked"
+            !vaultFacet.getVaultLock(_order.optionHolder),
+            "LeverageModule:optionHolder is locked"
         );
         require(
-            !vaultFacet.getVaultLock(_order.lender),
-            "LeverageModule:lender is locked"
+            !vaultFacet.getVaultLock(_order.optionWriter),
+            "LeverageModule:optionWriter is locked"
         );
         require(
-            vaultFacet.getVaultType(_order.borrower) == 9,
-            "LeverageModule:borrower vaultType 9"
+            vaultFacet.getVaultType(_order.optionHolder) == 9,
+            "LeverageModule:optionHolder vaultType 9"
         );
         require(
-            vaultFacet.getVaultType(_order.lender) == 8,
-            "LeverageModule:lender vaultType 8"
+            vaultFacet.getVaultType(_order.optionWriter) == 8,
+            "LeverageModule:optionWriter vaultType 8"
         );
         require(
-            _order.recipient != address(0) &&
-                _order.recipient != _order.borrower,
-            "LeverageModule:recipient error"
+            _order.recipientAddress != address(0) &&
+                _order.recipientAddress != _order.optionHolder,
+            "LeverageModule:recipientAddress error"
         );
         require(
-            _order.lender != _order.borrower,
-            "LeverageModule:lender error"
+            _order.optionWriter != _order.optionHolder,
+            "LeverageModule:optionWriter error"
         );
         require(
             _order.expirationDate > block.timestamp,
@@ -90,54 +90,54 @@ contract LeverageModule is
         IPlatformFacet platformFacet = IPlatformFacet(diamond);
 
         address eth = platformFacet.getEth();
-        //verify collateralAsset
-        if (_order.collateralAsset == eth) {
+        //verify underlyingAsset
+        if (_order.underlyingAsset == eth) {
             require(
-                _order.borrower.balance >= _order.collateralAmount,
-                "LeverageModule:borrower collateralAsset not enough"
+                _order.optionHolder.balance >= _order.underlyingAmount,
+                "LeverageModule:optionHolder underlyingAsset not enough"
             );
             require(
-                _order.lender.balance >= _order.lockedCollateralAmount,
-                "LeverageModule:lender collateralAsset lockedCollateralAmount not enough"
+                _order.optionWriter.balance >= _order.lockedUnderlyingAmount,
+                "LeverageModule:optionWriter underlyingAsset lockedUnderlyingAmount not enough"
             );
         } else {
             require(
-                IERC20(_order.collateralAsset).balanceOf(_order.borrower) >=
-                    _order.collateralAmount,
-                "LeverageModule:borrower collateralAsset not enough"
+                IERC20(_order.underlyingAsset).balanceOf(_order.optionHolder) >=
+                    _order.underlyingAmount,
+                "LeverageModule:optionHolder underlyingAsset not enough"
             );
             require(
-                IERC20(_order.collateralAsset).balanceOf(_order.lender) >=
-                    _order.lockedCollateralAmount,
-                "LeverageModule:lender collateralAsset lockedCollateralAmount not enough"
+                IERC20(_order.underlyingAsset).balanceOf(_order.optionWriter) >=
+                    _order.lockedUnderlyingAmount,
+                "LeverageModule:optionWriter underlyingAsset lockedUnderlyingAmount not enough"
             );
         }
         require(
-            _lenderData.maxCollateraAmount >= _order.collateralAmount,
-            "LeverageModule:collateralAmount exceeds the maximum collateral amount"
+            _lenderData.maxUnderlyingAmount >= _order.underlyingAmount,
+            "LeverageModule:underlyingAmount exceeds the maximum collateral amount"
         );
         require(
-            _lenderData.minCollateraAmount <= _order.collateralAmount,
-            "LeverageModule:collateralAmount below the minimum collateral amount"
+            _lenderData.minUnderlyingAmount <= _order.underlyingAmount,
+            "LeverageModule:underlyingAmount below the minimum collateral amount"
         );
-        //verify borrowAsset
-        if (_order.borrowAsset == eth) {
+        //verify receiveAsset
+        if (_order.receiveAsset == eth) {
             require(
-                _order.lender.balance >= _order.borrowAmount,
-                "LeverageModule:lender borrowAsset not enough"
+                _order.optionWriter.balance >= _order.receiveAmount,
+                "LeverageModule:optionWriter receiveAsset not enough"
             );
         } else {
             require(
-                IERC20(_order.borrowAsset).balanceOf(_order.lender) >=
-                    _order.borrowAmount,
-                "LeverageModule:lender borrowAsset not enough"
+                IERC20(_order.receiveAsset).balanceOf(_order.optionWriter) >=
+                    _order.receiveAmount,
+                "LeverageModule:optionWriter receiveAsset not enough"
             );
         }
         ILeverageFacet leverageFacet = ILeverageFacet(diamond);
         require(
-            leverageFacet.getLeverageOrderByOrderId(_order.orderId).orderId ==
+            leverageFacet.getLeverageOrderByOrderID(_order.orderID).orderID ==
                 0,
-            "LeverageModule:orderId repeated"
+            "LeverageModule:orderID repeated"
         );
         require(
             !leverageFacet.getBorrowSignature(_borrowerSignature),
@@ -145,36 +145,36 @@ contract LeverageModule is
         );
 
         require(
-            _order.borrowAsset == _lenderData.borrowAsset &&
-                _order.collateralAsset == _lenderData.collateralAsset &&
+            _order.receiveAsset == _lenderData.receiveAsset &&
+                _order.underlyingAsset == _lenderData.underlyingAsset &&
                 _order.expirationDate == _lenderData.expirationDate &&
                 _order.startDate == _lenderData.startDate &&
-                _order.pledgeCount == _lenderData.pledgeCount &&
-                _order.ltv == _lenderData.ltv &&
-                _order.interest == _lenderData.interest &&
+                _order.stakeCount == _lenderData.stakeCount &&
+                _order.hedgeRatio == _lenderData.hedgeRatio &&
+                _order.interestRate == _lenderData.interestRate &&
                 _order.platformFeeRate == _lenderData.platformFeeRate &&
                 _order.tradeFeeRate == _lenderData.tradeFeeRate,
             "LeverageModule:data not same"
         );
 
-        vaildBorrowerSign(_order.borrower, _order, _borrowerSignature);
-        vaildLenderSign(_order.lender, _lenderData, _lenderSignature);
+        vaildBorrowerSign(_order.optionHolder, _order, _borrowerSignature);
+        vaildLenderSign(_order.optionWriter, _lenderData, _lenderSignature);
 
         validSlippage(
-            _order.lockedCollateralAmount,
-            _feeData.lockedCollateralAmount,
+            _order.lockedUnderlyingAmount,
+            _feeData.lockedUnderlyingAmount,
             _order.slippage,
             _lenderData.slippage
         );
         validSlippage(
-            _order.borrowAmount,
-            _feeData.borrowAmount,
+            _order.receiveAmount,
+            _feeData.receiveAmount,
             _order.slippage,
             _lenderData.slippage
         );
         validSlippage(
-            _order.debtAmount,
-            _feeData.debtAmount,
+            _order.positionValue,
+            _feeData.positionValue,
             _order.slippage,
             _lenderData.slippage
         );
@@ -182,7 +182,7 @@ contract LeverageModule is
 
     function getFee(
         uint input,
-        uint ltv,
+        uint hedgeRatio,
         uint interestRate,
         uint tradeRate,
         uint price,
@@ -192,12 +192,14 @@ contract LeverageModule is
         uint usdcAmount = (input * price * 10 ** decimalB) /
             1 ether /
             10 ** decimalA;
-        uint debtAmount = (usdcAmount * ltv) / 1 ether;
-        uint interest = (debtAmount * interestRate) / 1 ether;
-        uint tradeFee = (debtAmount * (1 ether - interestRate) * tradeRate) /
+        uint positionValue = (usdcAmount * hedgeRatio) / 1 ether;
+        uint interest = (positionValue * interestRate) / 1 ether;
+        uint tradeFeeAmount = (positionValue *
+            (1 ether - interestRate) *
+            tradeRate) /
             1 ether /
             1 ether;
-        return (debtAmount, interest, tradeFee);
+        return (positionValue, interest, tradeFeeAmount);
     }
 
     function calculateFees(
@@ -208,41 +210,43 @@ contract LeverageModule is
         address eth
     ) public view returns (ILeverageFacet.FeeData memory data) {
         uint decimalCollateralAsset = IERC20Metadata(
-            _order.collateralAsset == eth
+            _order.underlyingAsset == eth
                 ? platformFacet.getWeth()
-                : _order.collateralAsset
+                : _order.underlyingAsset
         ).decimals();
         uint decimalBorrowAsset = IERC20Metadata(
-            _order.borrowAsset == eth
+            _order.receiveAsset == eth
                 ? platformFacet.getWeth()
-                : _order.borrowAsset
+                : _order.receiveAsset
         ).decimals();
-        data.collateralAmount = _order.collateralAmount;
-        for (uint i = 0; i < _order.pledgeCount; i++) {
-            (uint debtAmount, uint interest, uint tradeFee) = getFee(
-                data.collateralAmount,
-                _order.ltv,
-                _order.interest,
+        data.underlyingAmount = _order.underlyingAmount;
+        for (uint i = 0; i < _order.stakeCount; i++) {
+            (uint positionValue, uint interest, uint tradeFeeAmount) = getFee(
+                data.underlyingAmount,
+                _order.hedgeRatio,
+                _order.interestRate,
                 _order.tradeFeeRate,
                 price,
                 decimalCollateralAsset,
                 decimalBorrowAsset
             );
-            data.collateralAmount =
-                ((debtAmount - interest - tradeFee) *
+            data.underlyingAmount =
+                ((positionValue - interest - tradeFeeAmount) *
                     priceRevert *
                     10 ** decimalCollateralAsset) /
                 1 ether /
                 10 ** decimalBorrowAsset;
-            data.interestAmount += interest;
-            data.tradeFeeAmount += i < _order.pledgeCount - 1 ? tradeFee : 0;
-            data.borrowAmount = debtAmount - interest;
-            data.debtAmount += debtAmount;
-            data.lockedCollateralAmount += i < _order.pledgeCount - 1
-                ? data.collateralAmount
+            data.optionPremiumAmount += interest;
+            data.tradeFeeAmount += i < _order.stakeCount - 1
+                ? tradeFeeAmount
+                : 0;
+            data.receiveAmount = positionValue - interest;
+            data.positionValue += positionValue;
+            data.lockedUnderlyingAmount += i < _order.stakeCount - 1
+                ? data.underlyingAmount
                 : 0;
         }
-        data.collateralAmount = _order.collateralAmount;
+        data.underlyingAmount = _order.underlyingAmount;
         return data;
     }
 
@@ -253,21 +257,21 @@ contract LeverageModule is
         address eth
     ) public view returns (ILeverageFacet.FeeData memory) {
         uint256 price = IPriceOracle(leverageFacet.getPriceOracle()).getPrice(
-            _order.collateralAsset == eth
+            _order.underlyingAsset == eth
                 ? platformFacet.getWeth()
-                : _order.collateralAsset,
-            _order.borrowAsset == eth
+                : _order.underlyingAsset,
+            _order.receiveAsset == eth
                 ? platformFacet.getWeth()
-                : _order.borrowAsset
+                : _order.receiveAsset
         );
         uint256 priceRevert = IPriceOracle(leverageFacet.getPriceOracle())
             .getPrice(
-                _order.borrowAsset == eth
+                _order.receiveAsset == eth
                     ? platformFacet.getWeth()
-                    : _order.borrowAsset,
-                _order.collateralAsset == eth
+                    : _order.receiveAsset,
+                _order.underlyingAsset == eth
                     ? platformFacet.getWeth()
-                    : _order.collateralAsset
+                    : _order.underlyingAsset
             );
 
         return calculateFees(_order, price, priceRevert, platformFacet, eth);
@@ -299,75 +303,75 @@ contract LeverageModule is
         //storage data
         IVaultFacet vaultFacet = IVaultFacet(diamond);
 
-        vaultFacet.setVaultLock(_leveragePutOrder.borrower, true);
+        vaultFacet.setVaultLock(_leveragePutOrder.optionHolder, true);
 
         _leveragePutOrder.index = leverageFacet.getLeverageLenderPutOrderLength(
-            _leveragePutOrder.lender
+            _leveragePutOrder.optionWriter
         );
         leverageFacet.setLeverageBorrowerPutOrder(
-            _leveragePutOrder.borrower,
+            _leveragePutOrder.optionHolder,
             _leveragePutOrder
         );
         leverageFacet.setLeverageLenderPutOrder(
-            _leveragePutOrder.lender,
-            _leveragePutOrder.borrower
+            _leveragePutOrder.optionWriter,
+            _leveragePutOrder.optionHolder
         );
 
-        if (_leveragePutOrder.borrowAsset == eth) {
-            IVault(_leveragePutOrder.lender).invokeTransferEth(
-                _leveragePutOrder.recipient,
-                feeData.borrowAmount
+        if (_leveragePutOrder.receiveAsset == eth) {
+            IVault(_leveragePutOrder.optionWriter).invokeTransferEth(
+                _leveragePutOrder.recipientAddress,
+                feeData.receiveAmount
             );
         } else {
-            IVault(_leveragePutOrder.lender).invokeTransfer(
-                _leveragePutOrder.borrowAsset,
-                _leveragePutOrder.recipient,
-                feeData.borrowAmount
+            IVault(_leveragePutOrder.optionWriter).invokeTransfer(
+                _leveragePutOrder.receiveAsset,
+                _leveragePutOrder.recipientAddress,
+                feeData.receiveAmount
             );
         }
-        if (_leveragePutOrder.collateralAsset == eth) {
-            IVault(_leveragePutOrder.lender).invokeTransferEth(
-                _leveragePutOrder.borrower,
-                feeData.lockedCollateralAmount
+        if (_leveragePutOrder.underlyingAsset == eth) {
+            IVault(_leveragePutOrder.optionWriter).invokeTransferEth(
+                _leveragePutOrder.optionHolder,
+                feeData.lockedUnderlyingAmount
             );
         } else {
-            IVault(_leveragePutOrder.lender).invokeTransfer(
-                _leveragePutOrder.collateralAsset,
-                _leveragePutOrder.borrower,
-                feeData.lockedCollateralAmount
+            IVault(_leveragePutOrder.optionWriter).invokeTransfer(
+                _leveragePutOrder.underlyingAsset,
+                _leveragePutOrder.optionHolder,
+                feeData.lockedUnderlyingAmount
             );
         }
         leverageLendFee(_leveragePutOrder, feeData);
-        leverageFacet.setLeverageFeeData(_leveragePutOrder.orderId, feeData);
+        leverageFacet.setLeverageFeeData(_leveragePutOrder.orderID, feeData);
         leverageFacet.setBorrowSignature(_borrowerSignature);
-        leverageFacet.setLeverageOrderByOrderId(
-            _leveragePutOrder.orderId,
+        leverageFacet.setLeverageOrderByOrderID(
+            _leveragePutOrder.orderID,
             _leveragePutOrder
         );
         updatePosition(
-            _leveragePutOrder.borrower,
-            _leveragePutOrder.collateralAsset,
+            _leveragePutOrder.optionHolder,
+            _leveragePutOrder.underlyingAsset,
             0
         );
         updatePosition(
-            _leveragePutOrder.borrower,
-            _leveragePutOrder.borrowAsset,
+            _leveragePutOrder.optionHolder,
+            _leveragePutOrder.receiveAsset,
             0
         );
         updatePosition(
-            _leveragePutOrder.lender,
-            _leveragePutOrder.collateralAsset,
+            _leveragePutOrder.optionWriter,
+            _leveragePutOrder.underlyingAsset,
             0
         );
         updatePosition(
-            _leveragePutOrder.lender,
-            _leveragePutOrder.borrowAsset,
+            _leveragePutOrder.optionWriter,
+            _leveragePutOrder.receiveAsset,
             0
         );
         //set CurrentVaultModule
         setFuncBlackAndWhiteList(
-            _leveragePutOrder.lender,
-            _leveragePutOrder.borrower,
+            _leveragePutOrder.optionWriter,
+            _leveragePutOrder.optionHolder,
             true
         );
         emit SubmitLeveragePutOrder(msg.sender, _leveragePutOrder, feeData);
@@ -379,7 +383,7 @@ contract LeverageModule is
         bytes memory _signature
     ) public view {
         bytes32 infoTypeHash = keccak256(
-            "LeveragePutOrder(uint256 orderId,uint256 startDate,uint256 expirationDate,address lender,address borrower,address recipient,address collateralAsset,uint256 collateralAmount,address borrowAsset,uint256 borrowAmount,uint256 lockedCollateralAmount,uint256 debtAmount,uint256 pledgeCount,uint256 slippage,uint256 ltv,uint256 platformFeeAmount,uint256 tradeFeeAmount,uint256 loanFeeAmount,uint256 platformFeeRate,uint256 tradeFeeRate,uint256 interest,uint256 index)"
+            "LeveragePutOrder(uint256 orderID,uint256 startDate,uint256 expirationDate,address optionWriter,address optionHolder,address recipientAddress,address underlyingAsset,uint256 underlyingAmount,address receiveAsset,uint256 receiveAmount,uint256 lockedUnderlyingAmount,uint256 positionValue,uint256 stakeCount,uint256 slippage,uint256 hedgeRatio,uint256 platformFeeAmount,uint256 tradeFeeAmount,uint256 optionPremiumAmount,uint256 platformFeeRate,uint256 tradeFeeRate,uint256 interestRate,uint256 index)"
         );
         bytes32 _hashInfo = keccak256(abi.encode(infoTypeHash, _data));
         verifySignature(_signer, _hashInfo, _signature);
@@ -391,7 +395,7 @@ contract LeverageModule is
         bytes memory _signature
     ) public view {
         bytes32 infoTypeHash = keccak256(
-            "LeveragePutLenderData(address lender,address collateralAsset,address borrowAsset,uint256 minCollateraAmount,uint256 maxCollateraAmount,uint256 ltv,uint256 interest,uint256 slippage,uint256 pledgeCount,uint256 startDate,uint256 expirationDate,uint256 platformFeeRate,uint256 tradeFeeRate)"
+            "LeveragePutLenderData(address optionWriter,address underlyingAsset,address receiveAsset,uint256 minUnderlyingAmount,uint256 maxUnderlyingAmount,uint256 hedgeRatio,uint256 interestRate,uint256 slippage,uint256 stakeCount,uint256 startDate,uint256 expirationDate,uint256 platformFeeRate,uint256 tradeFeeRate)"
         );
         bytes32 _hashInfo = keccak256(abi.encode(infoTypeHash, _data));
         verifySignature(_signer, _hashInfo, _signature);
@@ -434,35 +438,35 @@ contract LeverageModule is
     /*
     liquidate
     -debtor  borrow
-    _type=true:liqudate collateralAsset
-    _type=false:liqudate borrowAsset
-    -loaner lender 
-    liqudate collateralAsset
+    _type=true:liqudate underlyingAsset
+    _type=false:liqudate receiveAsset
+    -loaner optionWriter 
+    liqudate underlyingAsset
     */
     function liquidateLeveragePutOrder(
         address _borrower,
         uint256 _type
     ) external payable nonReentrant {
         uint256 liquidateAmount;
-        uint256 tradeFee;
+        uint256 tradeFeeAmount;
         ILeverageFacet leverageFacet = ILeverageFacet(diamond);
         IVaultFacet vaultFacet = IVaultFacet(diamond);
         ILeverageFacet.LeveragePutOrder
             memory _leveragePutOrder = ILeverageFacet(diamond)
                 .getLeverageBorrowerPutOrder(_borrower);
         require(
-            _leveragePutOrder.borrower != address(0),
+            _leveragePutOrder.optionHolder != address(0),
             "LeverageModule:putOrder not exist"
         );
         leverageFacet.deleteLeverageBorrowerPutOrder(
-            _leveragePutOrder.borrower
+            _leveragePutOrder.optionHolder
         );
-        vaultFacet.setVaultLock(_leveragePutOrder.borrower, false);
+        vaultFacet.setVaultLock(_leveragePutOrder.optionHolder, false);
 
         address eth = IPlatformFacet(diamond).getEth();
-        address owner = IVault(_leveragePutOrder.borrower).owner();
+        address owner = IVault(_leveragePutOrder.optionHolder).owner();
         ILeverageFacet.FeeData memory feeData = ILeverageFacet(diamond)
-            .getLeverageFeeData(_leveragePutOrder.orderId);
+            .getLeverageFeeData(_leveragePutOrder.orderID);
         if (
             owner == msg.sender ||
             (IPlatformFacet(diamond).getIsVault(msg.sender) &&
@@ -470,57 +474,51 @@ contract LeverageModule is
         ) {
             // give up collateral
             if (_type == 1) {
-                if (_leveragePutOrder.collateralAsset == eth) {
-                    IVault(_leveragePutOrder.borrower).invokeTransferEth(
-                        _leveragePutOrder.lender,
-                        _leveragePutOrder.collateralAmount +
-                            feeData.lockedCollateralAmount
+                if (_leveragePutOrder.underlyingAsset == eth) {
+                    IVault(_leveragePutOrder.optionHolder).invokeTransferEth(
+                        _leveragePutOrder.optionWriter,
+                        _leveragePutOrder.underlyingAmount +
+                            feeData.lockedUnderlyingAmount
                     );
                     liquidateAmount =
-                        _leveragePutOrder.collateralAmount +
-                        feeData.lockedCollateralAmount;
+                        _leveragePutOrder.underlyingAmount +
+                        feeData.lockedUnderlyingAmount;
                 } else {
                     //transfer token
-                    // IVault(_leveragePutOrder.debtor).invokeTransfer(_leveragePutOrder.collateralAsset,_leveragePutOrder.loaner,_leveragePutOrder.collateralAmount);
-                    uint256 balance = IERC20(_leveragePutOrder.collateralAsset)
-                        .balanceOf(_leveragePutOrder.borrower);
-                    require(
-                        balance >=
-                            _leveragePutOrder.collateralAmount +
-                                feeData.lockedCollateralAmount,
-                        "LeverageModule:balance error"
-                    );
+                    // IVault(_leveragePutOrder.debtor).invokeTransfer(_leveragePutOrder.underlyingAsset,_leveragePutOrder.loaner,_leveragePutOrder.underlyingAmount);
+                    uint256 balance = IERC20(_leveragePutOrder.underlyingAsset)
+                        .balanceOf(_leveragePutOrder.optionHolder);
                     liquidateAmount = balance;
-                    IVault(_leveragePutOrder.borrower).invokeTransfer(
-                        _leveragePutOrder.collateralAsset,
-                        _leveragePutOrder.lender,
+                    IVault(_leveragePutOrder.optionHolder).invokeTransfer(
+                        _leveragePutOrder.underlyingAsset,
+                        _leveragePutOrder.optionWriter,
                         liquidateAmount
                     );
                 }
                 updatePosition(
-                    _leveragePutOrder.lender,
-                    _leveragePutOrder.collateralAsset,
+                    _leveragePutOrder.optionWriter,
+                    _leveragePutOrder.underlyingAsset,
                     0
                 );
-                // pay all debtAmount
+                // pay all positionValue
             } else if (_type == 2) {
-                liquidateAmount = feeData.debtAmount;
-                if (_leveragePutOrder.borrowAsset == eth) {
+                liquidateAmount = feeData.positionValue;
+                if (_leveragePutOrder.receiveAsset == eth) {
                     require(
                         msg.value >= liquidateAmount,
                         "LeverageModule: msg.vaule not enough"
                     );
-                    _leveragePutOrder.lender.call{value: liquidateAmount};
+                    _leveragePutOrder.optionWriter.call{value: liquidateAmount};
                 } else {
-                    IERC20(_leveragePutOrder.borrowAsset).safeTransferFrom(
-                        _leveragePutOrder.recipient,
-                        _leveragePutOrder.lender,
+                    IERC20(_leveragePutOrder.receiveAsset).safeTransferFrom(
+                        _leveragePutOrder.recipientAddress,
+                        _leveragePutOrder.optionWriter,
                         liquidateAmount
                     );
                 }
                 updatePosition(
-                    _leveragePutOrder.lender,
-                    _leveragePutOrder.borrowAsset,
+                    _leveragePutOrder.optionWriter,
+                    _leveragePutOrder.receiveAsset,
                     0
                 );
             } else if (_type == 3) {
@@ -528,7 +526,7 @@ contract LeverageModule is
                 uint liquidatePrice;
                 (
                     liquidateAmount,
-                    tradeFee,
+                    tradeFeeAmount,
                     liquidatePrice
                 ) = getliquidateAmount(
                     feeData,
@@ -539,12 +537,12 @@ contract LeverageModule is
                 handleRepayTransfer(
                     _leveragePutOrder,
                     liquidateAmount,
-                    tradeFee,
+                    tradeFeeAmount,
                     eth
                 );
                 updatePosition(
-                    _leveragePutOrder.lender,
-                    _leveragePutOrder.collateralAsset,
+                    _leveragePutOrder.optionWriter,
+                    _leveragePutOrder.underlyingAsset,
                     0
                 );
             }
@@ -553,49 +551,43 @@ contract LeverageModule is
                 _leveragePutOrder.expirationDate < block.timestamp,
                 "LeverageModule:not expirationDate"
             );
-            if (_leveragePutOrder.collateralAsset == eth) {
+            if (_leveragePutOrder.underlyingAsset == eth) {
                 liquidateAmount =
-                    _leveragePutOrder.collateralAmount +
-                    feeData.lockedCollateralAmount;
-                IVault(_leveragePutOrder.borrower).invokeTransferEth(
-                    _leveragePutOrder.lender,
+                    _leveragePutOrder.underlyingAmount +
+                    feeData.lockedUnderlyingAmount;
+                IVault(_leveragePutOrder.optionHolder).invokeTransferEth(
+                    _leveragePutOrder.optionWriter,
                     liquidateAmount
                 );
             } else {
                 //transfer token
-                // IVault(_leveragePutOrder.debtor).invokeTransfer(_leveragePutOrder.collateralAsset,_leveragePutOrder.loaner,_leveragePutOrder.collateralAmount);
-                uint256 balance = IERC20(_leveragePutOrder.collateralAsset)
-                    .balanceOf(_leveragePutOrder.borrower);
-                require(
-                    balance >=
-                        _leveragePutOrder.collateralAmount +
-                            feeData.lockedCollateralAmount,
-                    "LeverageModule:balance error"
-                );
+                // IVault(_leveragePutOrder.debtor).invokeTransfer(_leveragePutOrder.underlyingAsset,_leveragePutOrder.loaner,_leveragePutOrder.underlyingAmount);
+                uint256 balance = IERC20(_leveragePutOrder.underlyingAsset)
+                    .balanceOf(_leveragePutOrder.optionHolder);
                 liquidateAmount = balance;
-                IVault(_leveragePutOrder.borrower).invokeTransfer(
-                    _leveragePutOrder.collateralAsset,
-                    _leveragePutOrder.lender,
+                IVault(_leveragePutOrder.optionHolder).invokeTransfer(
+                    _leveragePutOrder.underlyingAsset,
+                    _leveragePutOrder.optionWriter,
                     liquidateAmount
                 );
             }
             updatePosition(
-                _leveragePutOrder.lender,
-                _leveragePutOrder.collateralAsset,
+                _leveragePutOrder.optionWriter,
+                _leveragePutOrder.underlyingAsset,
                 0
             );
         }
 
         leverageFacet.deleteLeverageLenderPutOrder(
-            _leveragePutOrder.lender,
+            _leveragePutOrder.optionWriter,
             _leveragePutOrder.index
         );
         setFuncBlackAndWhiteList(
-            _leveragePutOrder.lender,
-            _leveragePutOrder.borrower,
+            _leveragePutOrder.optionWriter,
+            _leveragePutOrder.optionHolder,
             false
         );
-        leverageFacet.deleteLeverageFeeData(_leveragePutOrder.orderId);
+        leverageFacet.deleteLeverageFeeData(_leveragePutOrder.orderID);
 
         emit LiquidateLeveragePutOrder(
             msg.sender,
@@ -603,40 +595,44 @@ contract LeverageModule is
             _borrower,
             _type,
             liquidateAmount,
-            tradeFee
+            tradeFeeAmount
         );
     }
 
     function handleRepayTransfer(
         ILeverageFacet.LeveragePutOrder memory _leveragePutOrder,
         uint liquidateAmount,
-        uint tradeFee,
+        uint tradeFeeAmount,
         address eth
     ) internal {
         address _lendFeePlatformRecipient = ILeverageFacet(diamond)
             .getleverageLendPlatformFeeRecipient();
-        if (_leveragePutOrder.collateralAsset == eth) {
-            if (tradeFee != 0 && _lendFeePlatformRecipient != address(0)) {
-                IVault(_leveragePutOrder.borrower).invokeTransferEth(
+        if (_leveragePutOrder.underlyingAsset == eth) {
+            if (
+                tradeFeeAmount != 0 && _lendFeePlatformRecipient != address(0)
+            ) {
+                IVault(_leveragePutOrder.optionHolder).invokeTransferEth(
                     _lendFeePlatformRecipient,
-                    tradeFee
+                    tradeFeeAmount
                 );
             }
-            IVault(_leveragePutOrder.borrower).invokeTransferEth(
-                _leveragePutOrder.lender,
+            IVault(_leveragePutOrder.optionHolder).invokeTransferEth(
+                _leveragePutOrder.optionWriter,
                 liquidateAmount
             );
         } else {
-            if (tradeFee != 0 && _lendFeePlatformRecipient != address(0)) {
-                IVault(_leveragePutOrder.borrower).invokeTransfer(
-                    _leveragePutOrder.collateralAsset,
+            if (
+                tradeFeeAmount != 0 && _lendFeePlatformRecipient != address(0)
+            ) {
+                IVault(_leveragePutOrder.optionHolder).invokeTransfer(
+                    _leveragePutOrder.underlyingAsset,
                     _lendFeePlatformRecipient,
-                    tradeFee
+                    tradeFeeAmount
                 );
             }
-            IVault(_leveragePutOrder.borrower).invokeTransfer(
-                _leveragePutOrder.collateralAsset,
-                _leveragePutOrder.lender,
+            IVault(_leveragePutOrder.optionHolder).invokeTransfer(
+                _leveragePutOrder.underlyingAsset,
+                _leveragePutOrder.optionWriter,
                 liquidateAmount
             );
         }
@@ -652,40 +648,42 @@ contract LeverageModule is
             _lendFeePlatformRecipient != address(0),
             "LeverageModule:_lendFeePlatformRecipient is zero "
         );
-        if (_leveragePutOrder.borrowAsset == IPlatformFacet(diamond).getEth()) {
+        if (
+            _leveragePutOrder.receiveAsset == IPlatformFacet(diamond).getEth()
+        ) {
             if (
-                feeData.interestAmount != 0 &&
+                feeData.optionPremiumAmount != 0 &&
                 _leveragePutOrder.platformFeeRate != 0
             ) {
-                IVault(_leveragePutOrder.lender).invokeTransferEth(
+                IVault(_leveragePutOrder.optionWriter).invokeTransferEth(
                     _lendFeePlatformRecipient,
-                    (feeData.interestAmount *
+                    (feeData.optionPremiumAmount *
                         _leveragePutOrder.platformFeeRate) / 1 ether
                 );
             }
 
             if (feeData.tradeFeeAmount != 0) {
-                IVault(_leveragePutOrder.lender).invokeTransferEth(
+                IVault(_leveragePutOrder.optionWriter).invokeTransferEth(
                     _lendFeePlatformRecipient,
                     feeData.tradeFeeAmount
                 );
             }
         } else {
             if (
-                feeData.interestAmount != 0 &&
+                feeData.optionPremiumAmount != 0 &&
                 _leveragePutOrder.platformFeeRate != 0
             ) {
-                IVault(_leveragePutOrder.lender).invokeTransfer(
-                    _leveragePutOrder.borrowAsset,
+                IVault(_leveragePutOrder.optionWriter).invokeTransfer(
+                    _leveragePutOrder.receiveAsset,
                     _lendFeePlatformRecipient,
-                    (feeData.interestAmount *
+                    (feeData.optionPremiumAmount *
                         _leveragePutOrder.platformFeeRate) / 1 ether
                 );
             }
 
             if (feeData.tradeFeeAmount != 0) {
-                IVault(_leveragePutOrder.lender).invokeTransfer(
-                    _leveragePutOrder.borrowAsset,
+                IVault(_leveragePutOrder.optionWriter).invokeTransfer(
+                    _leveragePutOrder.receiveAsset,
                     _lendFeePlatformRecipient,
                     feeData.tradeFeeAmount
                 );
@@ -735,49 +733,49 @@ contract LeverageModule is
     )
         public
         view
-        returns (uint liquidateAmount, uint tradeFee, uint liquidatePrice)
+        returns (uint liquidateAmount, uint tradeFeeAmount, uint liquidatePrice)
     {
         IPlatformFacet platformFacet = IPlatformFacet(diamond);
         uint _collateralAssetDecimal = IERC20Metadata(
-            _order.collateralAsset == eth
+            _order.underlyingAsset == eth
                 ? platformFacet.getWeth()
-                : _order.collateralAsset
+                : _order.underlyingAsset
         ).decimals();
         uint _borrowAssetDecimal = IERC20Metadata(
-            _order.borrowAsset == eth
+            _order.receiveAsset == eth
                 ? platformFacet.getWeth()
-                : _order.borrowAsset
+                : _order.receiveAsset
         ).decimals();
         liquidatePrice = toDecimals(
-            (_data.debtAmount * (1 ether + _order.tradeFeeRate)) /
-                (_order.collateralAmount + _data.lockedCollateralAmount),
+            (_data.positionValue * (1 ether + _order.tradeFeeRate)) /
+                (_order.underlyingAmount + _data.lockedUnderlyingAmount),
             _collateralAssetDecimal,
             _borrowAssetDecimal
         );
         uint nowPrice = IPriceOracle(leverageFacet.getPriceOracle()).getPrice(
-            _order.collateralAsset == eth
+            _order.underlyingAsset == eth
                 ? platformFacet.getWeth()
-                : _order.collateralAsset,
-            _order.borrowAsset == eth
+                : _order.underlyingAsset,
+            _order.receiveAsset == eth
                 ? platformFacet.getWeth()
-                : _order.borrowAsset
+                : _order.receiveAsset
         );
         uint nowRevertPrice = IPriceOracle(leverageFacet.getPriceOracle())
             .getPrice(
-                _order.borrowAsset == eth
+                _order.receiveAsset == eth
                     ? platformFacet.getWeth()
-                    : _order.borrowAsset,
-                _order.collateralAsset == eth
+                    : _order.receiveAsset,
+                _order.underlyingAsset == eth
                     ? platformFacet.getWeth()
-                    : _order.collateralAsset
+                    : _order.underlyingAsset
             );
         require(
             liquidatePrice <= nowPrice,
-            "LeverageModule: no enough collateralAsset to repay"
+            "LeverageModule: no enough underlyingAsset to repay"
         );
         // 11 ether-  17920*0.0004*10**18
         uint repayAmount = toDecimals(
-            _data.debtAmount * nowRevertPrice,
+            _data.positionValue * nowRevertPrice,
             _collateralAssetDecimal,
             _borrowAssetDecimal + 18
         );

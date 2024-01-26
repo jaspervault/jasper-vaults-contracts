@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.12;
 import {ILendFacet} from "./ILendFacet.sol";
-interface ILendModule {
+interface IOptionModule {
     event SubmitPutOrder(address indexed submitor, ILendFacet.PutOrder putOrder);
     event LiquidatePutOrder(address indexed liquidator, ILendFacet.PutOrder putOrder);
 

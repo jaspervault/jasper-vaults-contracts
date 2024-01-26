@@ -32,13 +32,21 @@ interface INonfungiblePositionManager {
         uint256 amount1Desired;
         uint256 amount0Min;
         uint256 amount1Min;
-        address recipient;
+        address recipientAddress;
         uint256 deadline;
     }
 
     function mint(
         MintParams calldata params
-    ) external payable returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
+    )
+        external
+        payable
+        returns (
+            uint256 tokenId,
+            uint128 liquidity,
+            uint256 amount0,
+            uint256 amount1
+        );
 
     struct IncreaseLiquidityParams {
         uint256 tokenId;
@@ -50,22 +58,27 @@ interface INonfungiblePositionManager {
     }
 
     struct DecreaseLiquidityParams {
-        uint256 tokenId; 
+        uint256 tokenId;
         uint128 liquidity;
-        uint256 amount0Min; 
+        uint256 amount0Min;
         uint256 amount1Min;
-        uint256 deadline; 
+        uint256 deadline;
     }
+
     function decreaseLiquidity(
         DecreaseLiquidityParams calldata params
     ) external payable returns (uint256 amount0, uint256 amount1);
 
     struct CollectParams {
         uint256 tokenId;
-        address recipient;
+        address recipientAddress;
         uint128 amount0Max;
         uint128 amount1Max;
     }
-    function collect(CollectParams calldata params) external payable returns (uint256 amount0, uint256 amount1);
+
+    function collect(
+        CollectParams calldata params
+    ) external payable returns (uint256 amount0, uint256 amount1);
+
     function burn(uint256 tokenId) external payable;
 }

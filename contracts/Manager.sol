@@ -200,6 +200,17 @@ contract Manager is  Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable{
     function setCollateralNft(address _nft,ILendFacet.CollateralNftType _type) external onlyOwner{
         ILendFacet(diamond).setCollateralNft(_nft,_type);
     }  
+    function setDomainHash(string memory _name,string memory _version,address _contract) public onlyOwner{
+        bytes32  DomainInfoTypeHash = keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
+        bytes32  _domainHash= keccak256(abi.encode(
+              DomainInfoTypeHash,
+                keccak256(bytes(_name)),
+                keccak256(bytes(_version)),
+                block.chainid,
+               _contract
+        ));
+        ILendFacet(diamond).setDomainHash(_domainHash);
+    }     
     //---------------
     function getVaultMasterToken(address _vault) external view returns(address){
         return IVaultFacet(diamond).getVaultMasterToken(_vault);
@@ -304,5 +315,6 @@ contract Manager is  Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable{
            return    IVaultFacet(diamond).getFuncBlackList(_vault,_func);
 
       }
+      
 
 }
