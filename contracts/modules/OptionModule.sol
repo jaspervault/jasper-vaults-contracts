@@ -347,9 +347,9 @@ contract OptionModule is
         handleCallOrderr(_callOrder.optionHolder,_callOrder,_borrowerSignature );
         ILendFacet lendFacet = ILendFacet(diamond);
         //store data
-        _callOrder.index = lendFacet.getBorrowerCallOrderLength(_callOrder.optionHolder);    
-        lendFacet.setLenderCallOrder(_callOrder.optionWriter, _callOrder);
-        lendFacet.setBorrowerCallOrder(_callOrder.optionHolder,_callOrder.optionWriter); 
+        _callOrder.index = lendFacet.getBorrowerCallOrderLength(_callOrder.optionWriter);
+        lendFacet.setLenderCallOrder(_callOrder.optionHolder, _callOrder);
+        lendFacet.setBorrowerCallOrder(_callOrder.optionWriter,_callOrder.optionHolder); 
         usedOrderCall[_callOrder.orderID] = true;
         //tranfer lendFeePlatformRecipient
         address lendFeePlatformRecipient = lendFacet.getLendFeePlatformRecipient();      
@@ -389,49 +389,60 @@ contract OptionModule is
     }
 
     function liquidateCallOrder(
-        address _lender,
+        address _optionHolder,
         bool _type
     ) external payable nonReentrant {
         ILendFacet lendFacet = ILendFacet(diamond);
         IVaultFacet vaultFacet = IVaultFacet(diamond);
-        ILendFacet.CallOrder memory callOrder = ILendFacet(diamond).getLenderCallOrder(_lender);  
-        require( callOrder.optionWriter != address(0),"OptionModule:callOrder not exist" );
-        lendFacet.deleteLenderCallOrder(callOrder.optionWriter);
+        ILendFacet.CallOrder memory callOrder = ILendFacet(diamond).getLenderCallOrder(_optionHolder);  
+        require( callOrder.optionHolder != address(0),"OptionModule:callOrder not exist" );
+        lendFacet.deleteLenderCallOrder(callOrder.optionHolder);
         vaultFacet.setVaultLock(callOrder.optionHolder, false);
-        IPlatformFacet platformFacet = IPlatformFacet(diamond);
-        address owner = IVault(callOrder.optionHolder).owner();
-        address eth = platformFacet.getEth();
+        address owner = IVault(callOrder.optionHolder).owner();   
         if (msg.sender == owner ||  (IPlatformFacet(diamond).getIsVault(msg.sender) && IOwnable(msg.sender).owner() == owner) ) {
             if (_type) {
-                //payLater time
+                liquidateCall(callOrder,true);
+            }else{
+                liquidateCall(callOrder,false);
+            }
+        } else if (block.timestamp > callOrder.expirationDate) {
+                liquidateCall(callOrder,false);             
+        } else {
+            revert("OptionModule:liquidate time not yet");
+        }
+        lendFacet.deleteLenderCallOrder(callOrder.optionWriter,callOrder.index);
+        setFuncBlackAndWhiteList(2,callOrder.optionHolder, callOrder.optionWriter,false);
+        emit LiquidateCallOrder(msg.sender, callOrder);
+    }
+
+    function liquidateCall(ILendFacet.CallOrder memory callOrder,bool isType) internal {
+         IPlatformFacet platformFacet = IPlatformFacet(diamond);
+         address eth = platformFacet.getEth();
+         if(isType){
+            //payLater time
                 //traferFrom optionPremiumAsset to optionWriter
                 if (callOrder.optionPremiumAsset == eth) {                      
                     callOrder.optionPremiumAsset= platformFacet.getWeth();  
                 }
                 IERC20(callOrder.optionPremiumAsset).safeTransferFrom( callOrder.optionHolderWallet,callOrder.optionWriter,callOrder.strikeNotionalAmount);    
-                updatePosition(callOrder.optionWriter,callOrder.optionPremiumAsset,0);     
-            }
-        } else if (block.timestamp > callOrder.expirationDate) {
-               //unlock
-                if (callOrder.underlyingAssetType == 0) {
-                    if (callOrder.underlyingAsset == eth) {
-                        IVault(callOrder.optionHolder).invokeTransferEth(callOrder.optionWriter, callOrder.underlyingAmount);                     
-                    } else {
-                        uint256 balance = IERC20(callOrder.underlyingAsset).balanceOf(callOrder.optionWriter);                          
-                        IVault(callOrder.optionHolder).invokeTransfer(callOrder.underlyingAsset,callOrder.optionWriter,balance);                   
-                    }
-                } else if (callOrder.underlyingAssetType == 1) {
-                    IVault(callOrder.optionHolder).invokeTransferNft(callOrder.underlyingAsset, callOrder.optionWriter, callOrder.underlyingNftID);       
+                updatePosition(callOrder.optionWriter,callOrder.optionPremiumAsset,0); 
+         }else{
+           //unlock
+            if (callOrder.underlyingAssetType == 0) {
+                if (callOrder.underlyingAsset == eth) {
+                    IVault(callOrder.optionHolder).invokeTransferEth(callOrder.optionWriter, callOrder.underlyingAmount);                     
                 } else {
-                    revert("OptionModule:underlyingAssetType error");
+                    uint256 balance = IERC20(callOrder.underlyingAsset).balanceOf(callOrder.optionWriter);                          
+                    IVault(callOrder.optionHolder).invokeTransfer(callOrder.underlyingAsset,callOrder.optionWriter,balance);                   
                 }
-                updatePosition(callOrder.optionHolder,callOrder.underlyingAsset,0);     
-                updatePosition(callOrder.optionWriter,callOrder.underlyingAsset,0);     
-        } else {
-            revert("OptionModule:liquidate time not yet");
-        }
-        setFuncBlackAndWhiteList(2,callOrder.optionHolder, callOrder.optionWriter,false );
-        emit LiquidateCallOrder(msg.sender, callOrder);
+            } else if (callOrder.underlyingAssetType == 1) {
+                IVault(callOrder.optionHolder).invokeTransferNft(callOrder.underlyingAsset, callOrder.optionWriter, callOrder.underlyingNftID);       
+            } else {
+                revert("OptionModule:underlyingAssetType error");
+            }
+            updatePosition(callOrder.optionHolder,callOrder.underlyingAsset,0);     
+            updatePosition(callOrder.optionWriter,callOrder.underlyingAsset,0);  
+         }
     }
 
     function setFuncBlackAndWhiteList(
