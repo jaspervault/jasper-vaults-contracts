@@ -3,30 +3,25 @@ const { ethers,upgrades,run } = require('hardhat');
 const network = process.env.HARDHAT_NETWORK
 const fs = require('fs');
 const settings = JSON.parse(fs.readFileSync(`scripts/config/${network}.json`));
- //获取合约数据  
 var contractData = JSON.parse(fs.readFileSync(`contractData.${network}.json`));
 
 
 var deployer;
 async function main() {
      [deployer]=await ethers.getSigners();
-//   await _deployDiamondData()
-//   await deleteSelector(contractData.LeverageFacet)
-   await _deployDiamondDataLendFacet()
+     await addFacet("VaultFacet",true,true)
 
 }
-
-
-
- async function _deployDiamondDataLendFacet(){
+ async function addFacet(contractName,verify,isDeploy){
     var DiamondCutFacet=await ethers.getContractFactory("DiamondCutFacet")
     DiamondCutFacet = DiamondCutFacet.connect(deployer);
     DiamondCutFacet = DiamondCutFacet.attach(contractData.Diamond)
-
-    //部署相关数据合约
-    //部署vault数据
-    //  var Contract= await  deployContract("LeverageFacet",false)
-    var Contract= await  getDeployedContract("LeverageFacet",contractData.LeverageFacet)
+    var Contract;
+    if(isDeploy){
+      Contract= await  deployContract(contractName,verify)
+    }else{
+      Contract= await  getDeployedContract(contractName,contractData[contractName])
+    }
     var args= await getSelectors(Contract)
     var tx=await DiamondCutFacet.diamondCut(args.diamondCut,args.init,args.calldata,{gasLimit:5000000})
     console.log(`<contract>:${Contract.address} add Selector  <hash>:${tx.hash}`)
@@ -35,7 +30,6 @@ async function main() {
 
 
 
-//获取函数选择器
 async function getSelectors(contract){
     var signatures = Object.keys(contract.interface.functions)
     var selectors = signatures.reduce((acc, val) => { 
@@ -49,7 +43,6 @@ async function getSelectors(contract){
     // console.log("calldata",calldata)
     // get already deployed contract selectorsList
     // var selectorList =await getSelectorList(contractData.LendFacet)
-
     let args={
         diamondCut:[{
             facetAddress:contract.address,
@@ -67,6 +60,7 @@ async function getSelectorList(address){
     var DiamondLoupeFacet = await getDeployedContract("DiamondLoupeFacet", contractData.Diamond)
    return await DiamondLoupeFacet.facetFunctionSelectors(address)
 }
+
 async function getDeployedContract(contractName, address, libraries){
    var contract = await ethers.getContractFactory(contractName, { libraries: libraries }, deployer);
     if (address) {
@@ -75,12 +69,7 @@ async function getDeployedContract(contractName, address, libraries){
     return contract
 }
 
-//删除facets
-async  function deleteSelector(_facetAddress){
-        var Contract= await  getDeployedContract("Manager",contractData.Manager)
-        var tx= await Contract.deleteFacetAllSelector(_facetAddress,{gasLimit:5000000})
-        console.log(`<contract>:${_facetAddress} delete Selector  <hash>:${tx.hash}`)
-}
+
 
 async function deployContract(contractName, verify, ...args){
     const Contract = await ethers.getContractFactory(contractName);
@@ -106,23 +95,6 @@ async function deployContract(contractName, verify, ...args){
     }
     return contract;
 }
-
-
-// async function _deployDiamondData(){
-//     var DiamondCutFacet=await ethers.getContractFactory("DiamondCutFacet")
-//     DiamondCutFacet = DiamondCutFacet.connect(deployer);
-//     DiamondCutFacet = DiamondCutFacet.attach(contractData.Diamond)
-//
-//     //部署相关数据合约
-//     //部署vault数据
-//     var VaultFacet= await  deployContract("VaultFacet",true)
-//     var args= await getSelectors(VaultFacet)
-//     var tx=await DiamondCutFacet.diamondCut(args.diamondCut,args.init,args.calldata)
-//     console.log(`<contract>:${VaultFacet.address} add Selector  <hash>:${tx.hash}`)
-//
-//
-//     console.log("add diamond data done")
-//  }
 
 main().catch((error) => {
   console.error(error);

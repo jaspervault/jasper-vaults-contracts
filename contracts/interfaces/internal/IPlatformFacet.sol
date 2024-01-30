@@ -47,4 +47,6 @@ interface IPlatformFacet{
     function setVaultImplementation(address _implementation) external; 
     function setProxyCodeHash(address _proxy,bool _option) external;  
     function getProxyCodeHash(address _proxy) external view returns(bool);
+    function getAssetTypeCount() external view returns(uint256);
+    function setAssetTypeCount(uint256 _count) external;
 }

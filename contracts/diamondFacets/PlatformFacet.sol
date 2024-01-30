@@ -33,7 +33,10 @@ contract PlatformFacet  is IPlatformFacet{
            address vaultImplementation;
            
            //proxy code
-           mapping(bytes32=>bool)  proxyCodeHash;   
+           mapping(bytes32=>bool)  proxyCodeHash;  
+
+           //asset type count
+           uint256 assetTypeCount; 
       }
 
       function diamondStorage() internal pure returns (Platform storage ds) {
@@ -239,4 +242,14 @@ contract PlatformFacet  is IPlatformFacet{
              return  ds.proxyCodeHash[hashCode];
       }
 
+
+      function getAssetTypeCount() external view returns(uint256){
+             Platform storage ds=diamondStorage();
+             return ds.assetTypeCount; 
+      }
+
+      function setAssetTypeCount(uint256 _count) external {
+             Platform storage ds=diamondStorage();
+             ds.assetTypeCount=_count;
+      }
 }

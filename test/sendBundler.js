@@ -16,7 +16,7 @@ async function getSender(index) {
    var VaultFactory = await ethers.getContractFactory("VaultFactory")
    VaultFactory = VaultFactory.connect(deployer);
    VaultFactory = VaultFactory.attach(contractData.VaultFactory)
-   var  senderTemp=await VaultFactory.getAddress(deployer.address,index)
+   var senderTemp = await VaultFactory.getAddress(deployer.address, index)
    console.log(senderTemp, "senderTemp")
    return senderTemp;
 }
@@ -29,6 +29,13 @@ async function setSender(index) {
    VaultFactory = VaultFactory.attach(contractData.VaultFactory)
    sender = await VaultFactory.getAddress(deployer.address, index)
    console.log(sender, "senderTemp222")
+   accountAPI = new SimpleAccountAPI({
+      provider: provider,
+      entryPointAddress: settings.entryPoint,
+      owner: deployer,
+      factoryAddress: contractData.VaultFactory,
+      index: index
+   })
    return sender;
 }
 
@@ -45,30 +52,32 @@ async function sendBundler(dest, value, func) {
    //查看当前地址是否是合约
    let code = await provider.getCode(sender)
    let initCode = "0x"
+
    console.log(accountAPI.index, "---")
    if (code == "0x") {
       initCode = `${contractData.VaultFactory}5fbfb9cf${String(deployer.address).substring(2).padStart(64, "0")}${String((Number(accountAPI.index)).toString(16)).padStart(64, "0")}`
    }
-   //数据处理
+
    let Vault = await ethers.getContractFactory("Vault")
    Vault = Vault.connect(deployer)
    Vault = Vault.attach(sender)
    let calldata = Vault.interface.encodeFunctionData("executeBatch", [dest, value, func])
-   //获取当前小费
+   // let calldata = '0x'
+
    let feeData = await provider.getFeeData()
    var unsignOp = {
       sender: sender,
       nonce: nonce,
       initCode: initCode,
       callData: calldata,
-      callGasLimit: 3000000,
+      callGasLimit: 1800000,
       verificationGasLimit: 500000,
-      maxFeePerGas: feeData.maxFeePerGas * 5,
-      maxPriorityFeePerGas: 31000,
+      maxFeePerGas: 1 * 10 ** 9,
+      maxPriorityFeePerGas: 1 * 10 ** 8,
       //   paymasterAndData:"0x",
       paymasterAndData: contractData.VaultPaymaster,
       //   paymasterAndData:"0x647f1eA2ed929D2D0dC0783c1810a57501C38e36",
-      preVerificationGas: 90000,
+      preVerificationGas: 60000,
       signature: ''
    }
    //verificationGasLimit*3 + preVerificationGas + callGasLimit 
@@ -85,7 +94,7 @@ async function sendBundler(dest, value, func) {
    // console.log("gas","--------------",gas)
    // return
    //maxFeePerGas
-   console.log("hash", await accountAPI.getUserOpHash(unsignOp))
+   // console.log("hash", await accountAPI.getUserOpHash(unsignOp))
    var op = await accountAPI.signUserOp(unsignOp)
 
    let tokenUrl = `${settings.bundleUrl}/tyche/api/transact`
@@ -111,11 +120,11 @@ async function sendBundler(dest, value, func) {
    }
    console.log("data", data)
 
-   return
+   // return
    let order = await axios.post(tokenUrl, data)
 
    if (!order || !order.data || !order.data.data) {
-      console.log("<订单错误 order>", order)
+      console.log(" order>", order)
       return null
    }
    console.log("<order Id>", order.data.data.id)
@@ -151,6 +160,21 @@ async function getOperationHash(orderID, timeout, interval) {
    }
    return await ethers.provider.getTransaction(hash);
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 exports.bundler = {
    setSender,
    sendBundler,

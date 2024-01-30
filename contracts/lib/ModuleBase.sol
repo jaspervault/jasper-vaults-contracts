@@ -33,6 +33,12 @@ contract ModuleBase {
         _;
     }
 
+    modifier onlyVaultOrManager(address _vault){
+        require(IPlatformFacet(diamond).getIsVault(_vault),"ModuleBase:vault must in platform");    
+        require(msg.sender == _vault || msg.sender == IVault(_vault).owner() ,"ModuleBase:caller error");
+        _;
+    }
+
     function updatePosition(
         address _vault,
         address _component,

@@ -8,7 +8,7 @@ contract VaultFacet is IVaultFacet {
         keccak256("diamond.vault.diamond.storage");
     struct Vault {
         bool lock;
-        //1 main  2 loaner  3 debtor  4 follow  5 mirror  6  optionWriter  7 optionHolder 8 leveragelender 9 leverage optionHolder
+        //1 main  2 loaner  3 debtor  4 follow  5 mirror  6  lender  7 borrower 8 leveragelender 9 leverage borrower
         uint256 vaultType;
         //platform 1  otherVault 2
         uint256 sourceType;
@@ -268,25 +268,31 @@ contract VaultFacet is IVaultFacet {
     ) external {
         VaultInfo storage ds = diamondStorage();
         bytes32 key = getPositionKey(_component, uint256(_append[0]));
-        uint16 positionType = ds.vaultInfo[_vault].positions[key].positionType;
-        uint16 ableUse = ds.vaultInfo[_vault].positions[key].ableUse;
+        // uint16 positionType = ds.vaultInfo[_vault].positions[key].positionType;
+        // uint16 ableUse = ds.vaultInfo[_vault].positions[key].ableUse;
         //delete position
-        if (_append[2] == 0 && ableUse == 1) {
-            ds.vaultInfo[_vault].positions[key].ableUse = 0;
-        }
-        //add position(real add)
-        if (_append[2] == 1 && positionType == 0) {
+        if (_append[2] == 0) {
+            // ds.vaultInfo[_vault].positions[key].ableUse = 0;    
+            delete  ds.vaultInfo[_vault].positions[key];
+            bytes32[] storage pks=ds.vaultInfo[_vault].positionKey[_append[0]];
+            for(uint i;i<pks.length;i++){
+               if(key == pks[i]){
+                  pks[i]=pks[pks.length-1];
+                  pks.pop();
+               }
+            }
+        }else{
+              //add position(real add)
             ds.vaultInfo[_vault].positions[key].ableUse = 1;
             ds.vaultInfo[_vault].positions[key].positionType = _append[0];
             ds.vaultInfo[_vault].positions[key].debtType = _append[1];
             ds.vaultInfo[_vault].positions[key].component = _component;
             ds.vaultInfo[_vault].positionKey[_append[0]].push(key);
-            // uint16[3] memory a1=[uint16(1),uint16(2),uint16(3)];
         }
         //add postion(edit add)
-        if (_append[2] == 1 && positionType != 0 && ableUse == 0) {
-            ds.vaultInfo[_vault].positions[key].ableUse = 1;
-        }
+        // if (_append[2] == 1 && positionType != 0 && ableUse == 0) {
+        //     ds.vaultInfo[_vault].positions[key].ableUse = 1;
+        // }
         emit SetVaultPosition(_vault, _component, _append);
     }
 
@@ -333,14 +339,9 @@ contract VaultFacet is IVaultFacet {
         positions = new Position[](len);
         len = 0;
         for (uint i; i < _positionTypes.length; i++) {
-            uint256 tempLen = ds
-                .vaultInfo[_vault]
-                .positionKey[_positionTypes[i]]
-                .length;
+            uint256 tempLen = ds.vaultInfo[_vault].positionKey[_positionTypes[i]].length;        
             for (uint j; j < tempLen; j++) {
-                bytes32 key = ds.vaultInfo[_vault].positionKey[
-                    _positionTypes[i]
-                ][j];
+                bytes32 key = ds.vaultInfo[_vault].positionKey[_positionTypes[i]][j];        
                 positions[len] = ds.vaultInfo[_vault].positions[key];
                 len++;
             }

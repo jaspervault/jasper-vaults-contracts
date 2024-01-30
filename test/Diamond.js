@@ -73,7 +73,8 @@ describe("Diamond", function () {
       "0xC6f9EE8453a91848D7b24B92654Dc1252a0e430A",
       "0x3136bD20782E134bFaE2d37DE8D378Ae09726139"
     ]
-    let status = [true, true, true, true, true, true] 
+    let status = [true, true, true, true, true, true]
+
     var tx = await PlatformFacet.setModules(modules, status)
     console.log("add module", tx)
     await tx.wait(1);
@@ -124,16 +125,24 @@ describe("Diamond", function () {
   })
    
   it.skip("LendFacet setLendFeePlatformRecipient",async function(){
-     let tx=  await LendFacet.setLendFeePlatformRecipient(ethers.constants.AddressZero)
+     let tx=  await LendFacet.setLendFeePlatformRecipient("0x758dc51d6A6A9BcaE8bdB91587790b9b2239db30")
      console.log(tx,"LendFacet")
   })
   
-  it.only("LeverageFacet setLendFeePlatformRecipient",async function(){
+  it.skip("LeverageFacet setLendFeePlatformRecipient",async function(){
     //0x758dc51d6A6A9BcaE8bdB91587790b9b2239db30
      let tx=await LeverageFacet.setleverageLendPlatformFeeRecipient("0x758dc51d6A6A9BcaE8bdB91587790b9b2239db30")
      console.log(tx,"LeverageFacet")
   })
-  
+  it.skip("PlatformFacet assetTypeCount",async function(){
+     let tx=await PlatformFacet.setAssetTypeCount(6)
+    await tx.wait(1)
+     console.log(tx)
+  })
+  it.only("IVaultFacet getVaultAllPosition",async function(){
+    let tx=await VaultFacet.getVaultAllPosition("0x6bdEf429C9465e632CF35b91Cc270590A2d40599",[1])
+    console.log(tx)
+ })
 })
 
 

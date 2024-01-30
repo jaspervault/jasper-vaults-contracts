@@ -325,8 +325,8 @@ contract OptionModule is
             underlyingNftID: _callOrder.underlyingNftID
         });
         if (_signer == tempInfo.optionHolder) {
-            tempInfo.optionPremiumAmount = 0;
-            tempInfo.strikeNotionalAmount = 0;
+            // tempInfo.optionPremiumAmount = 0;
+            // tempInfo.strikeNotionalAmount = 0;
             tempInfo.optionWriter = address(0);
         }
         bytes32 infoTypeHash = keccak256(

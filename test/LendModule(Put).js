@@ -1,9 +1,9 @@
-const {ethers} = require("hardhat");
+const { ethers } = require("hardhat");
 const fs = require("fs");
-const network = process.argv[process.argv.length-1]
+const network = process.argv[process.argv.length - 1]
 const contractData = JSON.parse(fs.readFileSync(`contractData.${network}.json`));
 const settings = JSON.parse(fs.readFileSync(`scripts/config/${network}.json`));
-const {bundler} = require("./sendBundler.js");
+const { bundler } = require("./sendBundler.js");
 let usdcToken = settings.tokens[0].address;
 let wbtcToken = settings.tokens[1].address;
 const domain = {
@@ -15,25 +15,26 @@ const domain = {
 
 const types = {
 	"PutOrder": [
-		{name: 'orderId', type: 'uint256'},
-		{name: 'lender', type: 'address'},
-		{name: 'borrower', type: 'address'},
-		{name: 'recipient', type: 'address'},
-		{name: 'collateralAsset', type: 'address'},
-		{name: 'collateralAmount', type: 'uint256'},
-		{name: 'borrowAsset', type: 'address'},
-		{name: 'borrowMinAmount', type: 'uint256'},
-		{name: 'borrowAmount', type: 'uint256'},
-		{name: 'expirationDate', type: 'uint256'},
-		{name: 'platformFee', type: 'uint256'},
-		{name: 'index', type: 'uint256'},
-		{name:"collateralAssetType", type:"uint256"},
-        {name:"collateralNftId", type:"uint256" }
+		{ name: 'orderID', type: 'uint256' },
+		{ name: 'optionWriter', type: 'address' },
+		{ name: 'optionHolder', type: 'address' },
+		{ name: 'recipientAddress', type: 'address' },
+		{ name: 'underlyingAsset', type: 'address' },
+		{ name: 'underlyingAmount', type: 'uint256' },
+		{ name: 'receiveAsset', type: 'address' },
+		{ name: 'receiveMinAmount', type: 'uint256' },
+		{ name: 'receiveAmount', type: 'uint256' },
+		{ name: 'expirationDate', type: 'uint256' },
+		{ name: 'platformFeeAmount', type: 'uint256' },
+		{ name: 'index', type: 'uint256' },
+		{ name: 'optionPremiumAmount', type: 'uint256' },
+		{ name: "underlyingAssetType", type: "uint256" },
+		{ name: "underlyingNftID", type: "uint256" }
 	]
 };
 let lenderSignature;
 let borrowerSignature;
-let transactionDate=parseInt(new Date().getTime()/1000)
+let transactionDate = parseInt(new Date().getTime() / 1000)
 // let transactionDate = 1695874969 
 describe("LendingModule", function () {
 	var deployer;
@@ -54,22 +55,38 @@ describe("LendingModule", function () {
 
 	});
 	it.only("debtor sign", async function () {
+
+		/**
+		 *
+		 *  { name: 'from', type: 'address' },
+			{ name: 'to', type: 'address' },
+			{ name: 'contents', type: 'string' },
+			{ name: 'data', type: 'bytes' },
+			{ name: 'data2', type: 'uint256[]' },
+			{ name: 'data3', type: 'string[]' },
+			0x2f9f8069f7e3be51286e5ebaf35d84a585c1c5b1135c557f44d4606772bf6f75
+			0x2f9f8069f7e3be51286e5ebaf35d84a585c1c5b1135c557f44d4606772bf6f75
+
+		 */
+
+		// The data to sign
 		const value = {
-				orderId: 0, 
-				lender: ethers.constants.AddressZero,
-				borrower: debtor,
-				recipient: deployer.address,
-				collateralAsset: settings.tokens[5].address,//wmatic
-				collateralAmount: "430923722",
-				borrowAsset: settings.tokens[0].address,
-				borrowMinAmount: 10 ** 6,
-				borrowAmount: 0,
-				expirationDate: transactionDate + 3600,
-				platformFee: `${10 ** 4}`,
-				index: 0,
-				collateralAssetType:1,
-				collateralNftId:1122294
-			};
+			orderID: 0,
+			optionWriter: ethers.constants.AddressZero,
+			optionHolder: debtor,
+			recipientAddress: deployer.address,
+			underlyingAsset: settings.tokens[5].address,//wmatic
+			underlyingAmount: "430923722",
+			receiveAsset: settings.tokens[0].address,
+			receiveMinAmount: 10 ** 6,
+			receiveAmount: 0,
+			expirationDate: transactionDate + 3600,
+			platformFeeAmount: `${10 ** 4}`,
+			index: 0,
+			optionPremiumAmount: 0,
+			underlyingAssetType: 1,
+			underlyingNftID: 1122294
+		};
 		borrowerSignature = await deployer._signTypedData(domain, types, value);
 		console.log("<debtor sign data>", borrowerSignature, value)
 		const recoveredAddress = ethers.utils.verifyTypedData(domain, types, value, borrowerSignature);
@@ -77,22 +94,24 @@ describe("LendingModule", function () {
 
 	})
 	it.only("loaner sign", async function () {
+	
 		// The data to sign
 		const value = {
-			orderId: 0,
-			lender: loaner,
-			borrower: debtor,
-			recipient: deployer.address,
-			collateralAsset: settings.tokens[5].address,//wmatic
-			collateralAmount:"430923722",
-			borrowAsset: settings.tokens[0].address,
-			borrowMinAmount: 10 ** 6,
-			borrowAmount: 10 ** 6,
+			orderID: 0,
+			optionWriter: loaner,
+			optionHolder: debtor,
+			recipientAddress: deployer.address,
+			underlyingAsset: settings.tokens[5].address,//wmatic
+			underlyingAmount: "430923722",
+			receiveAsset: settings.tokens[0].address,
+			receiveMinAmount: 10 ** 6,
+			receiveAmount: 10 ** 6,
 			expirationDate: transactionDate + 3600,
-			platformFee: `${10 ** 4}`,
+			platformFeeAmount: `${10 ** 4}`,
 			index: 0,
-			collateralAssetType:1,
-			collateralNftId:1122294
+			optionPremiumAmount: 0,
+			underlyingAssetType: 1,
+			underlyingNftID: 1122294
 		};
 		lenderSignature = await deployer._signTypedData(domain, types, value);
 		console.log("<loaner sign data>", lenderSignature, value)
@@ -104,20 +123,21 @@ describe("LendingModule", function () {
 		console.log("loaner.address", debtor)
 		console.log("debtor.address", loaner)
 		var putOrder = {
-			orderId: 0,
-			lender:loaner,
-			borrower: debtor,
-			recipient: deployer.address,
-			collateralAsset: settings.tokens[5].address,
-			collateralAmount:"430923722",
-			borrowAsset: settings.tokens[0].address,
-			borrowMinAmount: 10 ** 6,
-			borrowAmount: 10 ** 6,
+			orderID: 0,
+			optionWriter: loaner,
+			optionHolder: debtor,
+			recipientAddress: deployer.address,
+			underlyingAsset: settings.tokens[5].address,
+			underlyingAmount: "430923722",
+			receiveAsset: settings.tokens[0].address,
+			receiveMinAmount: 10 ** 6,
+			receiveAmount: 10 ** 6,
 			expirationDate: transactionDate + 3600,
-			platformFee: `${10 ** 4}`,
+			platformFeeAmount: `${10 ** 4}`,
 			index: 0,
-			collateralAssetType:1,
-			collateralNftId:1122294
+			optionPremiumAmount: 0,
+			underlyingAssetType: 1,
+			underlyingNftID: 1122294
 		}
 		let calldata = LendModule.interface.encodeFunctionData("submitPutOrder", [
 			putOrder,
@@ -154,47 +174,8 @@ describe("LendingModule", function () {
 		// var tx=await  ERC20.approve(contractData.LendModule, 5000000)
 		// console.log("<approve>",tx.hash)
 		let debtor = await bundler.getSender(2)
-		var tx = await LendModule.liquidatePutOrder(debtor, true,{gasLimit:2000000})
+		var tx = await LendModule.liquidatePutOrder(debtor, true, { gasLimit: 2000000 })
 		console.log("<tx>", tx.hash)
 	});
-	it.skip("replacementLiquidity",async function(){
-		let decimals=6 
-		let decimals2=8 
-		let tickNumber=58630
-		const price= Math.pow(1.0001, tickNumber)
 
-		let price_readable=  (price / Math.pow(10, decimals - decimals2))   
-
-
-		price_readable=price_readable.toFixed(5)
-		console.log(1 / price_readable,"---2")  
-
-		let ticker= Math.log(price_readable)/Math.log(1.0001)
-		//--------------
-		let calldata = LendModule.interface.encodeFunctionData("replacementLiquidity", [
-			debtor,
-			0,
-			500,
-			-10,
-			20
-		]);
-		await bundler.setSender(2)
-		await bundler.sendBundler([contractData.LendModule], [0], [calldata]);
-	})
-	it.skip("lender unlock", async function () {
-
-		var VaultFacet = await getDeployedContract("VaultFacet", contractData.Diamond)
-		// let tx = await VaultFacet.getVaultType(debtor)
-		// console.log("getVaultType  ",tx,debtor)
-
-		let tx = await VaultFacet.setVaultLock(debtor, false)
-		console.log("setVaultLock hash",tx)
-	},)
-	async function getDeployedContract(contractName, address, libraries) {
-		var contract = await ethers.getContractFactory(contractName, {libraries: libraries}, deployer);
-		if (address) {
-			contract = contract.attach(address);
-		}
-		return contract
-	}
 });

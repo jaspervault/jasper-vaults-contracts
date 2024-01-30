@@ -5,7 +5,7 @@ var contractData={}
 var deployer;
 async function main() {
     [deployer]=await ethers.getSigners();
-    //部署2535合约
+
     var DiamondCutFacet=await deployContract("DiamondCutFacet",false)
 
     var DiamondLoupeFacet=await deployContract("DiamondLoupeFacet",false)
@@ -47,7 +47,7 @@ async function main() {
 
    var Diamond=await deployContract("Diamond",false,diamondFacets,diamondArgs)
 
-   //部署相关数据合约
+ 
    var PlatformFacet= await  deployContract("PlatformFacet",false) 
    await addFunction(PlatformFacet)
 
@@ -64,7 +64,7 @@ async function addFunction(contract){
         addSelectors:selectors,
         removeSelectors:[]
     }]
-    // 要做的事情
+  
     // let calldata = contract.interface.encodeFunctionData('setModules',[[contract.address],[true]])
     // console.log("calldata",calldata)
     // await DiamondCutFacet.diamondCut(_diamondCut,contract.address,calldata)

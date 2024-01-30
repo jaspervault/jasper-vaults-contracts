@@ -48,16 +48,19 @@ async function sendBundler(dest, value, func) {
    let provider = ethers.provider
    let nonce = await EntryPoint.getNonce(sender, 0)
    // console.log(nonce,"nonce")
+
    let code = await provider.getCode(sender)
    let initCode = "0x"
    console.log(accountAPI.index, "---")
    if (code == "0x") {
       initCode = `${contractData.VaultFactory}5fbfb9cf${String(deployer.address).substring(2).padStart(64, "0")}${String((Number(accountAPI.index)).toString(16)).padStart(64, "0")}`
    }
+
    let Vault = await ethers.getContractFactory("Vault")
    Vault = Vault.connect(deployer)
    Vault = Vault.attach(sender)
    let calldata = Vault.interface.encodeFunctionData("executeBatch", [dest, value, func])
+
    let feeData = await provider.getFeeData()
    var unsignOp = {
       sender: sender,
@@ -146,7 +149,7 @@ async function sendBundler(dest, value, func) {
    let order = await axios.post(tokenUrl, data)
 
    if (!order || !order.data || !order.data.data) {
-      console.log("<订单错误 order>", order)
+      console.log("< order>", order)
       return null
    }
    console.log("<order Id>", order.data.data.id)

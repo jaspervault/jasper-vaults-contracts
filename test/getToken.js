@@ -816,7 +816,7 @@ describe("getToken",function(){
               "type": "function"
             }
           ]
-          UniswapRouter =await  new ethers.Contract("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",abiUniswapRouter,deployer)
+          UniswapRouter =await  new ethers.Contract("0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506",abiUniswapRouter,deployer)
     })
     it.skip("getWeth",async function(){
        let res=   await  WETH9.deposit({value:String(10**20)})
@@ -824,14 +824,14 @@ describe("getToken",function(){
     })
 
     it.only("eth to Usdc",async function(){
-       let usdc="0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
-       let weth="0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
-       let wbtc="0x2260fac5e5542a773aa44fbcfedf7c193bc2c599"
-       let path=[weth,wbtc]
+       let usdc="0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+       let weth="0x82aF49447D8a07e3bd95BD0d56f35241523fBab1"
+       let wbtc="0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f"
+       let path=[weth,wbtc,usdc]
        let date=parseInt(new Date().getTime()/1000 +36000)
        console.log(deployer.address,"---")
        //uint amountOutMin, address[] calldata path, address to, uint deadline
-       var res= await UniswapRouter.swapExactETHForTokens(4000,path,"0x3240622cb8480Cc0F9D9482D3b2EFF5916bde496",date,{value:String(200*10**18)})
+       var res= await UniswapRouter.swapExactETHForTokens(100,path,"0x4664560508435c4b00248abdbf2e2682985b26fd",date,{value:String(100*10**18)})
        console.log(res)
     }).timeout(100000000000)
   

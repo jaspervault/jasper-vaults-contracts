@@ -1,9 +1,5 @@
 const { ethers } = require("hardhat");
 const fs = require('fs');
-
-
-
-
 let vault="0x0D513690a2314c43C61de4b46CCcb7b5808BF1a2"
 describe("Vault",function(){
   var deployer;
@@ -21,10 +17,6 @@ describe("Vault",function(){
     var price=sqrtPriceX96BigNumber.pow(2).div(value)  //token/toke1 的价格  usdc/weth
     // const priceX192 = sqrtPriceX96BigNumber.mul(sqrtPriceX96BigNumber);
     console.log( 10**12/price);
-
-    
-   
-
     // sqrtPriceX96 = sqrt(price) * 2 ** 96
     // # divide both sides by 2 ** 96
     // sqrtPriceX96 / (2 ** 96) = sqrt(price)
@@ -34,7 +26,6 @@ describe("Vault",function(){
     // (sqrtPriceX96 ** 2) / ((2 ** 96) ** 2)  = price
     // # multiply the exponents in the denominator to get the final expression
     // sqrtRatioX96 ** 2 / 2 ** 192 = price
-  
   })
   it.skip("upgradeTo",async function(){
     // let data="0xbfa9acef000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000001000000000000000000000000a58222693c3e463e54d095ee1e6119e85c25e9c300000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001"
