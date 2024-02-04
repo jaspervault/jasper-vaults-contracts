@@ -49,31 +49,95 @@ contract OptionModule is
         ILendFacet.PutOrder memory _putOrder
     ) internal view {
         IVaultFacet vaultFacet = IVaultFacet(diamond);
-        require(_putOrder.recipientAddress == IVault(_putOrder.optionHolder).owner(),"OptionModule:recipientAddress error");
-        require(!usedOrderPut[_putOrder.orderID], "OptionModule:orderID is Used");
-        require(!vaultFacet.getVaultLock(_putOrder.optionHolder), "OptionModule:optionHolder is locked");     
-        require(!vaultFacet.getVaultLock(_putOrder.optionWriter), "OptionModule:optionWriter is locked");   
-        require(vaultFacet.getVaultType(_putOrder.optionHolder) == 3,"OptionModule:optionHolder vaultType error");
-        require(vaultFacet.getVaultType(_putOrder.optionWriter) == 2, "OptionModule:optionWriter vaultType error"); 
-        require( _putOrder.optionWriter != _putOrder.optionHolder,"OptionModule:optionWriter error" );  
-        require( _putOrder.expirationDate > block.timestamp,"OptionModule:invalid expirationDate");
-        require( _putOrder.receiveAmount >= _putOrder.receiveMinAmount, "OptionModule:receiveAmount error"); 
         IPlatformFacet platformFacet = IPlatformFacet(diamond);
+
+		require(platformFacet.getTokenType(_putOrder.underlyingAsset) != 0, "OptionModule:underlyingAsset error");
+		require(platformFacet.getTokenType(_putOrder.receiveAsset) != 0, "OptionModule:receiveAsset error");
+        require(
+            _putOrder.recipientAddress ==
+                IVault(_putOrder.optionHolder).owner(),
+            "OptionModule:recipientAddress error"
+        );
+        require(
+            !usedOrderPut[_putOrder.orderID],
+            "OptionModule:orderID is Used"
+        );
+        require(
+            !vaultFacet.getVaultLock(_putOrder.optionHolder),
+            "OptionModule:optionHolder is locked"
+        );
+        require(
+            !vaultFacet.getVaultLock(_putOrder.optionWriter),
+            "OptionModule:optionWriter is locked"
+        );
+        require(
+            vaultFacet.getVaultType(_putOrder.optionHolder) == 3,
+            "OptionModule:optionHolder vaultType error"
+        );
+        require(
+            vaultFacet.getVaultType(_putOrder.optionWriter) == 2,
+            "OptionModule:optionWriter vaultType error"
+        );
+        require(
+            _putOrder.optionWriter != _putOrder.optionHolder,
+            "OptionModule:optionWriter error"
+        );
+        require(
+            _putOrder.expirationDate > block.timestamp,
+            "OptionModule:invalid expirationDate"
+        );
+        require(
+            _putOrder.receiveAmount >= _putOrder.receiveMinAmount,
+            "OptionModule:receiveAmount error"
+        );
+      
         ILendFacet lendFacet = ILendFacet(diamond);
         address eth = platformFacet.getEth();
         //verify underlyingAsset
         if (_putOrder.underlyingAsset == eth) {
-            require(_putOrder.optionHolder.balance >= _putOrder.underlyingAmount,"OptionModule:underlyingAmount not enough");         
+            require(
+                _putOrder.optionHolder.balance >= _putOrder.underlyingAmount,
+                "OptionModule:underlyingAmount not enough"
+            );
         } else {
             if (_putOrder.underlyingAssetType == 0) {
                 //verify token amount
-                require(IERC20(_putOrder.underlyingAsset).balanceOf(_putOrder.optionHolder) >= _putOrder.underlyingAmount,"OptionModule:underlyingAmount not enough");        
+                require(
+                    IERC20(_putOrder.underlyingAsset).balanceOf(
+                        _putOrder.optionHolder
+                    ) >= _putOrder.underlyingAmount,
+                    "OptionModule:underlyingAmount not enough"
+                );
             } else if (_putOrder.underlyingAssetType == 1) {
                 //verify uniswapv3 nft liquidity
-                if (lendFacet.getCollateralNft(_putOrder.underlyingAsset) == ILendFacet.CollateralNftType.UniswapV3) {    
-                    (,,address token0,address token1,,,,uint128 liquidity,,,,) = INonfungiblePositionManager(_putOrder.underlyingAsset).positions(_putOrder.underlyingNftID);               
-                    require(platformFacet.getTokenType(token0) != 0 &&  platformFacet.getTokenType(token1) != 0, "OptionModule:nft assets error");        
-                    require(uint256(liquidity) >= _putOrder.underlyingAmount, "OptionModule:underlyingAmount not enough");                
+                if (
+                    lendFacet.getCollateralNft(_putOrder.underlyingAsset) ==
+                    ILendFacet.CollateralNftType.UniswapV3
+                ) {
+                    (
+                        ,
+                        ,
+                        address token0,
+                        address token1,
+                        ,
+                        ,
+                        ,
+                        uint128 liquidity,
+                        ,
+                        ,
+                        ,
+
+                    ) = INonfungiblePositionManager(_putOrder.underlyingAsset)
+                            .positions(_putOrder.underlyingNftID);
+                    require(
+                        platformFacet.getTokenType(token0) != 0 &&
+                            platformFacet.getTokenType(token1) != 0,
+                        "OptionModule:nft assets error"
+                    );
+                    require(
+                        uint256(liquidity) >= _putOrder.underlyingAmount,
+                        "OptionModule:underlyingAmount not enough"
+                    );
                 } else {
                     revert("OptionModule:invalid Nft");
                 }
@@ -83,9 +147,17 @@ contract OptionModule is
         }
         //verify receiveAsset
         if (_putOrder.receiveAsset == eth) {
-            require(_putOrder.optionWriter.balance >= _putOrder.receiveAmount,"OptionModule:receiveAmount not enough");  
+            require(
+                _putOrder.optionWriter.balance >= _putOrder.receiveAmount,
+                "OptionModule:receiveAmount not enough"
+            );
         } else {
-            require(IERC20(_putOrder.receiveAsset).balanceOf(_putOrder.optionWriter) >= _putOrder.receiveAmount,"OptionModule:receiveAmount not enough");  
+            require(
+                IERC20(_putOrder.receiveAsset).balanceOf(
+                    _putOrder.optionWriter
+                ) >= _putOrder.receiveAmount,
+                "OptionModule:receiveAmount not enough"
+            );
         }
     }
 
@@ -136,27 +208,56 @@ contract OptionModule is
         address eth = IPlatformFacet(diamond).getEth();
         vaultFacet.setVaultLock(_putOrder.optionHolder, true);
         ILendFacet lendFacet = ILendFacet(diamond);
-        _putOrder.index = lendFacet.getLenderPutOrderLength(_putOrder.optionWriter); 
+        _putOrder.index = lendFacet.getLenderPutOrderLength(
+            _putOrder.optionWriter
+        );
         lendFacet.setBorrowerPutOrder(_putOrder.optionHolder, _putOrder);
-        lendFacet.setLenderPutOrder(_putOrder.optionWriter, _putOrder.optionHolder);
+        lendFacet.setLenderPutOrder(
+            _putOrder.optionWriter,
+            _putOrder.optionHolder
+        );
         //tranfer lendFeePlatformRecipient
-        address lendFeePlatformRecipient = lendFacet.getLendFeePlatformRecipient();     
+        address lendFeePlatformRecipient = lendFacet
+            .getLendFeePlatformRecipient();
         usedOrderPut[_putOrder.orderID] = true;
         if (_putOrder.receiveAsset == eth) {
             if (lendFeePlatformRecipient != address(0)) {
-                IVault(_putOrder.optionWriter).invokeTransferEth( lendFeePlatformRecipient, _putOrder.platformFeeAmount);          
+                IVault(_putOrder.optionWriter).invokeTransferEth(
+                    lendFeePlatformRecipient,
+                    _putOrder.platformFeeAmount
+                );
             }
-            IVault(_putOrder.optionWriter).invokeTransferEth(_putOrder.recipientAddress,_putOrder.receiveAmount - _putOrder.platformFeeAmount - _putOrder.optionPremiumAmount);   
+            IVault(_putOrder.optionWriter).invokeTransferEth(
+                _putOrder.recipientAddress,
+                _putOrder.receiveAmount -
+                    _putOrder.platformFeeAmount -
+                    _putOrder.optionPremiumAmount
+            );
         } else {
             if (lendFeePlatformRecipient != address(0)) {
-                IVault(_putOrder.optionWriter).invokeTransfer(_putOrder.receiveAsset, lendFeePlatformRecipient,_putOrder.platformFeeAmount);          
+                IVault(_putOrder.optionWriter).invokeTransfer(
+                    _putOrder.receiveAsset,
+                    lendFeePlatformRecipient,
+                    _putOrder.platformFeeAmount
+                );
             }
             //tranfer metamask
-            IVault(_putOrder.optionWriter).invokeTransfer(_putOrder.receiveAsset,_putOrder.recipientAddress,_putOrder.receiveAmount - _putOrder.platformFeeAmount - _putOrder.optionPremiumAmount);    
+            IVault(_putOrder.optionWriter).invokeTransfer(
+                _putOrder.receiveAsset,
+                _putOrder.recipientAddress,
+                _putOrder.receiveAmount -
+                    _putOrder.platformFeeAmount -
+                    _putOrder.optionPremiumAmount
+            );
         }
         updatePosition(_putOrder.optionWriter, _putOrder.receiveAsset, 0);
         //set CurrentVaultModule
-        setFuncBlackAndWhiteList( 1,_putOrder.optionWriter, _putOrder.optionHolder,true );
+        setFuncBlackAndWhiteList(
+            1,
+            _putOrder.optionWriter,
+            _putOrder.optionHolder,
+            true
+        );
         emit SubmitPutOrder(msg.sender, _putOrder);
     }
 
@@ -189,8 +290,9 @@ contract OptionModule is
     ) external payable nonReentrant {
         ILendFacet lendFacet = ILendFacet(diamond);
         IVaultFacet vaultFacet = IVaultFacet(diamond);
-        ILendFacet.PutOrder memory putOrder = ILendFacet(diamond).getBorrowerPutOrder(_borrower);
-            
+        ILendFacet.PutOrder memory putOrder = ILendFacet(diamond)
+            .getBorrowerPutOrder(_borrower);
+
         require(
             putOrder.optionHolder != address(0),
             "OptionModule:putOrder not exist"
@@ -198,7 +300,11 @@ contract OptionModule is
         lendFacet.deleteBorrowerPutOrder(putOrder.optionHolder);
         vaultFacet.setVaultLock(putOrder.optionHolder, false);
         address owner = IVault(putOrder.optionHolder).owner();
-        if ( owner == msg.sender ||  (IPlatformFacet(diamond).getIsVault(msg.sender) && IOwnable(msg.sender).owner() == owner) ) { 
+        if (
+            owner == msg.sender ||
+            (IPlatformFacet(diamond).getIsVault(msg.sender) &&
+                IOwnable(msg.sender).owner() == owner)
+        ) {
             if (_type) {
                 liquidate(putOrder, 1);
             } else {
@@ -210,7 +316,12 @@ contract OptionModule is
             revert("OptionModule:liquidate time not yet");
         }
         lendFacet.deleteLenderPutOrder(putOrder.optionWriter, putOrder.index);
-        setFuncBlackAndWhiteList(1, putOrder.optionWriter,putOrder.optionHolder,false );
+        setFuncBlackAndWhiteList(
+            1,
+            putOrder.optionWriter,
+            putOrder.optionHolder,
+            false
+        );
         emit LiquidatePutOrder(msg.sender, putOrder);
     }
 
@@ -221,35 +332,68 @@ contract OptionModule is
         address eth = IPlatformFacet(diamond).getEth();
         if (_liquidateWay == 1) {
             if (_putOrder.underlyingAsset == eth) {
-                IVault(_putOrder.optionHolder).invokeTransferEth(_putOrder.optionWriter, _putOrder.underlyingAmount);         
+                IVault(_putOrder.optionHolder).invokeTransferEth(
+                    _putOrder.optionWriter,
+                    _putOrder.underlyingAmount
+                );
             } else {
                 if (_putOrder.underlyingAssetType == 0) {
                     //transfer token
                     // IVault(_putOrder.debtor).invokeTransfer(_putOrder.underlyingAsset,_putOrder.loaner,_putOrder.underlyingAmount);
-                    uint256 balance = IERC20(_putOrder.underlyingAsset).balanceOf(_putOrder.optionHolder);                      
-                    IVault(_putOrder.optionHolder).invokeTransfer(_putOrder.underlyingAsset, _putOrder.optionWriter,balance );    
+                    uint256 balance = IERC20(_putOrder.underlyingAsset)
+                        .balanceOf(_putOrder.optionHolder);
+                    IVault(_putOrder.optionHolder).invokeTransfer(
+                        _putOrder.underlyingAsset,
+                        _putOrder.optionWriter,
+                        balance
+                    );
                 } else if (_putOrder.underlyingAssetType == 1) {
                     //transfer nft
-                    IVault(_putOrder.optionHolder).invokeTransferNft(_putOrder.underlyingAsset, _putOrder.optionWriter, _putOrder.underlyingNftID);  
+                    IVault(_putOrder.optionHolder).invokeTransferNft(
+                        _putOrder.underlyingAsset,
+                        _putOrder.optionWriter,
+                        _putOrder.underlyingNftID
+                    );
                 } else {
                     revert("OptionModule:underlyingAssetType error");
                 }
             }
-            updatePosition( _putOrder.optionHolder, _putOrder.underlyingAsset,0); 
-            updatePosition( _putOrder.optionWriter, _putOrder.underlyingAsset,0);    
+            updatePosition(
+                _putOrder.optionHolder,
+                _putOrder.underlyingAsset,
+                0
+            );
+            updatePosition(
+                _putOrder.optionWriter,
+                _putOrder.underlyingAsset,
+                0
+            );
         } else if (_liquidateWay == 2) {
             //if receiveAsset == eth  repay asset is weth
-            if ( _putOrder.receiveAsset == eth &&  msg.value >= _putOrder.receiveAmount) {            
-                (bool success, ) = _putOrder.optionWriter.call{value: _putOrder.receiveAmount}("");      
+            if (
+                _putOrder.receiveAsset == eth &&
+                msg.value >= _putOrder.receiveAmount
+            ) {
+                (bool success, ) = _putOrder.optionWriter.call{
+                    value: _putOrder.receiveAmount
+                }("");
                 require(success, "OptionModule:trafer eth fail");
             } else {
                 if (_putOrder.receiveAsset == eth) {
                     _putOrder.receiveAsset = IPlatformFacet(diamond).getWeth();
                 }
-                IERC20(_putOrder.receiveAsset).safeTransferFrom(_putOrder.recipientAddress,_putOrder.optionWriter,_putOrder.receiveAmount);      
+                IERC20(_putOrder.receiveAsset).safeTransferFrom(
+                    _putOrder.recipientAddress,
+                    _putOrder.optionWriter,
+                    _putOrder.receiveAmount
+                );
             }
-            updatePosition( _putOrder.optionWriter,_putOrder.receiveAsset,1,0);          
-            
+            updatePosition(
+                _putOrder.optionWriter,
+                _putOrder.receiveAsset,
+                1,
+                0
+            );
         } else {
             revert("OptionModule:liquidateWay error");
         }
@@ -260,31 +404,98 @@ contract OptionModule is
         ILendFacet.CallOrder memory _callOrder
     ) internal view {
         IVaultFacet vaultFacet = IVaultFacet(diamond);
-        require(_callOrder.optionHolderWallet == IVault(_callOrder.optionHolder).owner(),"OptionModule:recipientAddress error");
-        require(!usedOrderCall[_callOrder.orderID],"OptionModule:orderID is Used");      
-        require(!vaultFacet.getVaultLock(_callOrder.optionHolder),"OptionModule:optionHolder is locked");
-        require(!vaultFacet.getVaultLock(_callOrder.optionWriter),"OptionModule:optionWriter is locked");
-        require(vaultFacet.getVaultType(_callOrder.optionHolder) == 7,"OptionModule:optionHolder vaultType error");    
-        require(vaultFacet.getVaultType(_callOrder.optionWriter) == 6,"OptionModule:optionWriter vaultType error");     
-        require(_callOrder.optionHolder != _callOrder.optionWriter,"OptionModule:optionHolder error" );     
-        require(_callOrder.expirationDate > block.timestamp,"OptionModule:invalid expirationDate" );  
-        require( _callOrder.optionPremiumAmount >= _callOrder.optionPremiumMinAmount,"OptionModule:optionPremiumAmount error"); 
-        require(_callOrder.strikeNotionalAmount >= _callOrder.strikeNotionalMinAmount, "OptionModule:strikeNotionalAmount error" );
         IPlatformFacet platformFacet = IPlatformFacet(diamond);
+        require(platformFacet.getTokenType(_callOrder.underlyingAsset) != 0, "OptionModule:underlyingAsset error");
+		require(platformFacet.getTokenType(_callOrder.optionPremiumAsset) != 0, "OptionModule:optionPremiumAsset error");
+        require(
+            _callOrder.optionHolderWallet ==
+                IVault(_callOrder.optionHolder).owner(),
+            "OptionModule:recipientAddress error"
+        );
+        require(
+            !usedOrderCall[_callOrder.orderID],
+            "OptionModule:orderID is Used"
+        );
+        require(
+            !vaultFacet.getVaultLock(_callOrder.optionHolder),
+            "OptionModule:optionHolder is locked"
+        );
+        require(
+            !vaultFacet.getVaultLock(_callOrder.optionWriter),
+            "OptionModule:optionWriter is locked"
+        );
+        require(
+            vaultFacet.getVaultType(_callOrder.optionHolder) == 7,
+            "OptionModule:optionHolder vaultType error"
+        );
+        require(
+            vaultFacet.getVaultType(_callOrder.optionWriter) == 6,
+            "OptionModule:optionWriter vaultType error"
+        );
+        require(
+            _callOrder.optionHolder != _callOrder.optionWriter,
+            "OptionModule:optionHolder error"
+        );
+        require(
+            _callOrder.expirationDate > block.timestamp,
+            "OptionModule:invalid expirationDate"
+        );
+        require(
+            _callOrder.optionPremiumAmount >= _callOrder.optionPremiumMinAmount,
+            "OptionModule:optionPremiumAmount error"
+        );
+        require(
+            _callOrder.strikeNotionalAmount >=
+                _callOrder.strikeNotionalMinAmount,
+            "OptionModule:strikeNotionalAmount error"
+        );
+       
         ILendFacet lendFacet = ILendFacet(diamond);
         address eth = platformFacet.getEth();
         //verify underlyingAsset
         if (_callOrder.underlyingAsset == eth) {
-            require(_callOrder.optionWriter.balance >= _callOrder.underlyingAmount,"OptionModule:underlyingAmount not enough" );      
+            require(
+                _callOrder.optionWriter.balance >= _callOrder.underlyingAmount,
+                "OptionModule:underlyingAmount not enough"
+            );
         } else {
             if (_callOrder.underlyingAssetType == 0) {
-                require(IERC20(_callOrder.underlyingAsset).balanceOf(_callOrder.optionWriter) >= _callOrder.underlyingAmount,"OptionModule:underlyingAmount not enough");                            
+                require(
+                    IERC20(_callOrder.underlyingAsset).balanceOf(
+                        _callOrder.optionWriter
+                    ) >= _callOrder.underlyingAmount,
+                    "OptionModule:underlyingAmount not enough"
+                );
             } else if (_callOrder.underlyingAssetType == 1) {
                 //verify uniswapv3 nft liquidity
-                if (lendFacet.getCollateralNft(_callOrder.underlyingAsset) ==  ILendFacet.CollateralNftType.UniswapV3) { 
-                    (,,address token0,address token1,,,,uint128 liquidity,,,,) = INonfungiblePositionManager(_callOrder.underlyingAsset).positions(_callOrder.underlyingNftID);                   
-                    require(platformFacet.getTokenType(token0) != 0 &&platformFacet.getTokenType(token1) != 0,"OptionModule:nft assets error");
-                    require( uint256(liquidity) >= _callOrder.underlyingAmount,"OptionModule:underlyingAmount not enough" );     
+                if (
+                    lendFacet.getCollateralNft(_callOrder.underlyingAsset) ==
+                    ILendFacet.CollateralNftType.UniswapV3
+                ) {
+                    (
+                        ,
+                        ,
+                        address token0,
+                        address token1,
+                        ,
+                        ,
+                        ,
+                        uint128 liquidity,
+                        ,
+                        ,
+                        ,
+
+                    ) = INonfungiblePositionManager(_callOrder.underlyingAsset)
+                            .positions(_callOrder.underlyingNftID);
+                    require(
+                        platformFacet.getTokenType(token0) != 0 &&
+                            platformFacet.getTokenType(token1) != 0,
+                        "OptionModule:nft assets error"
+                    );
+                    require(
+                        uint256(liquidity) >= _callOrder.underlyingAmount,
+                        "OptionModule:underlyingAmount not enough"
+                    );
                 } else {
                     revert("OptionModule:invalid Nft");
                 }
@@ -294,9 +505,23 @@ contract OptionModule is
         }
         //verify lendAsset
         if (_callOrder.optionPremiumAsset == eth) {
-            require( _callOrder.optionHolder.balance >=(_callOrder.optionPremiumAmount +  _callOrder.xFeeAmount +  _callOrder.platformFeeAmount),"OptionModule:receiveAmount not enough");       
+            require(
+                _callOrder.optionHolder.balance >=
+                    (_callOrder.optionPremiumAmount +
+                        _callOrder.xFeeAmount +
+                        _callOrder.platformFeeAmount),
+                "OptionModule:receiveAmount not enough"
+            );
         } else {
-            require( IERC20(_callOrder.optionPremiumAsset).balanceOf(_callOrder.optionHolder) >=(_callOrder.optionPremiumAmount + _callOrder.xFeeAmount + _callOrder.platformFeeAmount),"OptionModule:receiveAmount not enough");           
+            require(
+                IERC20(_callOrder.optionPremiumAsset).balanceOf(
+                    _callOrder.optionHolder
+                ) >=
+                    (_callOrder.optionPremiumAmount +
+                        _callOrder.xFeeAmount +
+                        _callOrder.platformFeeAmount),
+                "OptionModule:receiveAmount not enough"
+            );
         }
     }
 
@@ -344,7 +569,11 @@ contract OptionModule is
         verifyCallOrder(_callOrder);
         IVaultFacet vaultFacet = IVaultFacet(diamond);
         handleCallOrderr(_callOrder.optionWriter, _callOrder, _lenderSignature);
-        handleCallOrderr(_callOrder.optionHolder,_callOrder,_borrowerSignature );
+        handleCallOrderr(
+            _callOrder.optionHolder,
+            _callOrder,
+            _borrowerSignature
+        );
         ILendFacet lendFacet = ILendFacet(diamond);
         //store data
         _callOrder.index = lendFacet.getBorrowerCallOrderLength(_callOrder.optionWriter);
@@ -352,38 +581,73 @@ contract OptionModule is
         lendFacet.setBorrowerCallOrder(_callOrder.optionWriter,_callOrder.optionHolder); 
         usedOrderCall[_callOrder.orderID] = true;
         //tranfer lendFeePlatformRecipient
-        address lendFeePlatformRecipient = lendFacet.getLendFeePlatformRecipient();      
+        address lendFeePlatformRecipient = lendFacet
+            .getLendFeePlatformRecipient();
         IPlatformFacet platformFacet = IPlatformFacet(diamond);
         address eth = platformFacet.getEth();
         if (_callOrder.optionPremiumAsset == eth) {
             if (lendFeePlatformRecipient != address(0)) {
-                IVault(_callOrder.optionHolder).invokeTransferEth(lendFeePlatformRecipient,_callOrder.platformFeeAmount);        
+                IVault(_callOrder.optionHolder).invokeTransferEth(
+                    lendFeePlatformRecipient,
+                    _callOrder.platformFeeAmount
+                );
             }
-            IVault(_callOrder.optionHolder).invokeTransferEth(_callOrder.optionWriter,(_callOrder.optionPremiumAmount + _callOrder.xFeeAmount));          
+            IVault(_callOrder.optionHolder).invokeTransferEth(
+                _callOrder.optionWriter,
+                (_callOrder.optionPremiumAmount + _callOrder.xFeeAmount)
+            );
         } else {
             if (lendFeePlatformRecipient != address(0)) {
-                IVault(_callOrder.optionHolder).invokeTransfer(_callOrder.optionPremiumAsset, lendFeePlatformRecipient,_callOrder.platformFeeAmount);     
+                IVault(_callOrder.optionHolder).invokeTransfer(
+                    _callOrder.optionPremiumAsset,
+                    lendFeePlatformRecipient,
+                    _callOrder.platformFeeAmount
+                );
             }
-            IVault(_callOrder.optionHolder).invokeTransfer( _callOrder.optionPremiumAsset,_callOrder.optionWriter, (_callOrder.optionPremiumAmount + _callOrder.xFeeAmount) );     
+            IVault(_callOrder.optionHolder).invokeTransfer(
+                _callOrder.optionPremiumAsset,
+                _callOrder.optionWriter,
+                (_callOrder.optionPremiumAmount + _callOrder.xFeeAmount)
+            );
         }
         //transfer uunderlyingAsset
-        if(_callOrder.underlyingAsset == eth){
-            IVault(_callOrder.optionWriter).invokeTransferEth(_callOrder.optionHolder,_callOrder.underlyingAmount);
-        }else{
-            if(_callOrder.underlyingAssetType == 0){
-              IVault(_callOrder.optionWriter).invokeTransfer(_callOrder.underlyingAsset,_callOrder.optionHolder,_callOrder.underlyingAmount);
-            }else if(_callOrder.underlyingAssetType == 1){
-              IVault(_callOrder.optionWriter).invokeTransferNft( _callOrder.underlyingAsset, _callOrder.optionHolder, _callOrder.underlyingNftID);           
-            }else{
+        if (_callOrder.underlyingAsset == eth) {
+            IVault(_callOrder.optionWriter).invokeTransferEth(
+                _callOrder.optionHolder,
+                _callOrder.underlyingAmount
+            );
+        } else {
+            if (_callOrder.underlyingAssetType == 0) {
+                IVault(_callOrder.optionWriter).invokeTransfer(
+                    _callOrder.underlyingAsset,
+                    _callOrder.optionHolder,
+                    _callOrder.underlyingAmount
+                );
+            } else if (_callOrder.underlyingAssetType == 1) {
+                IVault(_callOrder.optionWriter).invokeTransferNft(
+                    _callOrder.underlyingAsset,
+                    _callOrder.optionHolder,
+                    _callOrder.underlyingNftID
+                );
+            } else {
                 revert("OptionModule:underlyingAssetType error");
-            }         
+            }
         }
         //update position
-        updatePosition(_callOrder.optionHolder, _callOrder.optionPremiumAsset,0);
+        updatePosition(
+            _callOrder.optionHolder,
+            _callOrder.optionPremiumAsset,
+            0
+        );
         updatePosition(_callOrder.optionHolder, _callOrder.underlyingAsset, 0);
         updatePosition(_callOrder.optionWriter, _callOrder.underlyingAsset, 0);
         //set CurrentVaultModule
-        setFuncBlackAndWhiteList(2, _callOrder.optionHolder, _callOrder.optionWriter,true);
+        setFuncBlackAndWhiteList(
+            2,
+            _callOrder.optionHolder,
+            _callOrder.optionWriter,
+            true
+        );
         vaultFacet.setVaultLock(_callOrder.optionHolder, true);
         emit SubmitCallOrder(msg.sender, _callOrder);
     }
@@ -421,8 +685,8 @@ contract OptionModule is
          if(isType){
             //payLater time
                 //traferFrom optionPremiumAsset to optionWriter
-                if (callOrder.optionPremiumAsset == eth) {                      
-                    callOrder.optionPremiumAsset= platformFacet.getWeth();  
+                if (callOrder.optionPremiumAsset == eth) {
+                    callOrder.optionPremiumAsset = platformFacet.getWeth();
                 }
                 IERC20(callOrder.optionPremiumAsset).safeTransferFrom( callOrder.optionHolderWallet,callOrder.optionWriter,callOrder.strikeNotionalAmount);    
                 updatePosition(callOrder.optionWriter,callOrder.optionPremiumAsset,0); 
@@ -453,10 +717,31 @@ contract OptionModule is
     ) internal {
         IVaultFacet vaultFacet = IVaultFacet(diamond);
         ILendFacet lendFacet = ILendFacet(diamond);
-        if ((_orderType == 1 &&  lendFacet.getLenderPutOrderLength(_blacker) == 0) ||  (_orderType == 2 && lendFacet.getBorrowerCallOrderLength(_blacker) == 0) ) {           
-            vaultFacet.setFuncBlackList(_blacker, bytes4(keccak256("setVaultType(address,uint256)")), _type );
+        if (
+            (_orderType == 1 &&
+                lendFacet.getLenderPutOrderLength(_blacker) == 0) ||
+            (_orderType == 2 &&
+                lendFacet.getBorrowerCallOrderLength(_blacker) == 0)
+        ) {
+            vaultFacet.setFuncBlackList(
+                _blacker,
+                bytes4(keccak256("setVaultType(address,uint256)")),
+                _type
+            );
         }
-        vaultFacet.setFuncWhiteList(_whiter,bytes4(keccak256("replacementLiquidity(address,uint8,uint24,int24,int24)")),_type);      
-        vaultFacet.setFuncWhiteList(_whiter,bytes4(keccak256("liquidateStakeOrder(address,bool)")), _type);      
+        vaultFacet.setFuncWhiteList(
+            _whiter,
+            bytes4(
+                keccak256(
+                    "replacementLiquidity(address,uint8,uint24,int24,int24)"
+                )
+            ),
+            _type
+        );
+        vaultFacet.setFuncWhiteList(
+            _whiter,
+            bytes4(keccak256("liquidateStakeOrder(address,bool)")),
+            _type
+        );
     }
 }
