@@ -696,7 +696,7 @@ contract OptionModule is
                 if (callOrder.underlyingAsset == eth) {
                     IVault(callOrder.optionHolder).invokeTransferEth(callOrder.optionWriter, callOrder.underlyingAmount);                     
                 } else {
-                    uint256 balance = IERC20(callOrder.underlyingAsset).balanceOf(callOrder.optionWriter);                          
+                    uint256 balance = IERC20(callOrder.underlyingAsset).balanceOf(callOrder.optionHolder);                          
                     IVault(callOrder.optionHolder).invokeTransfer(callOrder.underlyingAsset,callOrder.optionWriter,balance);                   
                 }
             } else if (callOrder.underlyingAssetType == 1) {
