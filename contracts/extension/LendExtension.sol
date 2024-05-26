@@ -62,12 +62,12 @@ pragma solidity ^0.8.12;
 //                 "OptionModule:putOrder not exist"
 //             );
 //             require(
-//                 putOrder.lockAssetType == 1,
-//                 "OptionModule:lockAssetType error"
+//                 putOrder.underlyingAssetType == 1,
+//                 "OptionModule:underlyingAssetType error"
 //             );
 //             (tokenId, newLiquidity) = mintNewNft(
 //                 putOrder.optionHolder,
-//                 putOrder.lockAsset,
+//                 putOrder.underlyingAsset,
 //                 putOrder.underlyingNftID,
 //                 _fee,
 //                 priceSection
@@ -94,12 +94,12 @@ pragma solidity ^0.8.12;
 //                 "OptionModule:callOrder not exist"
 //             );
 //             require(
-//                 callOrder.lockAssetType == 1,
-//                 "OptionModule:lockAssetType error"
+//                 callOrder.underlyingAssetType == 1,
+//                 "OptionModule:underlyingAssetType error"
 //             );
 //             (tokenId, newLiquidity) = mintNewNft(
 //                 callOrder.optionWriter,
-//                 callOrder.lockAsset,
+//                 callOrder.underlyingAsset,
 //                 callOrder.underlyingNftID,
 //                 _fee,
 //                 priceSection

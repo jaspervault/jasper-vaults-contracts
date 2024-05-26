@@ -31,7 +31,7 @@ contract Vault is
     IEntryPoint private immutable _entryPoint;
 
     function vaultVaild() internal pure returns (IVaultVaild) {
-        return IVaultVaild(0xa5Db2700E2CC1E007d9F50261ecb04339d712E3A);
+        return IVaultVaild(0x61Ab258c38D4095d17B6399642F18054135B4253);
     }
 
     function _validModule(

@@ -8,6 +8,7 @@ import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.
 import "../lib/ModuleBase.sol";
 import {IOwnable} from "../interfaces/internal/IOwnable.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IERC20 as OrignIERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {Invoke} from "../lib/Invoke.sol";
 import {IIssuanceModule} from "../interfaces/internal/IIssuanceModule.sol";
@@ -22,6 +23,7 @@ contract IssuanceModule is
 {
     using Invoke for IVault;
     using SafeERC20 for IERC20;
+    using SafeERC20 for OrignIERC20;
     modifier onlyOwner() {
         require(
             msg.sender == IOwnable(diamond).owner(),
@@ -169,7 +171,7 @@ contract IssuanceModule is
                 (bool success, ) = _vault.call{value: msg.value}("");
                 require(success, "IssuanceModule:tranfer error");
             } else {
-                // IERC20(_assets[i]).safeTransferFrom(_from, _vault, _amounts[i]);
+                OrignIERC20(_assets[i]).safeTransferFrom(_from, _vault, _amounts[i]);
             }
             updatePosition(_vault, _assets[i], 0);
         }

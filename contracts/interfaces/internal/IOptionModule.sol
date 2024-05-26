@@ -9,21 +9,18 @@ interface IOptionModule {
         uint16 liquidateSelect;  
         address writer;  
         address recipient;
-        uint16  premiumSelet;
-        uint256 lockAmount;
+        uint16  premiumSelect;
+        uint256 underlyingAmount;
         Signature signature;
-        uint256 quantity;
     }
     struct Signature {
         IOptionFacet.OrderType orderType;     
-        address lockAsset;   
-        address underlyingAsset;
-        IOptionFacet.UnderlyingAssetType lockAssetType;
+        address underlyingAsset;   
+        IOptionFacet.UnderlyingAssetType underlyingAssetType;
         uint256 underlyingNftID;
         uint256 expirationDate;
         uint256 total;
         uint256 timestamp;
-        uint256 lockDate;
         IOptionFacet.LiquidateMode[] liquidateModes;
         address[] strikeAssets;
         uint256[] strikeAmounts;
@@ -34,22 +31,21 @@ interface IOptionModule {
     struct SubmitJvaultOrder{
         IOptionFacet.OrderType orderType;  
         address writer;
-        IOptionFacet.UnderlyingAssetType lockAssetType;
+        IOptionFacet.UnderlyingAssetType underlyingAssetType;
         address holder;  
-        address lockAsset;
         address underlyingAsset;
         uint256 underlyingNftID;
-        uint256 lockAmount;
+        uint256 underlyingAmount;
         address strikeAsset;
         uint256 strikeAmount;
         address recipient;
         IOptionFacet.LiquidateMode liquidateMode;
         uint256 expirationDate;
-        uint256 lockDate;
         address premiumAsset;
         uint256 premiumFee;
-        uint256 quantity;
     }
+
+    event OptionPremiun(IOptionFacet.OrderType _orderType, uint64 _orderID, address _writer, address _holder, address _premiumAsset, uint256 _amount);
 
     function submitJvaultOrder(SubmitJvaultOrder memory _info,bytes memory _writerSignature,bytes memory _holderSignature) external;
 

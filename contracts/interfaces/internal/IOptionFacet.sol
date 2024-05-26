@@ -26,34 +26,28 @@ interface IOptionFacet {
         address holder;
         LiquidateMode liquidateMode;
         address writer;
-        UnderlyingAssetType lockAssetType;
+        UnderlyingAssetType underlyingAssetType;
         address recipient;
-        address lockAsset;
         address underlyingAsset;
         address strikeAsset;
-        uint256 lockAmount;
+        uint256 underlyingAmount;
         uint256 strikeAmount;
         uint256 expirationDate;
-        uint256 lockDate;
         uint256 underlyingNftID;
-        uint256 quantity;
     }
 
     struct CallOrder {
         address holder;
         LiquidateMode liquidateMode;
         address writer;
-        UnderlyingAssetType lockAssetType;
+        UnderlyingAssetType underlyingAssetType;
         address recipient;
-        address lockAsset;
         address underlyingAsset;
         address strikeAsset;
-        uint256 lockAmount;
+        uint256 underlyingAmount;
         uint256 strikeAmount;
         uint256 expirationDate;
-        uint256 lockDate;
         uint256 underlyingNftID;
-        uint256 quantity;
     }
     //---event---
     event SetOrderId(uint64 _orderId);
@@ -138,7 +132,5 @@ interface IOptionFacet {
     function getSigatureLock(address _vault,OrderType _orderType,address _underlyingAsset) external view returns (uint256);
     function setUnderlyTotal(address _vault,OrderType _orderType,address _underlyingAsset,uint256 _total) external;
     function getUnderlyTotal(address _vault,OrderType _orderType,address _underlyingAsset) external view returns(uint256);
-    function setTotalPremium(address _wallet,uint _amount) external;
-    function getTotalPremium(address _wallet) external view returns (uint256 amount) ;
 
 }

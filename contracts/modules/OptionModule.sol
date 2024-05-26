@@ -38,28 +38,23 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
         optionService=_optionService;
     }
     //----jvault-----
-    // hodler writer
-    // buyer  seller
     function submitJvaultOrder(SubmitJvaultOrder memory _info,bytes memory _writerSignature,bytes memory _holderSignature) external {
          handleJvaultSignature(_info,_writerSignature,_info.writer);
          SubmitJvaultOrder memory newInfo =  SubmitJvaultOrder({
                     orderType:_info.orderType,  
                     writer:address(0),
-                    lockAssetType:_info.lockAssetType,
+                    underlyingAssetType:_info.underlyingAssetType,
                     holder:_info.holder, 
-                    lockAsset:_info.lockAsset, 
+                    underlyingAsset:_info.underlyingAsset, 
                     underlyingNftID:_info.underlyingNftID,
-                    lockAmount:_info.lockAmount,
-                    underlyingAsset:_info.underlyingAsset,
+                    underlyingAmount:_info.underlyingAmount,
                     strikeAsset:_info.strikeAsset,
                     strikeAmount:_info.strikeAmount,
                     recipient:_info.recipient,
                     liquidateMode:_info.liquidateMode,
                     expirationDate:_info.expirationDate,
-                    lockDate:_info.lockDate,
                     premiumAsset:_info.premiumAsset,
-                    premiumFee:_info.premiumFee,
-                    quantity:_info.quantity
+                    premiumFee:_info.premiumFee
           });
          handleJvaultSignature(newInfo,_holderSignature,_info.holder);
          handleFee(
@@ -67,71 +62,63 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
                 _info.writer,
                 _info.premiumAsset,
                 _info.premiumFee,
-                _info.quantity
+                _info.underlyingAsset,
+                _info.underlyingAmount
          );
         //create order
         if(_info.orderType==IOptionFacet.OrderType.Call){
              IOptionFacet.CallOrder memory callOrder= IOptionFacet.CallOrder({
-                    holder:_info.holder,
-                    liquidateMode:_info.liquidateMode,
-                    writer:_info.writer,
-                    lockAssetType:_info.lockAssetType,
-                    recipient:_info.recipient,
-                    lockAsset:_info.lockAsset,
-                    underlyingAsset:_info.underlyingAsset,
-                    strikeAsset:_info.strikeAsset,
-                    lockAmount:_info.lockAmount,
-                    strikeAmount:_info.strikeAmount,
-                    expirationDate:_info.expirationDate,
-                    lockDate:_info.lockDate,
-                    underlyingNftID:_info.underlyingNftID,
-                    quantity:_info.quantity
+                         holder:_info.holder,
+                         liquidateMode:_info.liquidateMode,
+                         writer:_info.writer,
+                         underlyingAssetType:_info.underlyingAssetType,
+                         recipient:_info.recipient,
+                         underlyingAsset:_info.underlyingAsset,
+                         strikeAsset:_info.strikeAsset,
+                         underlyingAmount:_info.underlyingAmount,
+                         strikeAmount:_info.strikeAmount,
+                         expirationDate:_info.expirationDate,
+                         underlyingNftID:_info.underlyingNftID
              });
              optionService.createCallOrder(callOrder);
+             emit OptionPremiun(IOptionFacet.OrderType.Call ,  IOptionFacet(diamond).getOrderId(),  _info.writer,  _info.holder,  _info.premiumAsset,  _info.premiumFee);
         }else if(_info.orderType==IOptionFacet.OrderType.Put){
             IOptionFacet.PutOrder memory putOrder= IOptionFacet.PutOrder({
-                holder:_info.holder,
-                liquidateMode:_info.liquidateMode,
-                writer:_info.writer,
-                lockAssetType:_info.lockAssetType,
-                recipient:_info.recipient,
-                lockAsset:_info.lockAsset,
-                underlyingAsset:_info.underlyingAsset,
-                strikeAsset:_info.strikeAsset,
-                lockAmount:_info.lockAmount,
-                strikeAmount:_info.strikeAmount,
-                expirationDate:_info.expirationDate,
-                lockDate:_info.lockDate,
-                underlyingNftID:_info.underlyingNftID,
-                quantity:_info.quantity
+                         holder:_info.holder,
+                         liquidateMode:_info.liquidateMode,
+                         writer:_info.writer,
+                         underlyingAssetType:_info.underlyingAssetType,
+                         recipient:_info.recipient,
+                         underlyingAsset:_info.underlyingAsset,
+                         strikeAsset:_info.strikeAsset,
+                         underlyingAmount:_info.underlyingAmount,
+                         strikeAmount:_info.strikeAmount,
+                         expirationDate:_info.expirationDate,
+                         underlyingNftID:_info.underlyingNftID
              });
              optionService.createPutOrder(putOrder);
+             emit OptionPremiun(IOptionFacet.OrderType.Put ,  IOptionFacet(diamond).getOrderId(),  _info.writer,  _info.holder,  _info.premiumAsset,  _info.premiumFee);
         }else{
             revert("OptionModule:orderType error");
         }
-        optionService.setTotalPremium(_info.holder,_info.premiumAsset,optionService.getParts(_info.quantity,_info.premiumFee));
     }
-
         //----jvault-----
     function submitJvaultOrderSingle(SubmitJvaultOrder memory _info,bytes memory _holderSignature) external onlyVaultManager(_info.writer) {
         SubmitJvaultOrder memory newInfo =  SubmitJvaultOrder({
                     orderType:_info.orderType,  
                     writer:address(0),
-                    lockAssetType:_info.lockAssetType,
+                    underlyingAssetType:_info.underlyingAssetType,
                     holder:_info.holder, 
-                    lockAsset:_info.lockAsset, 
+                    underlyingAsset:_info.underlyingAsset, 
                     underlyingNftID:_info.underlyingNftID,
-                    lockAmount:_info.lockAmount,
-                    underlyingAsset:_info.underlyingAsset,
+                    underlyingAmount:_info.underlyingAmount,
                     strikeAsset:_info.strikeAsset,
                     strikeAmount:_info.strikeAmount,
                     recipient:_info.recipient,
                     liquidateMode:_info.liquidateMode,
                     expirationDate:_info.expirationDate,
-                    lockDate:_info.lockDate,
                     premiumAsset:_info.premiumAsset,
-                    premiumFee:_info.premiumFee,
-                    quantity:_info.quantity
+                    premiumFee:_info.premiumFee
           });
          handleJvaultSignature(newInfo,_holderSignature,_info.holder);
          handleFee(
@@ -139,55 +126,52 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
                 _info.writer,
                 _info.premiumAsset,
                 _info.premiumFee,
-                _info.quantity
+                _info.underlyingAsset,
+                _info.underlyingAmount
          );
         //create order
         if(_info.orderType==IOptionFacet.OrderType.Call){
              IOptionFacet.CallOrder memory callOrder= IOptionFacet.CallOrder({
-                holder:_info.holder,
-                liquidateMode:_info.liquidateMode,
-                writer:_info.writer,
-                lockAssetType:_info.lockAssetType,
-                recipient:_info.recipient,
-                lockAsset:_info.lockAsset,
-                strikeAsset:_info.strikeAsset,
-                lockAmount:_info.lockAmount,
-                underlyingAsset:_info.underlyingAsset,
-                strikeAmount:_info.strikeAmount,
-                expirationDate:_info.expirationDate,
-                lockDate:_info.lockDate,
-                underlyingNftID:_info.underlyingNftID,
-                quantity:_info.quantity
+                         holder:_info.holder,
+                         liquidateMode:_info.liquidateMode,
+                         writer:_info.writer,
+                         underlyingAssetType:_info.underlyingAssetType,
+                         recipient:_info.recipient,
+                         underlyingAsset:_info.underlyingAsset,
+                         strikeAsset:_info.strikeAsset,
+                         underlyingAmount:_info.underlyingAmount,
+                         strikeAmount:_info.strikeAmount,
+                         expirationDate:_info.expirationDate,
+                         underlyingNftID:_info.underlyingNftID
              });
              optionService.createCallOrder(callOrder);
+                emit OptionPremiun(IOptionFacet.OrderType.Call ,  IOptionFacet(diamond).getOrderId(),  _info.writer,  _info.holder,  _info.premiumAsset,  _info.premiumFee);
+
         }else if(_info.orderType==IOptionFacet.OrderType.Put){
             IOptionFacet.PutOrder memory putOrder= IOptionFacet.PutOrder({
-                holder:_info.holder,
-                liquidateMode:_info.liquidateMode,
-                writer:_info.writer,
-                lockAssetType:_info.lockAssetType,
-                recipient:_info.recipient,
-                lockAsset:_info.lockAsset,
-                underlyingAsset:_info.underlyingAsset,
-                strikeAsset:_info.strikeAsset,
-                lockAmount:_info.lockAmount,
-                strikeAmount:_info.strikeAmount,
-                expirationDate:_info.expirationDate,
-                lockDate:_info.lockDate,
-                underlyingNftID:_info.underlyingNftID,
-                quantity:_info.quantity
+                         holder:_info.holder,
+                         liquidateMode:_info.liquidateMode,
+                         writer:_info.writer,
+                         underlyingAssetType:_info.underlyingAssetType,
+                         recipient:_info.recipient,
+                         underlyingAsset:_info.underlyingAsset,
+                         strikeAsset:_info.strikeAsset,
+                         underlyingAmount:_info.underlyingAmount,
+                         strikeAmount:_info.strikeAmount,
+                         expirationDate:_info.expirationDate,
+                         underlyingNftID:_info.underlyingNftID
              });
              optionService.createPutOrder(putOrder);
+            emit OptionPremiun(IOptionFacet.OrderType.Call ,  IOptionFacet(diamond).getOrderId(),  _info.writer,  _info.holder,  _info.premiumAsset,  _info.premiumFee);
+
         }else{
             revert("OptionModule:orderType error");
         }
-        optionService.setTotalPremium(_info.holder,_info.premiumAsset,optionService.getParts(_info.quantity,_info.premiumFee));
-
     }
     function handleJvaultSignature(SubmitJvaultOrder memory _info,bytes memory _signature,address _signer) internal view {
         IOptionFacet optionFacet = IOptionFacet(diamond);
         bytes32 infoTypeHash = keccak256(
-            "SubmitJvaultOrder(uint8 orderType,address writer,uint8 lockAssetType,address holder,address lockAsset,uint256 underlyingNftID,uint256 lockAmount,address strikeAsset,uint256 strikeAmount,address recipient,uint8 liquidateMode,uint256 expirationDate,address premiumAsset,uint256 premiumFee,uint256 quantity)"
+            "SubmitJvaultOrder(uint8 orderType,address writer,uint8 underlyingAssetType,address holder,address underlyingAsset,uint256 underlyingNftID,uint256 underlyingAmount,address strikeAsset,uint256 strikeAmount,address recipient,uint8 liquidateMode,uint256 expirationDate,address premiumAsset,uint256 premiumFee)"
         );
 
         bytes32 _hashInfo = keccak256(abi.encode(infoTypeHash,_info));
@@ -216,62 +200,58 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
     //-----submit Order-----
     function submitOptionOrder(SubmitOrder memory _info,bytes memory _writerSignature) external  onlyVaultOrManager(_info.holder){   
         require(_info.strikeSelect<=_info.signature.strikeAssets.length,"OptionModule:strikeSelect error");
-        require(_info.premiumSelet<=_info.signature.premiumAssets.length,"OptionModule:premiumSelet error");
+        require(_info.premiumSelect<=_info.signature.premiumAssets.length,"OptionModule:premiumSelect error");
         require(_info.liquidateSelect<=_info.signature.liquidateModes.length,"OptionModule:liquidateSelect error");
         //verify signature
         handleSignature(_info.signature, _info.writer, _writerSignature);
-        checkTotalAndTimestamp(_info.signature.orderType,_info.signature,_info.writer,_info.lockAmount);
+        checkTotalAndTimestamp(_info.signature.orderType,_info.signature,_info.writer,_info.underlyingAmount);
         //transfer fee
         handleFee(
                 _info.holder,
                 _info.writer,
-                _info.signature.premiumAssets[_info.premiumSelet],
-                _info.signature.premiumFees[_info.premiumSelet],
-                _info.quantity
+                _info.signature.premiumAssets[_info.premiumSelect],
+                _info.signature.premiumFees[_info.premiumSelect],
+                _info.signature.underlyingAsset,
+                _info.underlyingAmount
         );
         //create order
         if(_info.signature.orderType==IOptionFacet.OrderType.Call){
              IOptionFacet.CallOrder memory callOrder= IOptionFacet.CallOrder({
-                holder:_info.holder,
-                liquidateMode:_info.signature.liquidateModes[_info.liquidateSelect],
-                writer:_info.writer,
-                lockAssetType:_info.signature.lockAssetType,
-                recipient:_info.recipient,
-                lockAsset:_info.signature.lockAsset,
-                underlyingAsset:_info.signature.underlyingAsset,
-                strikeAsset:_info.signature.strikeAssets[_info.strikeSelect],
-                lockAmount:_info.lockAmount,
-                strikeAmount:_info.signature.strikeAmounts[_info.strikeSelect],
-                expirationDate:_info.signature.expirationDate,
-                lockDate:_info.signature.lockDate,
-                underlyingNftID:_info.signature.underlyingNftID,
-                quantity:_info.quantity
+                         holder:_info.holder,
+                         liquidateMode:_info.signature.liquidateModes[_info.liquidateSelect],
+                         writer:_info.writer,
+                         underlyingAssetType:_info.signature.underlyingAssetType,
+                         recipient:_info.recipient,
+                         underlyingAsset:_info.signature.underlyingAsset,
+                         strikeAsset:_info.signature.strikeAssets[_info.strikeSelect],
+                         underlyingAmount:_info.underlyingAmount,
+                         strikeAmount:_info.signature.strikeAmounts[_info.strikeSelect],
+                         expirationDate:_info.signature.expirationDate,
+                         underlyingNftID:_info.signature.underlyingNftID
              });
              optionService.createCallOrder(callOrder);
+            emit OptionPremiun(IOptionFacet.OrderType.Call ,  IOptionFacet(diamond).getOrderId(),  _info.writer,  _info.holder, _info.signature.premiumAssets[_info.premiumSelect] ,  _info.signature.premiumFees[_info.premiumSelect]);
+
         }else if(_info.signature.orderType==IOptionFacet.OrderType.Put){
             IOptionFacet.PutOrder memory putOrder= IOptionFacet.PutOrder({
-                        holder:_info.holder,
-                        liquidateMode:_info.signature.liquidateModes[_info.liquidateSelect],
-                        writer:_info.writer,
-                        lockAssetType:_info.signature.lockAssetType,
-                        recipient:_info.recipient,
-                        lockAsset:_info.signature.lockAsset,
-                        underlyingAsset:_info.signature.underlyingAsset,
-                        strikeAsset:_info.signature.strikeAssets[_info.strikeSelect],
-                        lockAmount:_info.lockAmount,
-                        strikeAmount:_info.signature.strikeAmounts[_info.strikeSelect],
-                        expirationDate:_info.signature.expirationDate,
-                        lockDate:_info.signature.lockDate,
-                        underlyingNftID:_info.signature.underlyingNftID,
-                        quantity:_info.quantity
+                         holder:_info.holder,
+                         liquidateMode:_info.signature.liquidateModes[_info.liquidateSelect],
+                         writer:_info.writer,
+                         underlyingAssetType:_info.signature.underlyingAssetType,
+                         recipient:_info.recipient,
+                         underlyingAsset:_info.signature.underlyingAsset,
+                         strikeAsset:_info.signature.strikeAssets[_info.strikeSelect],
+                         underlyingAmount:_info.underlyingAmount,
+                         strikeAmount:_info.signature.strikeAmounts[_info.strikeSelect],
+                         expirationDate:_info.signature.expirationDate,
+                         underlyingNftID:_info.signature.underlyingNftID
              });
              optionService.createPutOrder(putOrder);
+            emit OptionPremiun(IOptionFacet.OrderType.Put ,  IOptionFacet(diamond).getOrderId(),  _info.writer,  _info.holder, _info.signature.premiumAssets[_info.premiumSelect] ,  _info.signature.premiumFees[_info.premiumSelect]);
+
         }else{
             revert("OptionModule:orderType error");
         }
-        optionService.setTotalPremium(_info.holder,_info.signature.premiumAssets[_info.premiumSelet],
-            optionService.getParts(_info.quantity,_info.signature.premiumFees[_info.premiumSelet])); 
-
     }
 
     function handleFee(
@@ -279,13 +259,14 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
         address _to,
         address _premiumAsset,
         uint256 _premiumFee,
-        uint256 _quantity
+        address _underlyingAsset,
+        uint256 _underlyingAmount
     ) internal {
         IOptionFacet optionFacet = IOptionFacet(diamond);
         IPlatformFacet platformFacet=IPlatformFacet(diamond);
         address eth= platformFacet.getEth();
         //calculate premiumFee
-        _premiumFee= optionService.getParts(_quantity, _premiumFee);   
+        _premiumFee= optionService.getParts(_underlyingAsset,_underlyingAmount, _premiumFee);   
         //calculate platformFee
         uint256 platformFee = (_premiumFee * optionFacet.getFeeRate()) / 1 ether;
            
@@ -320,12 +301,12 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
 
     function getHash(Signature memory _signatureInfo) internal pure  returns(bytes32){
         bytes32 infoTypeHash = keccak256(
-            "Signature(uint8 orderType,address lockAsset,uint8 lockAssetType,uint256 underlyingNftID,uint256 expirationDate,uint256 total,uint256 timestamp,uint8[] liquidateModes,address[] strikeAssets,uint256[] strikeAmounts,address[] premiumAssets,uint256[] premiumFees)"
+            "Signature(uint8 orderType,address underlyingAsset,uint8 underlyingAssetType,uint256 underlyingNftID,uint256 expirationDate,uint256 total,uint256 timestamp,uint8[] liquidateModes,address[] strikeAssets,uint256[] strikeAmounts,address[] premiumAssets,uint256[] premiumFees)"
         );
         bytes32 _hashInfo = keccak256(abi.encode(infoTypeHash,       
             _signatureInfo.orderType,
-            _signatureInfo.lockAsset,
-            _signatureInfo.lockAssetType,
+            _signatureInfo.underlyingAsset,
+            _signatureInfo.underlyingAssetType,
             _signatureInfo.underlyingNftID,
             _signatureInfo.expirationDate,
             _signatureInfo.total,
@@ -340,20 +321,20 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
     }
     function checkTotalAndTimestamp(IOptionFacet.OrderType _orderType,Signature memory _signatureInfo,address _writer,uint256 _underlyingAmount) internal {
         IOptionFacet optionFacet = IOptionFacet(diamond);
-        uint256 timestamp=optionFacet.getSigatureLock(_writer,_orderType,_signatureInfo.lockAsset);
-        uint256 total=optionFacet.getUnderlyTotal(_writer,_orderType,_signatureInfo.lockAsset);
+        uint256 timestamp=optionFacet.getSigatureLock(_writer,_orderType,_signatureInfo.underlyingAsset);
+        uint256 total=optionFacet.getUnderlyTotal(_writer,_orderType,_signatureInfo.underlyingAsset);
         require(_signatureInfo.timestamp >=timestamp, "OptionModule:signature overdue");
         require(_signatureInfo.expirationDate>= block.timestamp,"OptionModule:expirationDate error");
         if(_signatureInfo.timestamp >timestamp && total==0){
             _underlyingAmount=_signatureInfo.total-_underlyingAmount;
-            optionFacet.setUnderlyTotal(_writer,_orderType,_signatureInfo.lockAsset,_underlyingAmount);
-            optionFacet.setSigatureLock(_writer,_orderType,_signatureInfo.lockAsset,_signatureInfo.timestamp);
+            optionFacet.setUnderlyTotal(_writer,_orderType,_signatureInfo.underlyingAsset,_underlyingAmount);
+            optionFacet.setSigatureLock(_writer,_orderType,_signatureInfo.underlyingAsset,_signatureInfo.timestamp);
         }
         if(_signatureInfo.timestamp == timestamp && total !=0){
             _underlyingAmount=total-_underlyingAmount;
-            optionFacet.setUnderlyTotal(_writer,_orderType,_signatureInfo.lockAsset,_underlyingAmount);
+            optionFacet.setUnderlyTotal(_writer,_orderType,_signatureInfo.underlyingAsset,_underlyingAmount);
             if(_underlyingAmount==0){
-                optionFacet.setSigatureLock(_writer,_orderType,_signatureInfo.lockAsset,timestamp+1);
+                optionFacet.setSigatureLock(_writer,_orderType,_signatureInfo.underlyingAsset,timestamp+1);
             }
         }     
     }

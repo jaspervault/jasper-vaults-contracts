@@ -22,7 +22,6 @@ contract OptionFacet is IOptionFacet {
         bytes32 domain; 
         address feeRecipient;
         uint256 feeRate;
-        mapping(address => uint256) totalPremium;
         //---safe verify----
         mapping(address =>mapping(OrderType=>mapping(address=>uint256[2])) ) sigatureInfo;
     }
@@ -33,14 +32,7 @@ contract OptionFacet is IOptionFacet {
             ds.slot := position
         }
     }
-    function setTotalPremium(address _wallet,uint _amount) external {
-        Option storage ds = diamondStorage();
-        ds.totalPremium[_wallet] += _amount;
-    }
-    function getTotalPremium(address _wallet) external view returns (uint256 amount) {
-        Option storage ds = diamondStorage();
-        return ds.totalPremium[_wallet];
-    }
+
     //---safe verify----
     function setSigatureLock(address _vault,OrderType _orderType,address _underlyingAsset,uint256 _timestamp) external {
         Option storage ds = diamondStorage();

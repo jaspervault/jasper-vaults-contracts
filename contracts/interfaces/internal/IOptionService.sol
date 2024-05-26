@@ -19,33 +19,30 @@ interface IOptionService {
         address holder;
         IOptionFacet.LiquidateMode liquidateMode;
         address writer;
-        IOptionFacet.UnderlyingAssetType lockAssetType;
+        IOptionFacet.UnderlyingAssetType underlyingAssetType;
         address recipient;
-        address lockAsset;
+        address underlyingAsset;
         address strikeAsset;
-        uint256 lockAmount;
+        uint256 underlyingAmount;
         uint256 strikeAmount;
         uint256 expirationDate;
-        uint256 lockDate;
         uint256 underlyingNftID;
         uint256 writerType;
         uint256 holderType;
-        uint256 quantity;
     }
 
     struct LiquidateOrder{
         address holder;
         IOptionFacet.LiquidateMode liquidateMode;
         address writer;
-        IOptionFacet.UnderlyingAssetType lockAssetType;
+        IOptionFacet.UnderlyingAssetType underlyingAssetType;
         address recipient;
-        address lockAsset;
+        address underlyingAsset;
         address strikeAsset;
-        uint256 lockAmount;
+        uint256 underlyingAmount;
         uint256 strikeAmount;
         uint256 expirationDate;
         uint256 underlyingNftID;
-        uint256 quantity;
     }
 
     function createPutOrder(
@@ -63,14 +60,12 @@ interface IOptionService {
     ) external payable;
 
 
-    function getParts(uint256 quantity,uint256 strikeAmount)  external view returns(uint256);
-    function setTotalPremium(address _vault,address _premiumAsset,uint _premiumFee) external ;
+    function getParts(address underlyingAsset,uint256 underlyingAmount,uint256 strikeAmount)  external view returns(uint256);
 
     function getEarningsAmount(
-        address lockAsset, 
-        uint256 lockAmount,
+        address underlyingAsset, 
+        uint256 underlyingAmount,
         address strikeAsset,
-        uint256 strikeNotionalAmount,
-        uint256 quantity
+        uint256 strikeNotionalAmount
     ) external view returns (uint256);
 }
