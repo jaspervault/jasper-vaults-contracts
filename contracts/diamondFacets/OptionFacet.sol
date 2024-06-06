@@ -22,6 +22,7 @@ contract OptionFacet is IOptionFacet {
         bytes32 domain; 
         address feeRecipient;
         uint256 feeRate;
+        mapping(address => uint256) totalPremium;
         //---safe verify----
         mapping(address =>mapping(OrderType=>mapping(address=>uint256[2])) ) sigatureInfo;
     }
@@ -33,29 +34,12 @@ contract OptionFacet is IOptionFacet {
         }
     }
 
+
     //---safe verify----
-    function setSigatureLock(address _vault,OrderType _orderType,address _underlyingAsset,uint256 _timestamp) external {
-        Option storage ds = diamondStorage();
-        ds.sigatureInfo[_vault][_orderType][_underlyingAsset][0] = _timestamp;
-        emit SetSigatureLock(_vault,_orderType,_underlyingAsset, _timestamp);
-    }
-
-    function getSigatureLock(address _vault,OrderType _orderType,address _underlyingAsset) external view returns (uint256) {
-        Option storage ds = diamondStorage();
-        return ds.sigatureInfo[_vault][_orderType][_underlyingAsset][0];
-    }
-    
-    function setUnderlyTotal(address _vault,OrderType _orderType,address _underlyingAsset,uint256 _total) external {
-        Option storage ds = diamondStorage();
-        ds.sigatureInfo[_vault][_orderType][_underlyingAsset][1] = _total;
-        emit SetUnderlyTotal(_vault,_orderType,_underlyingAsset, _total);
-    }
 
 
-    function getUnderlyTotal(address _vault,OrderType _orderType,address _underlyingAsset)  external view returns(uint256){
-         Option storage ds = diamondStorage();
-         return ds.sigatureInfo[_vault][_orderType][_underlyingAsset][1];
-    }
+
+
 
 
     function getDomain() external view returns (bytes32) {

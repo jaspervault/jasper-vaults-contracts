@@ -106,15 +106,10 @@ contract VaultManageModule is
                     2 ,
                     IVault(_vault).owner(),
                     // TODO: need set fee with eth/usd 
-                    0.001 ether
+                    1 ether
                 );
             IPaymasterFacet(diamond). setQuotaLimit( IVault(_vault).owner(),1);
         }
-        // else if (IPaymasterFacet(diamond).getFuncFeeWhitelist(selector) == IPaymasterFacet.FreeGasFuncType.Issuse){
-
-        // }else{
-
-        // }
     }
     function registToPlatform(address _vault, uint256 _salt) external {
         require(_salt != 0, "VaultManageModule:_salt error");
@@ -193,10 +188,14 @@ contract VaultManageModule is
         address _vault,
         uint256 _vaultType
     ) external onlyVault(_vault) {
+        uint vaultIndex = IPlatformFacet(diamond).getVaultToSalt(_vault);
         require(
-            IPlatformFacet(diamond).getVaultToSalt(_vault) != 0,
-            "VaultManageModule:Main Vault not allow edit"
+             vaultIndex != 0 ,
+            "VaultManageModule:Main Vault 0 not allow edit"
         );
+        if (vaultIndex == 1){
+          require( _vaultType == 1,"VaultManageModule: _vault 1 only set type 1");
+        }
         IVaultFacet(diamond).setVaultType(_vault, _vaultType);
     }
 }

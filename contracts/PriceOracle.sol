@@ -134,4 +134,12 @@ contract PriceOracle is Initializable, UUPSUpgradeable
         return _array;
     }
     receive() external payable {}
+
+    function getPriceByChainLinkRoundIDList(
+        address _masterToken,
+        address _quoteToken,
+        uint80[] calldata _chainLinkIDList
+    ) external view returns (uint256) {
+        return getPriceByMedian(_masterToken, _quoteToken);
+    }
 }

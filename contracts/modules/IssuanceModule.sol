@@ -52,8 +52,8 @@ contract IssuanceModule is
         bool _status
     ) external onlyVaultOrManager(_vault) {
         require(_issuer != address(0), "IssuanceModule:issuer error");
-        IIssuanceFacet issuanceFacet = IIssuanceFacet(diamond); 
-        require(IIssuanceFacet.IssueMode.Default ==issuanceFacet.getIssueMode(_vault),"IssuanceModule:IssueMode error");      
+        IIssuanceFacet issuanceFacet = IIssuanceFacet(diamond);
+        require(IIssuanceFacet.IssueMode.Default ==issuanceFacet.getIssueMode(_vault),"IssuanceModule:IssueMode error");
         issuanceFacet.setProxyIssueWhiteList(_vault, _issuer, _status);
     }
 
