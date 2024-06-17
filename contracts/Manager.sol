@@ -461,5 +461,8 @@ contract Manager is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable {
         }
         return (vaults, positionList, decimalsList, isLockList, vaultTypeList);
     }
+    function getDiamondOwner() external view returns(address) {
+        return IOwnable(diamond).owner();
+    }
  
 }

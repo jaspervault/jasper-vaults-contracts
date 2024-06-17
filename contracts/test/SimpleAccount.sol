@@ -12,6 +12,7 @@ import "@openzeppelin/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "../eip/4337/core/BaseAccount.sol";
 import "../eip/4337/utils/TokenCallbackHandler.sol";
 
+import "hardhat/console.sol";
 /**
   * minimal account.
   *  this is sample minimal account.
@@ -55,6 +56,8 @@ contract SimpleAccount is BaseAccount, TokenCallbackHandler, UUPSUpgradeable, In
      * execute a transaction (called directly from owner, or by entryPoint)
      */
     function execute(address dest, uint256 value, bytes calldata func) external {
+
+        console.log("xxl 0000 ");
         _requireFromEntryPointOrOwner();
         _call(dest, value, func);
     }

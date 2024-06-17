@@ -10,6 +10,7 @@ import {IOwnable} from "../interfaces/internal/IOwnable.sol";
 import {IPaymasterFacet} from "../interfaces/internal/IPaymasterFacet.sol";
 import {IVault} from "../interfaces/internal/IVault.sol";
 
+import "hardhat/console.sol";
 contract VaultManageModule is
     ModuleBase,
     IVaultManageModule,
@@ -84,6 +85,7 @@ contract VaultManageModule is
             platformFacet.getIsVault(msg.sender),
             "VaultManageModule:invalid vault"
         );
+
         require(
             platformFacet.getModuleStatus(_module),
             "VaultManageModule:invalid module"
@@ -101,12 +103,13 @@ contract VaultManageModule is
         assembly {
             selector := mload(add(func, 32))
         }
+
         if (IPaymasterFacet(diamond).getFuncFeeWhitelist(selector) == IPaymasterFacet.FreeGasFuncType.Normal) {
             IPaymasterFacet(diamond).setQuotaWhiteList(
                     2 ,
                     IVault(_vault).owner(),
                     // TODO: need set fee with eth/usd 
-                    1 ether
+                    5 ether
                 );
             IPaymasterFacet(diamond). setQuotaLimit( IVault(_vault).owner(),1);
         }

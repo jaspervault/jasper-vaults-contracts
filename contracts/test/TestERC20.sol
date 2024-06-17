@@ -5,22 +5,22 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import {IOwnable} from "../interfaces/internal/IOwnable.sol";
 
+contract TestERC20 is Initializable, ERC20Upgradeable, OwnableUpgradeable, UUPSUpgradeable {
+    
+    uint8 public tokenDecimals;
 
-
-contract ERC20TOKEN is Initializable, ERC20Upgradeable, OwnableUpgradeable, UUPSUpgradeable {
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
     }
-    uint8 tokenDecimals ;
-    function initialize(string memory tokenName, uint8  _decimals) initializer public {
-        __ERC20_init(tokenName, tokenName);
-        tokenDecimals = _decimals;
+
+    function initialize(string calldata _name,string calldata _symbol,uint256 _totalSupply,uint8 _tokenDecimals) initializer public {
+        __ERC20_init(_name,_symbol);
         __Ownable_init();
         __UUPSUpgradeable_init();
-        _mint(msg.sender, 10000 ether * 10 ** decimals());
+         _mint(msg.sender, _totalSupply * 10 ** _tokenDecimals);
+         tokenDecimals = _tokenDecimals;
     }
 
     function _authorizeUpgrade(address newImplementation)
@@ -28,6 +28,7 @@ contract ERC20TOKEN is Initializable, ERC20Upgradeable, OwnableUpgradeable, UUPS
         onlyOwner
         override
     {}
+    
     function decimals() public view  override returns (uint8) {
         return tokenDecimals;
     }
@@ -36,8 +37,4 @@ contract ERC20TOKEN is Initializable, ERC20Upgradeable, OwnableUpgradeable, UUPS
         _mint(to, amount);
     }
 
-    function transferOwnershipV2(address diamond, address _newOwner) external onlyOwner {
-        require(_newOwner != address(0), "invalid address");
-        IOwnable(diamond).transferOwnership(_newOwner);
-    }
 }

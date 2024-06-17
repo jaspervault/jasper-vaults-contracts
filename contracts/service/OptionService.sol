@@ -138,10 +138,13 @@ contract OptionService is  ModuleBase,IOptionService, Initializable,UUPSUpgradea
             _verifyOrder.expirationDate > block.timestamp,
             "OptionService:invalid expirationDate"
         );
-       require(
-            _verifyOrder.lockDate  > block.timestamp &&  _verifyOrder.expirationDate >= _verifyOrder.lockDate,
-            "OptionService:invalid lockDate"
-        );
+        if (_verifyOrder.lockDate != 0){
+            require(
+                    _verifyOrder.lockDate  > block.timestamp &&  _verifyOrder.expirationDate >= _verifyOrder.lockDate,
+                    "OptionService:invalid lockDate"
+            );
+        }
+
         require(
             _verifyOrder.writer != _verifyOrder.holder,
             "OptionService:holder error"

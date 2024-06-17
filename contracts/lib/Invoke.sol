@@ -2,6 +2,8 @@
 pragma solidity ^0.8.12;
 import {IVault} from  "../interfaces/internal/IVault.sol";
 
+import "hardhat/console.sol";
+
 library Invoke {
     // using SafeMath for uint256;
     function invokeApprove(IVault _vault,address _token,address _spender,uint256 _amount) internal {
@@ -19,9 +21,20 @@ library Invoke {
         _vault.execute(_nft, 0, _calldata);       
     }
     function invokeTransfer(IVault _vault,address _token,address _to,uint256 _amount) internal{
+
+        // console.log("sol 01 invokeTransfer ... %s ",_token);
         if(_amount>0){
+
+          // console.log("sol 02 invokeTransfer ... %s - %s -%s",_to, _amount,address(_vault));
+          
           bytes memory _calldata = abi.encodeWithSignature("transfer(address,uint256)", _to, _amount);
+          console.logBytes(_calldata);
+
           _vault.execute(_token, 0, _calldata);
+          // _vault.owner();
+        //   bytes memory result = _vault.execute(_token, 0, _calldata);
+        //   console.log("xxl 00 1");
+        //   console.logBytes(result);
         }
     }
     function invokeTransferFrom(IVault _vault,address _token, address from, address _to,uint256 _amount) internal{

@@ -89,7 +89,7 @@ contract VaultFactory is Initializable, UUPSUpgradeable {
         //
         IVaultFacet(diamond).setSourceType(address(ret), 1);
         // salt ==0   vault == mainVault
-        if (salt == 0 || salt == 1) {
+        if (salt == 0) {
             IVaultFacet(diamond).setVaultType(address(ret), 1);
         }
         emit CreateVault(wallet, salt, address(ret));
