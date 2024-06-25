@@ -75,6 +75,7 @@ contract ChainLinkOracleAdapter is IOracleAdapter,Initializable, UUPSUpgradeable
             return getPriceByBase(_masterToken, ethToken);
         }
         (, price) = getPriceByUsd(_masterToken, _quoteToken);
+        require(price !=0,"Invalid price");
         return price;
         //    if(status){
         //        return price;

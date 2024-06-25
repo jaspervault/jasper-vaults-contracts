@@ -40,7 +40,11 @@ contract PythOracleAdapter is IOracleAdapter, Initializable, UUPSUpgradeable {
     function _authorizeUpgrade(
         address newImplementation
     ) internal override onlyOwner {}
-
+    function setPyth(
+        address _addr
+    ) external onlyOwner {
+        pyth = _addr;
+    }
     function setOralceList(
         address[] memory _masterTokens,
         address[] memory _quoteTokens,

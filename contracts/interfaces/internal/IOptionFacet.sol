@@ -55,7 +55,22 @@ interface IOptionFacet {
         uint256 underlyingNftID;
         uint256 quantity;
     }
-
+    struct ManagedOptionsSettings {
+        IOptionFacet.OrderType orderType;
+        address writer;
+        address lockAsset;
+        address underlyingAsset;
+        IOptionFacet.UnderlyingAssetType lockAssetType;
+        uint256 underlyingNftID;
+        IOptionFacet.LiquidateMode liquidateMode;
+        address strikeAsset;
+        address premiumAsset;
+        uint256 premiumFloor;
+        bool isOpen;
+        uint256 maximum;
+        uint256 maxStopLossPoint;
+        uint32[] productTypeList;
+    } 
     //---event---
     event SetOrderId(uint64 _orderId);
     event AddPutOrder(uint64 _orderId, PutOrder _putOrder,address _holderWallet,address _writerWallet);
@@ -133,6 +148,7 @@ interface IOptionFacet {
         string memory _version,
         address _contract
     ) external;
-
-
+    
+    function getManagedOptionsSettings(address _vault) external view returns(IOptionFacet.ManagedOptionsSettings memory set);
+    function setManagedOptionsSettings(IOptionFacet.ManagedOptionsSettings memory _set) external;
 }

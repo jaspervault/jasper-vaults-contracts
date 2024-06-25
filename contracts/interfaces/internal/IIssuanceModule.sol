@@ -24,7 +24,6 @@ interface IIssuanceModule {
 
     function redeem(
         address _vault,
-        address payable _to,
         uint256[] memory _assetsType,
         address[] memory _assets,
         uint256[] memory _amounts

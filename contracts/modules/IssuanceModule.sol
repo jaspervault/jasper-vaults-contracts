@@ -184,11 +184,11 @@ contract IssuanceModule is
 	 */
     function redeem(
         address _vault,
-        address payable _to,
         uint256[] memory _assetsType,
         address[] memory _assets,
         uint256[] memory _amounts
     ) external nonReentrant onlyVaultOrManager(_vault) {
+        address payable _to = payable(IVault(_vault).owner());
         IIssuanceFacet issuanceFacet = IIssuanceFacet(diamond);
         IIssuanceFacet.IssueMode mode = issuanceFacet.getIssueMode(_vault);
         if (mode == IIssuanceFacet.IssueMode.Proxy) {
