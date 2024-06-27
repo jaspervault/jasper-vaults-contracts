@@ -8,8 +8,8 @@ interface IOptionModule {
         address holder;
         address writer;  
         address recipient;
-        Signature signature;
         uint256 quantity;
+        Signature signature;
         bytes  writerSign;
         PremiumOracleSign premiumSign;
     }
@@ -17,7 +17,7 @@ interface IOptionModule {
         uint256 id;
         uint8 productType;
         address optionAsset;
-        uint256 strikePirce;
+        uint256 strikePrice;
         address strikeAsset;
         uint256 strikeAmount;
         address lockAsset;
@@ -49,19 +49,7 @@ interface IOptionModule {
         uint256[] premiumRates;
         uint256[] premiumFloors;
     } 
-    struct HostingSignature {
-        IOptionFacet.OrderType orderType;
-        address writer;
-        address lockAsset;
-        address underlyingAsset;
-        IOptionFacet.UnderlyingAssetType lockAssetType;
-        uint256 underlyingNftID;
-        uint256 total;
-        IOptionFacet.LiquidateMode liquidateMode;
-        address strikeAsset;
-        address premiumAsset;
-        uint256 premiumFloor;
-    } 
+
     struct SubmitJvaultOrder{
         IOptionFacet.OrderType orderType;  
         address writer;
@@ -81,12 +69,11 @@ interface IOptionModule {
         uint256 premiumFee;
         uint256 quantity;
     }
-    struct SubmitHostingOrder{
+    struct ManagedOrder{
         address holder;
+        address writer;
         address recipient;
-        HostingSignature signature;
         uint256 quantity;
-        bytes  writerSign;
         PremiumOracleSign premiumSign;
     }
     event OptionPremiun(IOptionFacet.OrderType _orderType, uint64 _orderID, address _writer, address _holder, address _premiumAsset, uint256 _amount);

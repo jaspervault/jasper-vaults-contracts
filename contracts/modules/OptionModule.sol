@@ -22,8 +22,8 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
         uint256 total;
         uint256 orderCount;
     }
-    mapping(bytes=>SignData) signData;
-    mapping(address=>bool) oracleWhiteList;
+    mapping(bytes=>SignData) public signData;
+    mapping(address=>bool) public oracleWhiteList;
     // TODO: delete this
     string name;
     string version;
@@ -128,8 +128,7 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
     //     signBlackList[_holderSignature] = true;
 
     // }
-
-        //----jvault-----
+    //----jvault-----degen  Single  
     function submitJvaultOrderSingle(SubmitJvaultOrder memory _info,bytes memory _holderSignature) external onlyVaultOrManager(_info.writer) {
         SubmitJvaultOrder memory newInfo =  SubmitJvaultOrder({
                     orderType:_info.orderType,  
@@ -162,7 +161,7 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
                 _info.premiumAsset,
                 optionService.getParts( _info.quantity, _info.premiumFee)
                
-         );
+        );
 
         //create order
         if(_info.orderType==IOptionFacet.OrderType.Call){
@@ -208,51 +207,65 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
         }
         signData[_holderSignature].lock = true;
     }
-    function handleJvaultSignature(SubmitJvaultOrder memory _info,bytes memory _signature,address _signer) internal view {
+    function SubmitManagedOrder(ManagedOrder memory _info) external  onlyVaultOrManager(_info.holder){   
+        //verify signature
         IOptionFacet optionFacet = IOptionFacet(diamond);
-        bytes32 infoTypeHash = keccak256(
-            "SubmitJvaultOrder(uint8 orderType,address writer,uint8 lockAssetType,address holder,address lockAsset,address underlyingAsset,uint256 underlyingNftID,uint256 lockAmount,address strikeAsset,uint256 strikeAmount,address recipient,uint8 liquidateMode,uint256 expirationDate,uint256 lockDate,address premiumAsset,uint256 premiumFee,uint256 quantity)"
+        IOptionFacet.ManagedOptionsSettings memory setting = optionFacet.getManagedOptionsSettings(_info.writer);
+        verifyManagedOrder(_info, setting);
+        _info.premiumSign.premiumFee = _info.premiumSign.premiumFee >= setting.premiumFloor?_info.premiumSign.premiumFee:setting.premiumFloor;
+        // pay the premium from recipient addr to holder
+        IVault(_info.recipient).invokeTransfer(setting.premiumAsset,  _info.holder, optionService.getParts(_info.quantity,_info.premiumSign.premiumFee));
+        //transfer fee
+        handleFee(
+                _info.holder,
+                setting.writer,
+                setting.premiumAsset,
+                optionService.getParts(_info.quantity, _info.premiumSign.premiumFee)
+                
         );
+        //create order
+        if(setting.orderType==IOptionFacet.OrderType.Call){
+             IOptionFacet.CallOrder memory callOrder= IOptionFacet.CallOrder({
+                holder:_info.holder,
+                liquidateMode:setting.liquidateMode,
+                writer:setting.writer,
+                lockAssetType:setting.lockAssetType,
+                recipient:_info.recipient,
+                lockAsset:setting.lockAsset,
+                underlyingAsset:setting.underlyingAsset,
+                strikeAsset:setting.strikeAsset,
+                lockAmount:_info.premiumSign.lockAmount,
+                strikeAmount:_info.premiumSign.strikeAmount,
+                expirationDate:_info.premiumSign.expireDate,
+                lockDate:_info.premiumSign.lockDate,
+                underlyingNftID:setting.underlyingNftID,
+                quantity:_info.quantity
+             });
+             optionService.createCallOrder(callOrder);
+            emit OptionPremiun(IOptionFacet.OrderType.Call ,  IOptionFacet(diamond).getOrderId(),  setting.writer,  _info.holder, setting.premiumAsset , optionService.getParts(_info.quantity ,_info.premiumSign.premiumFee));
+        }else if(setting.orderType==IOptionFacet.OrderType.Put){
+            IOptionFacet.PutOrder memory putOrder= IOptionFacet.PutOrder({
+                        holder:_info.holder,
+                        liquidateMode:setting.liquidateMode,
+                        writer:setting.writer,
+                        lockAssetType:setting.lockAssetType,
+                        recipient:_info.recipient,
+                        lockAsset:setting.lockAsset,
+                        underlyingAsset:setting.underlyingAsset,
+                        strikeAsset:setting.strikeAsset,
+                        lockAmount:_info.premiumSign.lockAmount,
+                        strikeAmount:_info.premiumSign.strikeAmount,
+                        expirationDate:_info.premiumSign.expireDate,
+                        lockDate:_info.premiumSign.lockDate,
+                        underlyingNftID:setting.underlyingNftID,
+                        quantity:_info.quantity
+             });
+             optionService.createPutOrder(putOrder);
+            emit OptionPremiun(IOptionFacet.OrderType.Put,  IOptionFacet(diamond).getOrderId(),  setting.writer,  _info.holder, setting.premiumAsset,  optionService.getParts(_info.quantity ,_info.premiumSign.premiumFee));
+        }else{
+            revert("OptionModule:orderType error");
+        }
 
-        bytes32 _hashInfo = keccak256(abi.encode(infoTypeHash,_info));
-        bytes32 digest = keccak256(
-            abi.encodePacked("\x19\x01", optionFacet.getDomain(), _hashInfo)
-        );
-        address signer = IVault(_signer).owner();
-        address recoverAddress = ECDSA.recover(digest, _signature);
-        require(recoverAddress == signer, "OptionModule:handleJvaultSignature signature error");
-    }
-    //----option------
-    //----signature-----
-    function setSigatureLock(
-        Signature memory _sign,
-        bytes calldata _writerSignature
-    ) external onlyVaultOrManager(_sign.writer) {
-        handleSignature(_sign, _sign.writer, _writerSignature);
-        signData[_writerSignature].lock = true;
-    }
-
-    function vaildSignature(SubmitOrder memory _info)internal view{
-        require(_info.optionSelect<=_info.signature.expirationDate.length,"OptionModule:premiumSelect error");
-        require(
-            _info.signature.lockDate.length== _info.signature.expirationDate.length&&
-            _info.signature.liquidateModes.length== _info.signature.expirationDate.length&&
-            _info.signature.strikeAssets.length== _info.signature.expirationDate.length&&
-            _info.signature.strikeAmounts.length== _info.signature.expirationDate.length&&
-            _info.signature.premiumAssets.length== _info.signature.expirationDate.length&&
-            _info.signature.premiumFloors.length== _info.signature.expirationDate.length,"OptionModule:data length mismatch");
-        require(_info.signature.underlyingAsset == _info.premiumSign.optionAsset,"OptionModule:underlyingAsset mismatch");
-        require(_info.signature.strikeAssets[_info.optionSelect] == _info.premiumSign.strikeAsset,"OptionModule:strikeAsset mismatch");
-        require(_info.signature.lockAsset == _info.premiumSign.lockAsset,"OptionModule:lockAsset mismatch");
-        require(_info.signature.expirationDate[_info.optionSelect] == _info.premiumSign.expireDate,"OptionModule:expireDate mismatch");
-        require(_info.signature.lockDate[_info.optionSelect] == _info.premiumSign.lockDate,"OptionModule:lockDate mismatch");
-        require(uint8(_info.signature.orderType) == _info.premiumSign.optionType,"OptionModule:optionType mismatch");
-        require(_info.premiumSign.timestamp<=block.timestamp, "OptionModule:PremiumOracleSign timestamp expired");
-
-                    //verify signature
-        
-        handleSignature(_info.signature, _info.writer, _info.writerSign);
-        handlePremiumSign(_info.premiumSign);
     }
     //-----submit Order-----
     function submitOptionOrder(SubmitOrder memory _info) external  onlyVaultOrManager(_info.holder){   
@@ -317,6 +330,51 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
         }else{
             revert("OptionModule:orderType error");
         }
+    }
+
+    function handleJvaultSignature(SubmitJvaultOrder memory _info,bytes memory _signature,address _signer) internal view {
+        IOptionFacet optionFacet = IOptionFacet(diamond);
+        bytes32 infoTypeHash = keccak256(
+            "SubmitJvaultOrder(uint8 orderType,address writer,uint8 lockAssetType,address holder,address lockAsset,address underlyingAsset,uint256 underlyingNftID,uint256 lockAmount,address strikeAsset,uint256 strikeAmount,address recipient,uint8 liquidateMode,uint256 expirationDate,uint256 lockDate,address premiumAsset,uint256 premiumFee,uint256 quantity)"
+        );
+
+        bytes32 _hashInfo = keccak256(abi.encode(infoTypeHash,_info));
+        bytes32 digest = keccak256(
+            abi.encodePacked("\x19\x01", optionFacet.getDomain(), _hashInfo)
+        );
+        address signer = IVault(_signer).owner();
+        address recoverAddress = ECDSA.recover(digest, _signature);
+        require(recoverAddress == signer, "OptionModule:handleJvaultSignature signature error");
+    }
+    //----option------
+    //----signature-----
+    function setSigatureLock(
+        Signature memory _sign,
+        bytes calldata _writerSignature
+    ) external onlyVaultOrManager(_sign.writer) {
+        handleSignature(_sign, _sign.writer, _writerSignature);
+        signData[_writerSignature].lock = true;
+    }
+
+    function vaildSignature(SubmitOrder memory _info)internal view{
+        require(_info.optionSelect<_info.signature.expirationDate.length,"OptionModule:premiumSelect error");
+        require(
+            _info.signature.lockDate.length== _info.signature.expirationDate.length&&
+            _info.signature.liquidateModes.length== _info.signature.expirationDate.length&&
+            _info.signature.strikeAssets.length== _info.signature.expirationDate.length&&
+            _info.signature.strikeAmounts.length== _info.signature.expirationDate.length&&
+            _info.signature.premiumAssets.length== _info.signature.expirationDate.length&&
+            _info.signature.premiumFloors.length== _info.signature.expirationDate.length,"OptionModule:data length mismatch");
+        require(_info.signature.underlyingAsset == _info.premiumSign.optionAsset,"OptionModule:underlyingAsset mismatch");
+        require(_info.signature.strikeAssets[_info.optionSelect] == _info.premiumSign.strikeAsset,"OptionModule:strikeAsset mismatch");
+        require(_info.signature.lockAsset == _info.premiumSign.lockAsset,"OptionModule:lockAsset mismatch");
+        require(_info.signature.expirationDate[_info.optionSelect] == _info.premiumSign.expireDate,"OptionModule:expireDate mismatch");
+        require(_info.signature.lockDate[_info.optionSelect] == _info.premiumSign.lockDate,"OptionModule:lockDate mismatch");
+        require(uint8(_info.signature.orderType) == _info.premiumSign.optionType,"OptionModule:optionType mismatch");
+        require(_info.premiumSign.timestamp<= block.timestamp , "OptionModule:PremiumOracleSign timestamp expired");
+        //verify signature
+        handleSignature(_info.signature, _info.writer, _info.writerSign);
+        handlePremiumSign(_info.premiumSign);
     }
 
     function handleFee(
@@ -413,7 +471,7 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
             _sign.id,
             _sign.productType,
             _sign.optionAsset,
-            _sign.strikePirce,
+            _sign.strikePrice,
             _sign.strikeAsset,
             _sign.strikeAmount,
             _sign.lockAsset,
@@ -450,95 +508,36 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
             require(oracleWhiteList[ECDSA.recover(digest, _sign.oracleSign[i])], "OptionModule:handlePremiumSign not from whiteList error");
         }
     }
-    function getHostingHash(HostingSignature memory _signatureInfo) internal pure  returns(bytes32 _hashInfo){
-        bytes32 infoTypeHash = keccak256(
-            "HostingSignature(uint8 orderType,address writer,address lockAsset,address underlyingAsset,uint8 lockAssetType,uint256 underlyingNftID,uint256 total,uint8 liquidateMode,address strikeAsset,address premiumAsset,uint256 premiumFloor)"
-        );
-        return keccak256(abi.encode(infoTypeHash,_signatureInfo));
-    }
-    function handleHostingSignature(
-        HostingSignature memory _signatureInfo,
-        address _signer,
-        bytes memory _signature
-    ) internal view {
-        IOptionFacet optionFacet = IOptionFacet(diamond);
-        bytes32 _hashInfo=getHostingHash(_signatureInfo);
-        bytes32 digest = keccak256(
-            abi.encodePacked("\x19\x01", optionFacet.getDomain(), _hashInfo)
-        );
-        address signer = IVault(_signer).owner();
-        address recoverAddress = ECDSA.recover(digest, _signature);
-        require(recoverAddress == signer, "OptionModule: handleHostingSignature signature error");
-    }
-    function submitHostingOptionOrder(SubmitHostingOrder memory _info) external  onlyVaultOrManager(_info.holder){   
-               //verify signature
-        handleHostingSignature(_info.signature, _info.signature.writer, _info.writerSign);
-        handlePremiumSign(_info.premiumSign);
-        require(
-            !IVaultFacet(diamond).getVaultLock(_info.recipient),
-            "OptionModule:recipient is locked"
-        );
-         if (signData[_info.writerSign].orderCount == 0){
-            require(_info.signature.total>= _info.quantity,"OptionModule:total less than quantity");
-            signData[_info.writerSign].total = _info.signature.total - _info.quantity;
-        }else{
-            require(signData[_info.writerSign].total >= _info.quantity,"OptionModule:total less than quantity");
-            signData[_info.writerSign].total -=  _info.quantity;
-        }
-        _info.premiumSign.premiumFee = _info.premiumSign.premiumFee >= _info.signature.premiumFloor?_info.premiumSign.premiumFee:_info.signature.premiumFloor;
-        // pay the premium from recipient addr to holder
-        IVault(_info.recipient).invokeTransfer(_info.signature.premiumAsset,  _info.holder, optionService.getParts(_info.quantity,_info.premiumSign.premiumFee));
-        //transfer fee
-        handleFee(
-                _info.holder,
-                _info.signature.writer,
-                _info.signature.premiumAsset,
-                optionService.getParts(_info.quantity, _info.premiumSign.premiumFee)
-                
-        );
-        //create order
-        if(_info.signature.orderType==IOptionFacet.OrderType.Call){
-             IOptionFacet.CallOrder memory callOrder= IOptionFacet.CallOrder({
-                holder:_info.holder,
-                liquidateMode:_info.signature.liquidateMode,
-                writer:_info.signature.writer,
-                lockAssetType:_info.signature.lockAssetType,
-                recipient:_info.recipient,
-                lockAsset:_info.signature.lockAsset,
-                underlyingAsset:_info.signature.underlyingAsset,
-                strikeAsset:_info.signature.strikeAsset,
-                lockAmount:_info.premiumSign.lockAmount,
-                strikeAmount:_info.premiumSign.strikeAmount,
-                expirationDate:_info.premiumSign.expireDate,
-                lockDate:_info.premiumSign.expireDate,
-                underlyingNftID:_info.signature.underlyingNftID,
-                quantity:_info.quantity
-             });
-             optionService.createCallOrder(callOrder);
-            emit OptionPremiun(IOptionFacet.OrderType.Call ,  IOptionFacet(diamond).getOrderId(),  _info.signature.writer,  _info.holder, _info.signature.premiumAsset , optionService.getParts(_info.quantity ,_info.premiumSign.premiumFee));
-        }else if(_info.signature.orderType==IOptionFacet.OrderType.Put){
-            IOptionFacet.PutOrder memory putOrder= IOptionFacet.PutOrder({
-                        holder:_info.holder,
-                        liquidateMode:_info.signature.liquidateMode,
-                        writer:_info.signature.writer,
-                        lockAssetType:_info.signature.lockAssetType,
-                        recipient:_info.recipient,
-                        lockAsset:_info.signature.lockAsset,
-                        underlyingAsset:_info.signature.underlyingAsset,
-                        strikeAsset:_info.signature.strikeAsset,
-                        lockAmount:_info.premiumSign.lockAmount,
-                        strikeAmount:_info.premiumSign.strikeAmount,
-                        expirationDate:_info.premiumSign.expireDate,
-                        lockDate:_info.premiumSign.expireDate,
-                        underlyingNftID:_info.signature.underlyingNftID,
-                        quantity:_info.quantity
-             });
-             optionService.createPutOrder(putOrder);
-            emit OptionPremiun(IOptionFacet.OrderType.Put,  IOptionFacet(diamond).getOrderId(),  _info.signature.writer,  _info.holder, _info.signature.premiumAsset,  optionService.getParts(_info.quantity ,_info.premiumSign.premiumFee));
-        }else{
-            revert("OptionModule:orderType error");
-        }
 
+    function verifyManagedOrder(ManagedOrder memory _info, IOptionFacet.ManagedOptionsSettings memory _setting) internal view{
+        require(_setting.isOpen, "OptionModule:isOpen error");
+        require(!IVaultFacet(diamond).getVaultLock(_info.recipient)&&
+                !IVaultFacet(diamond).getVaultLock(_info.holder)&&
+                !IVaultFacet(diamond).getVaultLock(_info.writer),
+                "OptionModule:vault is locked");
+        require(_setting.writer == _info.writer,"OptionModule:writer error");
+        require(uint8(_setting.orderType) == _info.premiumSign.optionType,"OptionModule:optionType mismatch");
+        require(_setting.lockAsset == _info.premiumSign.lockAsset,"OptionModule:lockAsset mismatch");
+        require(_setting.underlyingAsset == _info.premiumSign.optionAsset,"OptionModule:underlyingAsset mismatch");
+        require(_setting.strikeAsset == _info.premiumSign.strikeAsset,"OptionModule:strikeAsset mismatch");
+        require(_setting.premiumAsset == _info.premiumSign.premiumAsset,"OptionModule:premiumAsset mismatch");
+        require(_setting.maximum>=_info.quantity, "OptionModule:productType error");
+        require(contains(_setting.productTypeList, _info.premiumSign.productType), "OptionModule:productType error");
+        require(_info.premiumSign.strikeAmount >0, "OptionModule:strikeAmount error");
+        require(_info.premiumSign.timestamp<= block.timestamp , "OptionModule:PremiumOracleSign timestamp expired");
+        handlePremiumSign(_info.premiumSign);
+    }
+    function contains(uint32[] memory array, uint32 element) public pure returns(bool) {
+        for(uint i = 0; i < array.length; i++) {
+            if(array[i] == element) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function setManagedOptionsSettings(IOptionFacet.ManagedOptionsSettings memory _set) external onlyVaultOrManager(_set.writer){
+        IOptionFacet(diamond).setManagedOptionsSettings(_set);
     }
 
 }

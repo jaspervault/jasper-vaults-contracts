@@ -109,7 +109,7 @@ contract VaultManageModule is
                     2 ,
                     IVault(_vault).owner(),
                     // TODO: need set fee with eth/usd 
-                    5 ether
+                    1 ether
                 );
             IPaymasterFacet(diamond). setQuotaLimit( IVault(_vault).owner(),1);
         }

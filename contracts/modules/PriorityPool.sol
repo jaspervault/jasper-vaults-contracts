@@ -9,6 +9,7 @@ import "../interfaces/internal/ILPToken.sol";
 import "../interfaces/internal/IPoolModule.sol";
 import "../interfaces/internal/IProfitService.sol";
 
+
 contract PriorityPool is
     PoolBase
 {
@@ -48,7 +49,7 @@ contract PriorityPool is
      */
     function deposit(
         uint256 _amount
-    ) payable external {
+    ) payable external nonReentrant{
 
         // deposit to vault
         depositToVault(_amount);
@@ -94,7 +95,7 @@ contract PriorityPool is
      */
     function withdrawProfit(
         uint256 _amount
-    ) external{
+    ) external nonReentrant{
         uint256 addressProfit = addressProfitMap[msg.sender];
         require(_amount <= addressProfit, "Insufficient profit");
 
@@ -112,7 +113,7 @@ contract PriorityPool is
      */
     function withdrawPrincipal(
         uint256 _amount
-    ) external{
+    ) external nonReentrant{
 
         uint256 addressDeposit = addressDepositAmountMap[msg.sender];
         require(_amount <= addressDeposit, "Insufficient amount");

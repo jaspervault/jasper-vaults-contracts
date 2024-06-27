@@ -43,7 +43,7 @@ contract RegularPool is
      */
     function deposit(
         uint256 _assetAmount
-    ) payable external {
+    ) payable  external nonReentrant {
 
         // validate params
         require(_assetAmount > 0, "deposit amount should larger than 0");
@@ -75,7 +75,7 @@ contract RegularPool is
      */
     function withdraw(
         uint256 _lpAmount
-    ) external{
+    ) external nonReentrant{
 
         // validate params
         uint256 currentAmount = getCurrentAmount();

@@ -426,7 +426,7 @@ contract OptionService is  ModuleBase,IOptionService, Initializable,UUPSUpgradea
                         optionOrder.strikeAsset,
                         getParts(optionOrder.quantity, optionOrder.strikeAmount)
                     );
-                     validSlippage(amount, _incomeAmount, _slippage, _slippage);
+                    validSlippage(amount, _incomeAmount, _slippage, _slippage);
                     if (optionOrder.lockAsset == eth) {
                         IVault(optionOrder.holder).invokeTransferEth(optionOrder.writer, getParts(optionOrder.quantity, optionOrder.lockAmount) - amount);
                         IVault(optionOrder.holder).invokeTransferEth(optionOrder.recipient, amount);
@@ -476,6 +476,7 @@ contract OptionService is  ModuleBase,IOptionService, Initializable,UUPSUpgradea
         address strikeAsset, // USDC
         uint256 strikeAmount
     ) public view returns (uint) { 
+    
         address eth=IPlatformFacet(diamond).getEth();
         address weth=IPlatformFacet(diamond).getWeth();
         uint price = priceOracle.getPrice(lockAsset == eth ? weth : lockAsset, strikeAsset == eth ? weth : strikeAsset);        
