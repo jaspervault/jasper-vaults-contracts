@@ -21,6 +21,11 @@ interface IOptionFacet {
         ProfitSettlement,
         PhysicalDelivery
     }
+    enum PremiumOracleSource{
+        Both,
+        OnlyAMMs,
+        OnlyPAMMS
+    }
 
     struct PutOrder {
         address holder;
@@ -56,6 +61,7 @@ interface IOptionFacet {
         uint256 quantity;
     }
     struct ManagedOptionsSettings {
+        bool isOpen;
         IOptionFacet.OrderType orderType;
         address writer;
         address lockAsset;
@@ -65,12 +71,13 @@ interface IOptionFacet {
         IOptionFacet.LiquidateMode liquidateMode;
         address strikeAsset;
         address premiumAsset;
-        uint256 premiumFloor;
-        bool isOpen;
         uint256 maximum;
         uint256 maxStopLossPoint;
-        uint32[] productTypeList;
-    } 
+        PremiumOracleSource premiumOracleSource;
+        uint256 premiumFloor;
+        uint256 premiumRate;
+        uint32 productType;
+    }
     //---event---
     event SetOrderId(uint64 _orderId);
     event AddPutOrder(uint64 _orderId, PutOrder _putOrder,address _holderWallet,address _writerWallet);

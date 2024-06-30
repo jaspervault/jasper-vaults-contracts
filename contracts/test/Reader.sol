@@ -4,9 +4,11 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 
+import "../interfaces/internal/IReader.sol";
 
 contract Reader is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable {
     address public owner;
+
     modifier onlyOwner() {
         require(msg.sender ==owner, "Quoter:only owner");
         _;
@@ -28,6 +30,11 @@ contract Reader is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable {
 
     mapping (address=>uint) public optionPremium;
     mapping (address=>Role) public readerRole;
+
+    mapping (address=>uint256) public vaultProfit;
+    mapping (address=>uint256) public vaultAmount;
+
+
     enum Role {
         None,
         Writer
@@ -54,6 +61,28 @@ contract Reader is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable {
             data[i] =  optionPremium[_userList[i]];
         }
         return data;
+    }
+
+    function setOptionProfits(address[] memory _userList, uint256[] memory _profits) public onlyWriter {
+        require(_userList.length == _profits.length, "_userList length mismatch _profits length");
+        for (uint i = 0; i < _userList.length; i++) {
+            vaultProfit[_userList[i]] = _profits[i];
+        }
+    }
+
+    function setOptionAmount(address[] memory _userList, uint256[] memory _amount) public onlyWriter {
+        require(_userList.length == _amount.length, "_userList length mismatch _amount length");
+        for (uint i = 0; i < _userList.length; i++) {
+            vaultAmount[_userList[i]] = _amount[i];
+        }
+    }
+
+    function getOptionProfit(address _user) public view returns(uint256) {
+        return vaultProfit[_user];
+    }
+
+    function getOptionAmount(address _user) public view returns(uint256) {
+        return vaultAmount[_user];
     }
 
 }

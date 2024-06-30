@@ -7,13 +7,13 @@ import "hardhat/console.sol";
 import "../lib/PoolBase.sol";
 import "../interfaces/internal/ILPToken.sol";
 import "../interfaces/internal/IPoolModule.sol";
-import "../interfaces/internal/IProfitService.sol";
+import "../interfaces/internal/IReader.sol";
 
 contract RegularPool is
     PoolBase
 {
     using SafeMath for uint256;
-    address public profitService;
+    address public reader;
     address public lpToken;
     uint256 public lastProfit;
     uint256 totalDepositAmount;
@@ -26,7 +26,7 @@ contract RegularPool is
         address _diamond,
         address _asset,
         address _lpToken,
-        address _profitService
+        address _reader
         )public initializer {
 
         super.initialize(_vault,_diamond,_asset);
@@ -34,7 +34,7 @@ contract RegularPool is
         lastProfit = 0;
 
         // lastProfit
-        profitService = _profitService;
+        reader = _reader;
     }
 
     /**
@@ -96,7 +96,7 @@ contract RegularPool is
     }
 
     function getCurrentAmount() internal view returns(uint256) {
-        return IProfitService(profitService).currentAmount();
+        return IReader(reader).getOptionAmount(vault);
     }
 
     fallback() external payable {

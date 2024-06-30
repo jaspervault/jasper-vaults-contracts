@@ -77,9 +77,6 @@ interface IOptionModule {
         PremiumOracleSign premiumSign;
     }
     event OptionPremiun(IOptionFacet.OrderType _orderType, uint64 _orderID, address _writer, address _holder, address _premiumAsset, uint256 _amount);
-
-    // function submitJvaultOrder(SubmitJvaultOrder memory _info,bytes memory _writerSignature,bytes memory _holderSignature) external;
-
     function submitOptionOrder(SubmitOrder memory _info) external;
-
+    
 }

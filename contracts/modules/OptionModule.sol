@@ -27,6 +27,8 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
     // TODO: delete this
     string name;
     string version;
+    mapping (address=>mapping(uint256 => uint256)) premiunByAMMs;
+
     modifier onlyOwner() {
         require( msg.sender == IOwnable(diamond).owner(),"OptionModule:only owner");  
         _;
@@ -45,89 +47,15 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
         address newImplementation
     ) internal override onlyOwner {}
 
+    function setOptionPremiunByAMMs(address _token,uint256 _productType,uint256 _premiunRate) external onlyOwner{
+        premiunByAMMs[_token][_productType] = _premiunRate;
+    }
     function setOptionService(IOptionService _optionService) external onlyOwner{
         optionService=_optionService;
     }
     function setOracleWhiteList(address oracle) external onlyOwner{
         oracleWhiteList[oracle]=true;
     }
-    //----jvault-----
-
-    // function submitJvaultOrder(SubmitJvaultOrder memory _info,bytes memory _writerSignature,bytes memory _holderSignature) external {
-    //      handleJvaultSignature(_info,_writerSignature,_info.writer);
-    //      SubmitJvaultOrder memory newInfo =  SubmitJvaultOrder({
-    //                 orderType:_info.orderType,  
-    //                 writer:address(0),
-    //                 lockAssetType:_info.lockAssetType,
-    //                 holder:_info.holder, 
-    //                 lockAsset:_info.lockAsset, 
-    //                 underlyingNftID:_info.underlyingNftID,
-    //                 lockAmount:_info.lockAmount,
-    //                 underlyingAsset:_info.underlyingAsset,
-    //                 strikeAsset:_info.strikeAsset,
-    //                 strikeAmount:_info.strikeAmount,
-    //                 recipient:_info.recipient,
-    //                 liquidateMode:_info.liquidateMode,
-    //                 expirationDate:_info.expirationDate,
-    //                 lockDate:_info.lockDate,
-    //                 premiumAsset:_info.premiumAsset,
-    //                 premiumFee:_info.premiumFee,
-    //                 quantity:_info.quantity
-    //       });
-    //      handleJvaultSignature(newInfo,_holderSignature,_info.holder);
-    //      handleFee(
-    //             _info.holder,
-    //             _info.writer,
-    //             _info.premiumAsset,
-    //             _info.premiumFee,
-    //             _info.quantity
-    //      );
-
-    //     //create order
-    //     if(_info.orderType==IOptionFacet.OrderType.Call){
-    //          IOptionFacet.CallOrder memory callOrder= IOptionFacet.CallOrder({
-    //                 holder:_info.holder,
-    //                 liquidateMode:_info.liquidateMode,
-    //                 writer:_info.writer,
-    //                 lockAssetType:_info.lockAssetType,
-    //                 recipient:_info.recipient,
-    //                 lockAsset:_info.lockAsset,
-    //                 underlyingAsset:_info.underlyingAsset,
-    //                 strikeAsset:_info.strikeAsset,
-    //                 lockAmount:_info.lockAmount,
-    //                 strikeAmount:_info.strikeAmount,
-    //                 expirationDate:_info.expirationDate,
-    //                 lockDate:_info.lockDate,
-    //                 underlyingNftID:_info.underlyingNftID,
-    //                 quantity:_info.quantity
-    //          });
-    //          optionService.createCallOrder(callOrder);
-    //          emit OptionPremiun(IOptionFacet.OrderType.Call ,  IOptionFacet(diamond).getOrderId(),  _info.writer,  _info.holder,  _info.premiumAsset,  optionService.getParts(_info.quantity, _info.premiumFee));
-    //     }else if(_info.orderType==IOptionFacet.OrderType.Put){
-    //         IOptionFacet.PutOrder memory putOrder= IOptionFacet.PutOrder({
-    //             holder:_info.holder,
-    //             liquidateMode:_info.liquidateMode,
-    //             writer:_info.writer,
-    //             lockAssetType:_info.lockAssetType,
-    //             recipient:_info.recipient,
-    //             lockAsset:_info.lockAsset,
-    //             underlyingAsset:_info.underlyingAsset,
-    //             strikeAsset:_info.strikeAsset,
-    //             lockAmount:_info.lockAmount,
-    //             strikeAmount:_info.strikeAmount,
-    //             expirationDate:_info.expirationDate,
-    //             lockDate:_info.lockDate,
-    //             underlyingNftID:_info.underlyingNftID,
-    //             quantity:_info.quantity
-    //          });
-    //          optionService.createPutOrder(putOrder);
-    //          emit OptionPremiun(IOptionFacet.OrderType.Put ,  IOptionFacet(diamond).getOrderId(),  _info.writer,  _info.holder,  _info.premiumAsset,  optionService.getParts(_info.quantity, _info.premiumFee));
-    //     }else{
-    //         revert("OptionModule:orderType error");
-    //     }
-    //     signBlackList[_holderSignature] = true;
-
-    // }
     //----jvault-----degen  Single  
     function submitJvaultOrderSingle(SubmitJvaultOrder memory _info,bytes memory _holderSignature) external onlyVaultOrManager(_info.writer) {
         SubmitJvaultOrder memory newInfo =  SubmitJvaultOrder({
@@ -212,15 +140,16 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
         IOptionFacet optionFacet = IOptionFacet(diamond);
         IOptionFacet.ManagedOptionsSettings memory setting = optionFacet.getManagedOptionsSettings(_info.writer);
         verifyManagedOrder(_info, setting);
-        _info.premiumSign.premiumFee = _info.premiumSign.premiumFee >= setting.premiumFloor?_info.premiumSign.premiumFee:setting.premiumFloor;
+        uint256 premiumFeePayed =  _info.premiumSign.premiumFee >= setting.premiumFloor? _info.premiumSign.premiumFee:setting.premiumFloor;
+        premiumFeePayed = premiumFeePayed*setting.premiumRate / 1 ether;
         // pay the premium from recipient addr to holder
-        IVault(_info.recipient).invokeTransfer(setting.premiumAsset,  _info.holder, optionService.getParts(_info.quantity,_info.premiumSign.premiumFee));
+        IVault(_info.recipient).invokeTransfer(setting.premiumAsset,  _info.holder, optionService.getParts(_info.quantity,premiumFeePayed));
         //transfer fee
         handleFee(
                 _info.holder,
                 setting.writer,
                 setting.premiumAsset,
-                optionService.getParts(_info.quantity, _info.premiumSign.premiumFee)
+                optionService.getParts(_info.quantity,premiumFeePayed)
                 
         );
         //create order
@@ -522,7 +451,7 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
         require(_setting.strikeAsset == _info.premiumSign.strikeAsset,"OptionModule:strikeAsset mismatch");
         require(_setting.premiumAsset == _info.premiumSign.premiumAsset,"OptionModule:premiumAsset mismatch");
         require(_setting.maximum>=_info.quantity, "OptionModule:productType error");
-        require(contains(_setting.productTypeList, _info.premiumSign.productType), "OptionModule:productType error");
+        require(_setting.productType == _info.premiumSign.productType, "OptionModule:productType error");
         require(_info.premiumSign.strikeAmount >0, "OptionModule:strikeAmount error");
         require(_info.premiumSign.timestamp<= block.timestamp , "OptionModule:PremiumOracleSign timestamp expired");
         handlePremiumSign(_info.premiumSign);

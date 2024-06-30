@@ -7,7 +7,7 @@ import "hardhat/console.sol";
 import "../lib/PoolBase.sol";
 import "../interfaces/internal/ILPToken.sol";
 import "../interfaces/internal/IPoolModule.sol";
-import "../interfaces/internal/IProfitService.sol";
+import "../interfaces/internal/IReader.sol";
 
 
 contract PriorityPool is
@@ -15,7 +15,7 @@ contract PriorityPool is
 {
     using SafeMath for uint256;
 
-    address public profitService;
+    address public reader;
     address public lpToken;
     uint256 public lastProfit;
     uint256 totalDepositAmount;
@@ -32,14 +32,14 @@ contract PriorityPool is
         address _asset,
         address _profitAsset,
         address _lpToken,
-        address _profitService
+        address _reader
         )public initializer {
 
         super.initialize(_vault,_diamond,_asset);
         lpToken = _lpToken;
         lastProfit = 0;
         // lastProfit
-        profitService = _profitService;
+        reader = _reader;
         profitAsset = _profitAsset;
     }
 
@@ -106,7 +106,6 @@ contract PriorityPool is
 
     }
 
-
     /**
      * withdraw  principal from vault 
      * @param _amount withdraw principal from vault
@@ -130,7 +129,7 @@ contract PriorityPool is
 
     // Decimal
     function getCurrentProfit() internal view returns(uint256) {
-        return IProfitService(profitService).currentProfit();
+        return IReader(reader).getOptionProfit(vault);
     }
 
     function getAddressProfit() external view returns(uint256) {
