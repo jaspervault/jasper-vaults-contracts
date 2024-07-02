@@ -25,6 +25,10 @@ npm install
 
 ```
 
+## Generate TypeChain Typings
+
+`yarn build`
+
 ## Testing
 
 This project uses Hardhat for testing. First, you need to create a `.env` file and set your Ethereum node address. Then, you can run the following command for testing:

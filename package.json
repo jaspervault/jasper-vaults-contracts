@@ -58,9 +58,12 @@
     "ethereumjs-abi": "https://registry.npmjs.org/ethereumjs-abi/-/ethereumjs-abi-0.6.8.tgz"
   },
   "scripts": {
+    "build": "yarn compile && yarn typechain && yarn transpile-dist",
     "compile": "hardhat compile",
     "test": "hardhat test",
     "coverage": "hardhat coverage",
-    "typechain": "hardhat typechain"
+    "typechain": "hardhat typechain",
+    "transpile": "tsc",
+    "transpile-dist": "tsc -p tsconfig.dist.json"
   }
 }
