@@ -140,8 +140,8 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
         IOptionFacet optionFacet = IOptionFacet(diamond);
         IOptionFacet.ManagedOptionsSettings memory setting = optionFacet.getManagedOptionsSettings(_info.writer);
         verifyManagedOrder(_info, setting);
-        uint256 premiumFeePayed =  _info.premiumSign.premiumFee >= setting.premiumFloor? _info.premiumSign.premiumFee:setting.premiumFloor;
-        premiumFeePayed = premiumFeePayed*setting.premiumRate / 1 ether;
+        uint256 premiumFeePayed =  _info.premiumSign.premiumFee >= setting.premiumFloorList[_info.optionSelect]? _info.premiumSign.premiumFee:setting.premiumFloorList[_info.optionSelect];
+        premiumFeePayed = premiumFeePayed*setting.premiumRateList[_info.optionSelect] / 1 ether;
         // pay the premium from recipient addr to holder
         IVault(_info.recipient).invokeTransfer(setting.premiumAsset,  _info.holder, optionService.getParts(_info.quantity,premiumFeePayed));
         //transfer fee
@@ -451,18 +451,10 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
         require(_setting.strikeAsset == _info.premiumSign.strikeAsset,"OptionModule:strikeAsset mismatch");
         require(_setting.premiumAsset == _info.premiumSign.premiumAsset,"OptionModule:premiumAsset mismatch");
         require(_setting.maximum>=_info.quantity, "OptionModule:productType error");
-        require(_setting.productType == _info.premiumSign.productType, "OptionModule:productType error");
+        require(_setting.productTypeList[_info.optionSelect] == _info.premiumSign.productType, "OptionModule:productType error");
         require(_info.premiumSign.strikeAmount >0, "OptionModule:strikeAmount error");
         require(_info.premiumSign.timestamp<= block.timestamp , "OptionModule:PremiumOracleSign timestamp expired");
         handlePremiumSign(_info.premiumSign);
-    }
-    function contains(uint32[] memory array, uint32 element) public pure returns(bool) {
-        for(uint i = 0; i < array.length; i++) {
-            if(array[i] == element) {
-                return true;
-            }
-        }
-        return false;
     }
 
     function setManagedOptionsSettings(IOptionFacet.ManagedOptionsSettings memory _set) external onlyVaultOrManager(_set.writer){

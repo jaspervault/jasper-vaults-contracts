@@ -74,6 +74,7 @@ interface IOptionModule {
         address writer;
         address recipient;
         uint256 quantity;
+        uint256 optionSelect;
         PremiumOracleSign premiumSign;
     }
     event OptionPremiun(IOptionFacet.OrderType _orderType, uint64 _orderID, address _writer, address _holder, address _premiumAsset, uint256 _amount);

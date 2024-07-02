@@ -74,9 +74,9 @@ interface IOptionFacet {
         uint256 maximum;
         uint256 maxStopLossPoint;
         PremiumOracleSource premiumOracleSource;
-        uint256 premiumFloor;
-        uint256 premiumRate;
-        uint32 productType;
+        uint256[] premiumFloorList;
+        uint256[] premiumRateList;
+        uint32[] productTypeList;
     }
     //---event---
     event SetOrderId(uint64 _orderId);
