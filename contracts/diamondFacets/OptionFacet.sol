@@ -26,8 +26,9 @@ contract OptionFacet is IOptionFacet {
         //---safe verify----
         mapping(address =>mapping(OrderType=>mapping(address=>uint256[2])) ) sigatureInfo;
         mapping (address => ManagedOptionsSettings) managedOptionsSettings;
-
     }
+
+
 
     function diamondStorage() internal pure returns (Option storage ds) {
         bytes32 position = DIAMOND_STORAGE_POSITION;
@@ -210,10 +211,10 @@ contract OptionFacet is IOptionFacet {
             }
         }
     }
-
     function setManagedOptionsSettings(IOptionFacet.ManagedOptionsSettings memory _set) external {
         Option storage ds = diamondStorage();
         ds.managedOptionsSettings[_set.writer] = _set;
+        emit SetManagedOptionsSettings(_set);
     }
     function getManagedOptionsSettings(address _vault) external view returns(IOptionFacet.ManagedOptionsSettings memory set) {
         Option storage ds = diamondStorage();

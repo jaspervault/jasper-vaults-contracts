@@ -426,6 +426,7 @@ contract OptionService is  ModuleBase,IOptionService, Initializable,UUPSUpgradea
                         optionOrder.strikeAsset,
                         getParts(optionOrder.quantity, optionOrder.strikeAmount)
                     );
+
                     validSlippage(amount, _incomeAmount, _slippage, _slippage);
                     if (optionOrder.lockAsset == eth) {
                         IVault(optionOrder.holder).invokeTransferEth(optionOrder.writer, getParts(optionOrder.quantity, optionOrder.lockAmount) - amount);
@@ -435,9 +436,7 @@ contract OptionService is  ModuleBase,IOptionService, Initializable,UUPSUpgradea
                         IVault(optionOrder.holder).invokeTransfer( optionOrder.lockAsset, optionOrder.writer, balance - amount );
                         IVault(optionOrder.holder).invokeTransfer( optionOrder.lockAsset, optionOrder.recipient,amount );          
                     }
-                }
-
-               
+                }               
             } else {
                 revert("OptionService:liquidateCall LiquidateType error");
             }
@@ -447,6 +446,9 @@ contract OptionService is  ModuleBase,IOptionService, Initializable,UUPSUpgradea
         }
     }
 
+     function liquidateswapOrder () public{
+        
+     }
     function validSlippage(
         uint amountA,
         uint amountB,
@@ -483,7 +485,7 @@ contract OptionService is  ModuleBase,IOptionService, Initializable,UUPSUpgradea
         uint lockAssetDecimal = uint(IERC20(lockAsset == eth ? weth : lockAsset).decimals());
         uint strikeAssetDecimal = uint( IERC20(strikeAsset == eth ? weth : strikeAsset).decimals());    
         uint reversePrice =priceOracle.getPrice( strikeAsset == eth ? weth : strikeAsset, lockAsset == eth ? weth : lockAsset);     
-        uint nowAmount = ( lockAmount * price * 10 ** strikeAssetDecimal  )  / 10 ** lockAssetDecimal / 1 ether;   
+        uint nowAmount = ( lockAmount * price * 10 ** strikeAssetDecimal  )  / 10 ** lockAssetDecimal / 1 ether;
         return strikeAmount >= nowAmount ? 0:((nowAmount-strikeAmount) * reversePrice *  10 ** lockAssetDecimal) / 10 ** strikeAssetDecimal /1 ether;  
     }
     function getParts(uint256 quantity ,uint256 strikeAmount)  public pure returns(uint256){

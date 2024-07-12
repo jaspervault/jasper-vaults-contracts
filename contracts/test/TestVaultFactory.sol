@@ -10,7 +10,7 @@ import {IPlatformFacet} from "../interfaces/internal/IPlatformFacet.sol";
 import {IVaultFacet} from "../interfaces/internal/IVaultFacet.sol";
 
 /**
- * A sample factory contract for Vault
+ * A sample factory contract for TestVault
  * A UserOperations "initCode" holds the address of the factory, and a method call (to createAccount, in this sample factory).
  * The factory's createAccount returns the target account address even if it is already installed.
  * This way, the entryPoint.getSenderAddress() can be called either before or after the account is created.
@@ -51,14 +51,14 @@ contract TestVaultFactory is Initializable, UUPSUpgradeable {
     }
 
     function setVaultImplementation() public onlyOwner {
-        Vault accountImplementation = new Vault(entryPoint);
+        TestVault accountImplementation = new TestVault(entryPoint);
         IPlatformFacet(diamond).setVaultImplementation(
             address(accountImplementation)
         );
     }
 
     function setVaultImp() public onlyOwner{
-        Vault accountImplementation = new Vault(entryPoint);
+        TestVault accountImplementation = new TestVault(entryPoint);
         vaultImp=address(accountImplementation);
     }
 
@@ -71,20 +71,20 @@ contract TestVaultFactory is Initializable, UUPSUpgradeable {
     function createAccount(
         address wallet,
         uint256 salt
-    ) public returns (Vault ret) {
+    ) public returns (TestVault ret) {
         address addr = getAddress(wallet, salt);
         uint codeSize = addr.code.length;
         if (codeSize > 0) {
-            return Vault(payable(addr));
+            return TestVault(payable(addr));
         }
         IPlatformFacet platformFact = IPlatformFacet(diamond);
         // address accountImplementation = platformFact.getVaultImplementation();
         address  accountImplementation=vaultImp;
-        ret = Vault(
+        ret = TestVault(
             payable(
                 new ERC1967Proxy{salt: bytes32(salt)}(
                     accountImplementation,
-                    abi.encodeCall(Vault.initialize, (wallet, moduleManager))
+                    abi.encodeCall(TestVault.initialize, (wallet, moduleManager))
                 )
             )
         );
@@ -117,7 +117,7 @@ contract TestVaultFactory is Initializable, UUPSUpgradeable {
                         type(ERC1967Proxy).creationCode,
                         abi.encode(
                             accountImplementation,
-                            abi.encodeCall(Vault.initialize, (wallet, moduleManager))
+                            abi.encodeCall(TestVault.initialize, (wallet, moduleManager))
                         )
                     )
                 )

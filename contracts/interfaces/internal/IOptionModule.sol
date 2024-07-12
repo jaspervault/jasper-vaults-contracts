@@ -74,10 +74,10 @@ interface IOptionModule {
         address writer;
         address recipient;
         uint256 quantity;
-        uint256 optionSelect;
+        uint256 index;
+        uint256 oracleIndex;
         PremiumOracleSign premiumSign;
     }
     event OptionPremiun(IOptionFacet.OrderType _orderType, uint64 _orderID, address _writer, address _holder, address _premiumAsset, uint256 _amount);
-    function submitOptionOrder(SubmitOrder memory _info) external;
-    
+    event SetManagedOptionsSettings(IOptionFacet.ManagedOptionsSettings _newset);
 }

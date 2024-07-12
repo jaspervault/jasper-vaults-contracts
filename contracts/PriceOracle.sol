@@ -25,7 +25,7 @@ contract PriceOracle is Initializable, UUPSUpgradeable
         diamond = _diamond;
     }
     function setPrice(address _pyth,bytes[] calldata _priceUpdateData) external{
-        require( IPlatformFacet(diamond).getIsVault(msg.sender),"PriceOracle:role error");  
+        require(IPlatformFacet(diamond).getIsVault(msg.sender),"PriceOracle:role error");  
         uint fee = IPyth(_pyth).getUpdateFee(_priceUpdateData);
         IPyth(_pyth).updatePriceFeeds{ value: fee }(_priceUpdateData);
     }
@@ -141,5 +141,12 @@ contract PriceOracle is Initializable, UUPSUpgradeable
         uint80[] calldata _chainLinkIDList
     ) external view returns (uint256) {
         return getPriceByMedian(_masterToken, _quoteToken);
+    }
+
+    function getUSDPriceSpecifyOracle(address _token, uint index) external view returns (uint256){
+        return IOracleAdapter(oracles[index]).read(_token, 0x0000000000000000000000000000000000000001);
+    }
+    function getPriceSpecifyOracle(address _assetOne, address _assetTwo, uint index) external view returns (uint256){
+        return IOracleAdapter(oracles[index]).read(_assetOne, _assetTwo);
     }
 }

@@ -68,7 +68,7 @@ contract PoolBase is
         issuanceFacet.setIssueMode(vault, IIssuanceFacet.IssueMode.Proxy);
         issuanceFacet.setIssuer(vault, address(this));
         // issuanceFacet.setIsHosting(vault, address(this));
-        // issuanceFacet.setProductTypeList(vault, address(this));
+        // issuanceFacet.setproductTypes(vault, address(this));
         
         validAsset(vault, asset);
 

@@ -18,7 +18,7 @@ interface IVaultVaild {
     function removeVault(address _vault) external;
 }
 
-contract Vault is
+contract TestVault is
     BaseAccount,
     TokenCallbackHandler,
     UUPSUpgradeable,

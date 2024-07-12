@@ -13,4 +13,7 @@ interface IPriceOracle {
     ) external view returns (uint256);
 
     function getUSDPrice(address _token) external view returns (uint256);
+    function getUSDPriceSpecifyOracle(address _token, uint256 oracleIndex) external view returns (uint256);
+    function getPriceSpecifyOracle(address _assetOne, address _assetTwo, uint256 oracleIndex) external view returns (uint256);
+
 }
