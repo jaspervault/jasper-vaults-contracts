@@ -379,7 +379,7 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
     // }
     struct OptionPrice {
         uint256 id;
-        uint8 productType;
+        uint64 productType;
         address optionAsset;
         uint256 strikePrice;
         address strikeAsset;
@@ -413,7 +413,7 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
             _sign.timestamp
         );
         bytes32 infoTypeHash = keccak256(
-            "OptionPrice(uint256 id,uint8 productType,address optionAsset,uint256 strikePrice,address strikeAsset,uint256 strikeAmount,address lockAsset,uint256 lockAmount,uint256 expireDate,uint256 lockDate,uint8 optionType,address premiumAsset,uint256 premiumFee,uint256 timestamp)");
+            "OptionPrice(uint256 id,uint64 productType,address optionAsset,uint256 strikePrice,address strikeAsset,uint256 strikeAmount,address lockAsset,uint256 lockAmount,uint256 expireDate,uint256 lockDate,uint8 optionType,address premiumAsset,uint256 premiumFee,uint256 timestamp)");
         bytes32 _hashInfo = keccak256(abi.encode(
                 infoTypeHash,
                 data

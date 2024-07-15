@@ -15,7 +15,7 @@ interface IOptionModule {
     }
     struct PremiumOracleSign {
         uint256 id;
-        uint8 productType;
+        uint64 productType;
         address optionAsset;
         uint256 strikePrice;
         address strikeAsset;

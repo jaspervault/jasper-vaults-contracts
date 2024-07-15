@@ -73,7 +73,7 @@ interface IOptionFacet {
         uint256 maximum;
         PremiumOracleType  premiumOracleType;
         address[] premiumAssets;
-        uint32[]   productTypes;    // 1h=3600 2h=7200
+        uint64[]   productTypes;    // 1h=3600 2h=7200
         uint256[]  premiumFloorUSDs;// 10u 15u
         uint256[]  premiumRates;    // 1.1 ether 0.9 ether
     }
