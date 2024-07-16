@@ -76,6 +76,7 @@ interface IOptionModule {
         uint256 quantity;
         uint256 index;
         uint256 oracleIndex;
+        address nftFreeOption;
         PremiumOracleSign premiumSign;
     }
     event OptionPremiun(IOptionFacet.OrderType _orderType, uint64 _orderID, address _writer, address _holder, address _premiumAsset, uint256 _amount);
