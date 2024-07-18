@@ -69,16 +69,7 @@ interface IOptionModule {
         uint256 premiumFee;
         uint256 quantity;
     }
-    struct ManagedOrder{
-        address holder;
-        address writer;
-        address recipient;
-        uint256 quantity;
-        uint256 index;
-        uint256 oracleIndex;
-        address nftFreeOption;
-        PremiumOracleSign premiumSign;
-    }
     event OptionPremiun(IOptionFacet.OrderType _orderType, uint64 _orderID, address _writer, address _holder, address _premiumAsset, uint256 _amount);
-    event SetManagedOptionsSettings(IOptionFacet.ManagedOptionsSettings _newset);
+
+
 }

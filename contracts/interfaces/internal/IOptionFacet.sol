@@ -21,10 +21,7 @@ interface IOptionFacet {
         ProfitSettlement,
         PhysicalDelivery
     }
-    enum PremiumOracleType {
-        PAMMS,
-        AMMS
-    }
+
 
 
     struct PutOrder {
@@ -60,24 +57,6 @@ interface IOptionFacet {
         uint256 underlyingNftID;
         uint256 quantity;
     }
-    struct ManagedOptionsSettings {
-        bool isOpen;
-        IOptionFacet.OrderType orderType;
-        address writer;
-        address lockAsset;
-        address underlyingAsset;
-        IOptionFacet.UnderlyingAssetType lockAssetType;
-        uint256 underlyingNftID;
-        IOptionFacet.LiquidateMode liquidateMode;
-        address strikeAsset;
-        uint256 maximum;
-        PremiumOracleType  premiumOracleType;
-        address[] premiumAssets;
-        uint64[]   productTypes;    // 1h=3600 2h=7200
-        uint256[]  premiumFloorUSDs;// 10u 15u
-        uint256[]  premiumRates;    // 1.1 ether 0.9 ether
-    }
-
 
     //---event---
     event SetOrderId(uint64 _orderId);
@@ -96,7 +75,6 @@ interface IOptionFacet {
     event SetFeeRate(uint256 _feeRate);
     event SetSigatureLock(address _vault,OrderType _orderType,address _underlyingAsset, uint256 _timestamp);
     event SetUnderlyTotal(address _vault,OrderType _orderType,address _underlyingAsset, uint256 _total);
-    event SetManagedOptionsSettings(IOptionFacet.ManagedOptionsSettings set);
     //---put---
     function addPutOrder(uint64 _orderId, PutOrder memory _putOrder) external;
 
@@ -157,7 +135,4 @@ interface IOptionFacet {
         string memory _version,
         address _contract
     ) external;
-    
-    function getManagedOptionsSettings(address _vault) external view returns(IOptionFacet.ManagedOptionsSettings memory set);
-    function setManagedOptionsSettings(IOptionFacet.ManagedOptionsSettings memory set) external;
 }
