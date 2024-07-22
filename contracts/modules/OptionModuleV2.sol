@@ -27,7 +27,6 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
     }
     mapping(bytes=>SignData) public signData;
     mapping(address=>bool) public oracleWhiteList;
-    // TODO: delete this
     mapping(address=>bool) public nftWhiteList;
     
     modifier onlyOwner() {
@@ -61,6 +60,10 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
     function setPriceOracle(IPriceOracle _priceOracleModule) external onlyOwner{
         emit SetPriceOracle(address(_priceOracleModule));
         priceOracleModule = _priceOracleModule;
+    }
+    function setNftWhiteList(address _pool) external onlyOwner{
+        emit SetNftWhiteList(_pool);
+        nftWhiteList[_pool] = true;
     }
 
     function SubmitManagedOrder(ManagedOrder memory _info) external  onlyVaultOrManager(_info.holder){
@@ -259,7 +262,9 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
                 if (platformFee > 0 && feeRecipient != address(0)) {
                     IVault(_info.holder).invokeTransferEth(feeRecipient, platformFee);
                 }
-                IVault(_info.holder).invokeTransferEth(_info.writer, _premiumFeePayed - platformFee);
+                if( _premiumFeePayed - platformFee>0){
+                    IVault(_info.holder).invokeTransferEth(_info.writer, _premiumFeePayed - platformFee);
+                }
             } else {
                 if (freeOptionAmount>0){
                     IVault(_info.nftFreeOption).invokeTransfer(_info.premiumSign.premiumAsset, _info.holder, freeOptionAmount);
@@ -270,7 +275,9 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
                 if (platformFee > 0 && feeRecipient != address(0)) {
                     IVault(_info.holder).invokeTransfer( _info.premiumSign.premiumAsset,feeRecipient,platformFee);         
                 }
-                IVault(_info.holder).invokeTransfer(_info.premiumSign.premiumAsset, _info.writer, _premiumFeePayed - platformFee );     
+                if( _premiumFeePayed - platformFee>0){
+                    IVault(_info.holder).invokeTransfer(_info.premiumSign.premiumAsset, _info.writer, _premiumFeePayed - platformFee );     
+                }
             }
             require(INFTFreeOptionPool(_info.nftFreeOption).submitFreeAmount(_info, freeOptionAmount),"OptionModule:submitFreeAmount error");
     }
@@ -363,7 +370,7 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
         require(_setting.productTypes[_info.index] == _info.premiumSign.productType, "OptionModule:productType error");
         require(_info.premiumSign.strikeAmount >0, "OptionModule:strikeAmount error");
         require(_info.premiumSign.timestamp<= block.timestamp , "OptionModule:PremiumOracleSign timestamp expired");
-        require(nftWhiteList[_info.nftFreeOption], "OptionModule: nftFreeOption error");
+        require(_info.nftFreeOption == address(0)||nftWhiteList[_info.nftFreeOption], "OptionModule: nftFreeOption error");
         handlePremiumSign(_info.premiumSign);
     }
 

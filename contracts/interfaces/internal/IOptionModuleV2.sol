@@ -72,5 +72,6 @@ interface IOptionModuleV2 {
     event SetManagedOptionsSettings(IOptionFacetV2.ManagedOptionsSettings _newset);
     event SetOracleWhiteList(address _oracleSigner);
     event SetPriceOracle(address _priceOracleModule);
+    event SetNftWhiteList(address _pool);
 
  }
