@@ -22,8 +22,6 @@ interface IOptionFacet {
         PhysicalDelivery
     }
 
-
-
     struct PutOrder {
         address holder;
         LiquidateMode liquidateMode;
@@ -135,4 +133,6 @@ interface IOptionFacet {
         string memory _version,
         address _contract
     ) external;
+
+
 }

@@ -34,6 +34,7 @@ contract OptionFacet is IOptionFacet {
         assembly {
             ds.slot := position
         }
+     
     }
 
 

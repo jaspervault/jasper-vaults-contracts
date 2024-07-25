@@ -27,7 +27,7 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
     }
     mapping(bytes=>SignData) public signData;
     mapping(address=>bool) public oracleWhiteList;
-    mapping(address=>bool) public nftWhiteList;
+    mapping(address=>bool) public feeDiscountWhitlist;
     
     modifier onlyOwner() {
         require( msg.sender == IOwnable(diamond).owner(),"OptionModule:only owner");  
@@ -53,17 +53,17 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
     function setOptionService(IOptionService _optionService) external onlyOwner{
         optionService=_optionService;
     }
-    function setOracleWhiteList(address _oracleSigner) external onlyOwner{
+    function setOracleWhiteList(address _oracleSigner,bool _status) external onlyOwner{
         emit SetOracleWhiteList(_oracleSigner);
-        oracleWhiteList[_oracleSigner]=true;
+        oracleWhiteList[_oracleSigner]=_status;
     }
     function setPriceOracle(IPriceOracle _priceOracleModule) external onlyOwner{
         emit SetPriceOracle(address(_priceOracleModule));
         priceOracleModule = _priceOracleModule;
     }
-    function setNftWhiteList(address _pool) external onlyOwner{
-        emit SetNftWhiteList(_pool);
-        nftWhiteList[_pool] = true;
+    function setFeeDiscountWhitlist(address _pool,bool _status) external onlyOwner{
+        emit SetFeeDiscountWhitlist(_pool);
+        feeDiscountWhitlist[_pool] = _status;
     }
 
     function SubmitManagedOrder(ManagedOrder memory _info) external  onlyVaultOrManager(_info.holder){
@@ -279,7 +279,9 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
                     IVault(_info.holder).invokeTransfer(_info.premiumSign.premiumAsset, _info.writer, _premiumFeePayed - platformFee );     
                 }
             }
-            require(INFTFreeOptionPool(_info.nftFreeOption).submitFreeAmount(_info, freeOptionAmount),"OptionModule:submitFreeAmount error");
+            if (_info.nftFreeOption!=address(0)){
+                require(INFTFreeOptionPool(_info.nftFreeOption).submitFreeAmount(_info, freeOptionAmount),"OptionModule:submitFreeAmount error");
+            }
     }
 
 
@@ -287,6 +289,7 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
 
     struct OptionPrice {
         uint256 id;
+        uint256 chainId;
         uint64 productType;
         address optionAsset;
         uint256 strikePrice;
@@ -306,6 +309,7 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
     ) internal view {
         OptionPrice memory data = OptionPrice(
             _sign.id,
+            _sign.chainId,
             _sign.productType,
             _sign.optionAsset,
             _sign.strikePrice,
@@ -321,7 +325,7 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
             _sign.timestamp
         );
         bytes32 infoTypeHash = keccak256(
-            "OptionPrice(uint256 id,uint64 productType,address optionAsset,uint256 strikePrice,address strikeAsset,uint256 strikeAmount,address lockAsset,uint256 lockAmount,uint256 expireDate,uint256 lockDate,uint8 optionType,address premiumAsset,uint256 premiumFee,uint256 timestamp)");
+            "OptionPrice(uint256 id,uint256 chainId,uint64 productType,address optionAsset,uint256 strikePrice,address strikeAsset,uint256 strikeAmount,address lockAsset,uint256 lockAmount,uint256 expireDate,uint256 lockDate,uint8 optionType,address premiumAsset,uint256 premiumFee,uint256 timestamp)");
         bytes32 _hashInfo = keccak256(abi.encode(
                 infoTypeHash,
                 data
@@ -369,13 +373,15 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
         require(_setting.maximum>=_info.quantity, "OptionModule:productType error");
         require(_setting.productTypes[_info.index] == _info.premiumSign.productType, "OptionModule:productType error");
         require(_info.premiumSign.strikeAmount >0, "OptionModule:strikeAmount error");
-        require(_info.premiumSign.timestamp<= block.timestamp , "OptionModule:PremiumOracleSign timestamp expired");
-        require(_info.nftFreeOption == address(0)||nftWhiteList[_info.nftFreeOption], "OptionModule: nftFreeOption error");
+        require(_info.premiumSign.timestamp >= block.timestamp , "OptionModule:PremiumOracleSign timestamp expired");
+        require(_info.nftFreeOption == address(0)||feeDiscountWhitlist[_info.nftFreeOption], "OptionModule: nftFreeOption error");
         handlePremiumSign(_info.premiumSign);
     }
 
     function setManagedOptionsSettings(IOptionFacetV2.ManagedOptionsSettings memory _set) external onlyVaultOrManager(_set.writer){
         require(!IVaultFacet(diamond).getVaultLock(_set.writer),"OptionModule:writer is locked");
+        require(_set.productTypes.length ==_set.premiumFloorUSDs.length&& _set.productTypes.length==_set.premiumRates.length , 
+        "OptionModule:ManagedOptionsSettings length not same");
         IOptionFacetV2(diamond).setManagedOptionsSettings(_set);
     }
     function handleManagedFee(ManagedOrder memory _info,IOptionFacetV2.ManagedOptionsSettings memory setting ) internal returns(uint256){

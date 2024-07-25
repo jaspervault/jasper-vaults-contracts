@@ -43,6 +43,7 @@ interface IOptionModuleV2 {
     } 
     struct PremiumOracleSign {
         uint256 id;
+        uint256 chainId;
         uint64 productType;
         address optionAsset;
         uint256 strikePrice;
@@ -72,6 +73,5 @@ interface IOptionModuleV2 {
     event SetManagedOptionsSettings(IOptionFacetV2.ManagedOptionsSettings _newset);
     event SetOracleWhiteList(address _oracleSigner);
     event SetPriceOracle(address _priceOracleModule);
-    event SetNftWhiteList(address _pool);
-
- }
+    event SetFeeDiscountWhitlist(address _pool);
+}

@@ -71,5 +71,6 @@ interface IOptionModule {
     }
     event OptionPremiun(IOptionFacet.OrderType _orderType, uint64 _orderID, address _writer, address _holder, address _premiumAsset, uint256 _amount);
 
+    function submitJvaultOrderSingle(SubmitJvaultOrder memory _info,bytes memory _holderSignature) external;
 
 }

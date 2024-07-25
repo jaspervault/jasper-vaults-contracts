@@ -15,9 +15,11 @@ contract OptionFacetV2 is IOptionFacetV2 {
             ds.slot := position
         }
     }
+
     function setManagedOptionsSettings(ManagedOptionsSettings memory _set) external {
         OptionV2 storage ds = diamondStorage();
         ds.managedOptionsSettings[_set.writer] = _set;
+        
         emit SetManagedOptionsSettings(_set);
     }
     function getManagedOptionsSettings(address _vault) external view returns(IOptionFacetV2.ManagedOptionsSettings memory set) {

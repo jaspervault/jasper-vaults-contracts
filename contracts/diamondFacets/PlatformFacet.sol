@@ -39,6 +39,19 @@ contract PlatformFacet is IPlatformFacet {
             ds.slot := position
         }
     }
+    function getIndex()view public returns(bytes32){
+        return DIAMOND_STORAGE_POSITION;
+    }
+    function getSlot() public view returns(uint) {
+        uint i;
+        Platform storage ds = diamondStorage();
+        // address eth =  ds.eth;
+        assembly{
+            i:= ds.slot
+        }
+        return i;
+    }
+
 
     //set modules
     function setModules(

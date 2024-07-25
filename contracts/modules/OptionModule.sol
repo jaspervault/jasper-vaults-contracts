@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.12;
-
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
@@ -11,28 +10,15 @@ import {Invoke} from "../lib/Invoke.sol";
 import {IOptionModule} from "../interfaces/internal/IOptionModule.sol";
 import {IOptionService} from "../interfaces/internal/IOptionService.sol";
 import {IOptionFacet} from "../interfaces/internal/IOptionFacet.sol";
+import {INonfungiblePositionManager} from "../interfaces/external/INonfungiblePositionManager.sol";
 import {IPriceOracle} from "../interfaces/internal/IPriceOracle.sol";
-import {INFTFreeOptionPool} from "../interfaces/external/INFTFreeOptionPool.sol";
+import {IVaultFactory} from "../interfaces/internal/IVaultFactory.sol";
 
 contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable, ReentrancyGuardUpgradeable{
     using Invoke for IVault;
     IOptionService public optionService;
-    struct SignData{
-        bool lock;
-        uint256 total;
-        uint256 orderCount;
-    }
-    mapping(bytes=>SignData) public signData;
-    mapping(address=>bool) public oracleWhiteList;
-    string name;
-    string version;
-    // TODO: delete this
-    mapping(bytes=>bool) public signBlackList;
-
-    mapping(address=>mapping(uint256 => uint256)) premiunByAMMs;
-    mapping(address=>bool) public nftWhiteList;
-    IPriceOracle priceOracle;
-    
+    mapping(bytes=>bool) signBlackList;
+    mapping(address=>bool) oracleWhiteList;
     modifier onlyOwner() {
         require( msg.sender == IOwnable(diamond).owner(),"OptionModule:only owner");  
         _;
@@ -51,19 +37,10 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
         address newImplementation
     ) internal override onlyOwner {}
 
-    function setOptionPremiunByAMMs(address _token,uint256 _productType,uint256 _premiunRate) external onlyOwner{
-        premiunByAMMs[_token][_productType] = _premiunRate;
-    }
     function setOptionService(IOptionService _optionService) external onlyOwner{
         optionService=_optionService;
     }
-    function setOracleWhiteList(address oracle) external onlyOwner{
-        oracleWhiteList[oracle]=true;
-    }
-    function setPriceOracle(IPriceOracle _priceOracle) external onlyOwner{
-        priceOracle = _priceOracle;
-    }
-    // ----jvault-----degen  Single  
+    //----jvault-----
     function submitJvaultOrderSingle(SubmitJvaultOrder memory _info,bytes memory _holderSignature) external onlyVaultOrManager(_info.writer) {
         SubmitJvaultOrder memory newInfo =  SubmitJvaultOrder({
                     orderType:_info.orderType,  
@@ -85,16 +62,8 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
                     quantity:_info.quantity
           });
         handleJvaultSignature(newInfo,_holderSignature,_info.holder);
-        require(
-            !IVaultFacet(diamond).getVaultLock(_info.recipient),
-            "OptionModule:recipient is locked"
-        );
-        if (_info.premiumAsset == IPlatformFacet(diamond).getEth()) { 
-            IVault(_info.recipient).invokeTransferEth(_info.holder, optionService.getParts(_info.quantity, _info.premiumFee));
-        }else{
-            IVault(_info.recipient).invokeTransfer(_info.premiumAsset,  _info.holder, optionService.getParts(_info.quantity, _info.premiumFee));
-        }
         handleFee(_info);
+
         //create order
         if(_info.orderType==IOptionFacet.OrderType.Call){
              IOptionFacet.CallOrder memory callOrder= IOptionFacet.CallOrder({
@@ -137,9 +106,8 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
         }else{
             revert("OptionModule:orderType error");
         }
-        signData[_holderSignature].lock = true;
+        signBlackList[_holderSignature] = true;
     }
-
     function handleJvaultSignature(SubmitJvaultOrder memory _info,bytes memory _signature,address _signer) internal view {
         IOptionFacet optionFacet = IOptionFacet(diamond);
         bytes32 infoTypeHash = keccak256(
@@ -152,12 +120,9 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
         );
         address signer = IVault(_signer).owner();
         address recoverAddress = ECDSA.recover(digest, _signature);
-        require(recoverAddress == signer, "OptionModule:handleJvaultSignature signature error");
+        require(recoverAddress == signer, "OptionModule:signature error");
     }
     //----option------
-    //----signature-----
-
-
 
     function handleFee(
         SubmitJvaultOrder memory _info
@@ -176,7 +141,8 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
             "OptionModule: holder vault is locked"
         );
         require(
-            platformFacet.getIsVault(_info.recipient)&&platformFacet.getIsVault(_info.holder)&&IOwnable(_info.holder).owner()==IOwnable(_info.recipient).owner(),
+            platformFacet.getIsVault(_info.recipient)&&platformFacet.getIsVault(_info.holder)&&
+            IOwnable(_info.holder).owner()==IOwnable(_info.recipient).owner(),
             "OptionModule:recipient error"
         );
         if (_info.premiumAsset == eth) {
@@ -193,5 +159,8 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
             IVault(_info.holder).invokeTransfer(_info.premiumAsset, _info.writer, _premiumFee - platformFee );     
         }
     }
-    
+
+
+
+
 }
