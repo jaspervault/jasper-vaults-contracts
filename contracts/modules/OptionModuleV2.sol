@@ -374,6 +374,7 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
         require(_setting.productTypes[_info.index] == _info.premiumSign.productType, "OptionModule:productType error");
         require(_info.premiumSign.strikeAmount >0, "OptionModule:strikeAmount error");
         require(_info.premiumSign.timestamp >= block.timestamp , "OptionModule:PremiumOracleSign timestamp expired");
+        require(_info.premiumSign.chainId == block.chainid , "OptionModule:PremiumOracleSign timestamp expired");
         require(_info.nftFreeOption == address(0)||feeDiscountWhitlist[_info.nftFreeOption], "OptionModule: nftFreeOption error");
         handlePremiumSign(_info.premiumSign);
     }
@@ -383,6 +384,10 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
         require(_set.productTypes.length ==_set.premiumFloorUSDs.length&& _set.productTypes.length==_set.premiumRates.length , 
         "OptionModule:ManagedOptionsSettings length not same");
         IOptionFacetV2(diamond).setManagedOptionsSettings(_set);
+    }
+    function getManagedOptionsSettings(address _vault) external view returns(IOptionFacetV2.ManagedOptionsSettings memory){
+        IOptionFacetV2 optionFacetV2 = IOptionFacetV2(diamond);
+        return optionFacetV2.getManagedOptionsSettings(_vault);
     }
     function handleManagedFee(ManagedOrder memory _info,IOptionFacetV2.ManagedOptionsSettings memory setting ) internal returns(uint256){
         uint256 premiumFeePayed;

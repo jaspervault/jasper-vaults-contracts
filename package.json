@@ -1,6 +1,6 @@
 {
   "name": "@jaspervault/contracts-v2",
-  "version": "2.5.2",
+  "version": "2.5.3",
   "main": "dist",
   "license": "MIT",
   "files": [
