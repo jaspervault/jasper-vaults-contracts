@@ -19,9 +19,9 @@ interface IOptionFacetV2 {
         uint256 maximum;
         PremiumOracleType  premiumOracleType;
         address[] premiumAssets;
-        uint64[]   productTypes;    // 1h=3600 2h=7200
-        uint256[]  premiumFloorUSDs;// 10u = 10 ether
-        uint256[]  premiumRates;    // 1.1 ether 0.9 ether
+        uint64[] productTypes;    // 1h=3600 2h=7200
+        uint256[] premiumFloorAMMs;// 10u = 10 ether
+        uint256[] premiumRates;    // 1.1 ether 0.9 ether
     }
     event SetManagedOptionsSettings(ManagedOptionsSettings set);
 

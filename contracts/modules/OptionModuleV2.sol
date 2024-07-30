@@ -72,7 +72,7 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
         IOptionFacetV2.ManagedOptionsSettings memory setting = optionFacetV2.getManagedOptionsSettings(_info.writer);
         verifyManagedOrder(_info, setting);
         //transfer fee
-        uint premiumFeePayed = handleManagedFee(_info, setting);
+        uint256 premiumFeePayed = transferManagedFee(_info, setting);
         
         //create order
         if(setting.orderType==IOptionFacet.OrderType.Call){
@@ -93,7 +93,7 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
                 quantity:_info.quantity
              });
              optionService.createCallOrder(callOrder);
-            emit OptionPremiun(IOptionFacet.OrderType.Call ,  IOptionFacet(diamond).getOrderId(),  setting.writer,  _info.holder, setting.premiumAssets[_info.index] ,premiumFeePayed);
+            emit OptionPremiun(IOptionFacet.OrderType.Call ,  IOptionFacet(diamond).getOrderId(),  setting.writer,  _info.holder, _info.premiumSign.premiumAsset ,premiumFeePayed);
         }else if(setting.orderType==IOptionFacet.OrderType.Put){
             IOptionFacet.PutOrder memory putOrder= IOptionFacet.PutOrder({
                         holder:_info.holder,
@@ -112,7 +112,7 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
                         quantity:_info.quantity
              });
              optionService.createPutOrder(putOrder);
-            emit OptionPremiun(IOptionFacet.OrderType.Put,  IOptionFacet(diamond).getOrderId(),  setting.writer,  _info.holder, setting.premiumAssets[_info.index], premiumFeePayed);
+            emit OptionPremiun(IOptionFacet.OrderType.Put,  IOptionFacet(diamond).getOrderId(),  setting.writer,  _info.holder, _info.premiumSign.premiumAsset, premiumFeePayed);
         }else{
             revert("OptionModule:orderType error");
         }
@@ -193,7 +193,7 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
         IPlatformFacet platformFacet=IPlatformFacet(diamond);
         address eth= platformFacet.getEth();
         //calculate premiumFee
-        uint _premiumFee= optionService.getParts(_info.quantity, _info.premiumFee);   
+        uint256 _premiumFee= optionService.getParts(_info.quantity, _info.premiumFee);   
         //calculate platformFee
         uint256 platformFee = (_premiumFee * optionFacet.getFeeRate()) / 1 ether;           
         address feeRecipient = optionFacet.getFeeRecipient();
@@ -251,6 +251,8 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
             }else{
                 freeOptionAmount = _premiumFeePayed;
             }
+        }else{
+            holderPayOptionAmount=_premiumFeePayed;
         }
         if (_info.premiumSign.premiumAsset == eth) {
                 if (freeOptionAmount>0){
@@ -345,12 +347,12 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
         bytes32 digest = keccak256(
             abi.encodePacked("\x19\x01", _domain, _hashInfo)
         );
-        for(uint i; i<_sign.oracleSign.length; i++) {
+        for(uint256 i; i<_sign.oracleSign.length; i++) {
             require(oracleWhiteList[ECDSA.recover(digest, _sign.oracleSign[i])], "OptionModule:handlePremiumSign not from whiteList error");
         }
     }    
     function isInArray(address[] memory array, address element) public pure returns (bool) {
-        for (uint i = 0; i < array.length; i++) {
+        for (uint256 i = 0; i < array.length; i++) {
             if (array[i] == element) {
                 return true;
             }
@@ -381,7 +383,8 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
 
     function setManagedOptionsSettings(IOptionFacetV2.ManagedOptionsSettings memory _set) external onlyVaultOrManager(_set.writer){
         require(!IVaultFacet(diamond).getVaultLock(_set.writer),"OptionModule:writer is locked");
-        require(_set.productTypes.length ==_set.premiumFloorUSDs.length&& _set.productTypes.length==_set.premiumRates.length , 
+        require(_set.productTypes.length ==_set.premiumFloorAMMs.length
+        && _set.productTypes.length==_set.premiumRates.length , 
         "OptionModule:ManagedOptionsSettings length not same");
         IOptionFacetV2(diamond).setManagedOptionsSettings(_set);
     }
@@ -389,26 +392,34 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
         IOptionFacetV2 optionFacetV2 = IOptionFacetV2(diamond);
         return optionFacetV2.getManagedOptionsSettings(_vault);
     }
-    function handleManagedFee(ManagedOrder memory _info,IOptionFacetV2.ManagedOptionsSettings memory setting ) internal returns(uint256){
-        uint256 premiumFeePayed;
+    function transferManagedFee(ManagedOrder memory _info,IOptionFacetV2.ManagedOptionsSettings memory setting) internal returns(uint256 premiumFeePayed){
         address eth = IPlatformFacet(diamond).getEth();
         address weth = IPlatformFacet(diamond).getWeth();
+        uint256 premiumAmount;
         uint256 premiumAssetPrice =  priceOracleModule.getUSDPriceSpecifyOracle(
             _info.premiumSign.premiumAsset == eth ? weth :  _info.premiumSign.premiumAsset,
             _info.oracleIndex);
-        uint premiumDecimals =  uint(IERC20(_info.premiumSign.premiumAsset == eth ? weth : _info.premiumSign.premiumAsset).decimals());
-        uint floorPremiumAmount =  10**36/premiumAssetPrice * setting.premiumFloorUSDs[_info.index] / 1 ether * 10**premiumDecimals/ 1 ether; 
-
+        uint256 premiumDecimals =  uint256(IERC20(_info.premiumSign.premiumAsset == eth ? weth : _info.premiumSign.premiumAsset).decimals());
+        // 10**6
+        // uint256 floorPremiumAmount =  10**36/premiumAssetPrice * setting.premiumFloorUSDs[_info.index] / 1 ether * 10**premiumDecimals/ 1 ether; 
+        // uint256 premiumFloorUSD = (setting.premiumFloorAMMs[_info.index] * priceOracleModule.getUSDPriceSpecifyOracle(setting.lockAsset == eth ? weth : setting.lockAsset, _info.oracleIndex) /1 ether *_info.premiumSign.lockAmount / 1 ether) ;
+        uint256 premiumFloorAmount = getPremiumFloorAmount(_info,setting,eth,weth,premiumAssetPrice,premiumDecimals);
         if (setting.premiumOracleType==IOptionFacetV2.PremiumOracleType.AMMS){
-            uint256 premiumUSD = setting.premiumRates[_info.index] * priceOracleModule.getUSDPriceSpecifyOracle(setting.lockAsset == eth ? weth : setting.lockAsset, _info.oracleIndex) *_info.premiumSign.lockAmount /1 ether / 1 ether;
-            uint premiumAmount = 10**36/premiumAssetPrice* premiumUSD / 1 ether * 10**premiumDecimals / 10** uint(IERC20(setting.lockAsset == eth ? weth : setting.lockAsset).decimals());
-            premiumFeePayed=premiumAmount*premiumAssetPrice/ 10**premiumDecimals >= setting.premiumFloorUSDs[_info.index] ? premiumAmount :floorPremiumAmount ;
+            uint256 premiumUSD = setting.premiumRates[_info.index] * priceOracleModule.getUSDPriceSpecifyOracle(setting.lockAsset == eth ? weth : setting.lockAsset, _info.oracleIndex) /1 ether *_info.premiumSign.lockAmount / 1 ether;
+            premiumAmount = 10**36/premiumAssetPrice*premiumUSD
+            / 1 ether * 10**premiumDecimals / 10** uint256(IERC20(setting.lockAsset == eth ? weth : setting.lockAsset).decimals());
+            premiumFeePayed=premiumAmount*premiumAssetPrice/ 10**premiumDecimals >= setting.premiumFloorAMMs[_info.index] ? premiumAmount :premiumFloorAmount ;
         }else if(setting.premiumOracleType==IOptionFacetV2.PremiumOracleType.PAMMS){
-            uint premiumAmount = _info.premiumSign.premiumFee*setting.premiumRates[_info.index] / 1 ether;
-            premiumFeePayed=premiumAmount*premiumAssetPrice/ 10**premiumDecimals >= setting.premiumFloorUSDs[_info.index] ? premiumAmount :floorPremiumAmount ;
+            // 12*10**6
+            premiumAmount = _info.premiumSign.premiumFee*setting.premiumRates[_info.index] / 1 ether;
+            premiumFeePayed=premiumAmount*premiumAssetPrice/ 10**premiumDecimals >= setting.premiumFloorAMMs[_info.index] ? premiumAmount :premiumFloorAmount ;
         }
-        premiumFeePayed =  optionService.getParts(_info.quantity,premiumFeePayed);
+        premiumFeePayed = optionService.getParts(_info.quantity,premiumFeePayed);
         handleManagedFee(_info,premiumFeePayed);
         return premiumFeePayed;
+    }
+    function getPremiumFloorAmount(ManagedOrder memory _info,IOptionFacetV2.ManagedOptionsSettings memory setting,address eth, address weth,uint256 premiumAssetPrice,uint256 premiumDecimals) internal view returns(uint256 premiumFloorAmount) {
+        uint256 preMiumFloorUSD =  setting.premiumFloorAMMs[_info.index] * priceOracleModule.getUSDPriceSpecifyOracle(setting.lockAsset == eth ? weth : setting.lockAsset, _info.oracleIndex) /1 ether *_info.premiumSign.lockAmount / 1 ether;
+        premiumFloorAmount = 10 ** 36/ premiumAssetPrice* preMiumFloorUSD / 1 ether * 10**premiumDecimals / 10** uint256(IERC20(setting.lockAsset == eth ? weth : setting.lockAsset).decimals());
     }
 }

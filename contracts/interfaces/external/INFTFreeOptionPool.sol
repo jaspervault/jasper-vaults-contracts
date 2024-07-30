@@ -4,6 +4,7 @@ import {IOptionModuleV2} from "../internal/IOptionModuleV2.sol";
 
 interface INFTFreeOptionPool {
     function getFreeAmount(IOptionModuleV2.ManagedOrder memory _info) external view returns (uint256 amount);
-    function submitFreeAmount(IOptionModuleV2.ManagedOrder memory _info, uint256 amount) external view returns (bool ok);
+    function submitFreeAmount(IOptionModuleV2.ManagedOrder memory _info, uint256 amount) external returns (bool ok);
+    function addNFTDiscountToUser(address _user, uint256 _nftId) external ;
 
 }
