@@ -64,7 +64,8 @@ interface IOptionModuleV2 {
         address writer;
         address recipient;
         uint256 quantity;
-        uint256 index;
+        uint256 settingsIndex;
+        uint256 productTypeIndex;
         uint256 oracleIndex;
         address nftFreeOption;
         PremiumOracleSign premiumSign;

@@ -8,7 +8,6 @@ import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.
 import "@openzeppelin/contracts-upgradeable/access/IAccessControlUpgradeable.sol";
 import {IOwnable} from "./interfaces/internal/IOwnable.sol";
 
-import "hardhat/console.sol";
 
 contract LPToken is
     ERC20PresetMinterPauserUpgradeable,
@@ -35,7 +34,6 @@ contract LPToken is
    
        initialize(_name,_symbol);
         __UUPSUpgradeable_init();
-        //console.logBytes32(MINTER_ROLE);
         diamond = _diamond;
     }
 

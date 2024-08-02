@@ -10,7 +10,6 @@ import {IOwnable} from "../interfaces/internal/IOwnable.sol";
 import {IPaymasterFacet} from "../interfaces/internal/IPaymasterFacet.sol";
 import {IVault} from "../interfaces/internal/IVault.sol";
 
-import "hardhat/console.sol";
 contract VaultManageModule is
     ModuleBase,
     IVaultManageModule,

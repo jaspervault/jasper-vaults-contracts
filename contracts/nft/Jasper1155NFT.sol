@@ -92,7 +92,6 @@ contract JVTB is Initializable, UUPSUpgradeable, OwnableUpgradeable, ERC1155Supp
         uint256 tokenId = promoteCodeList[promoteCode];
         require(tokenId > 0, "Invalid Promote Code");
         
-        //require(hasMint[msg.sender][tokenId] == false, "Only Mint Once Per Address");
         require(globalHasMint[msg.sender] == false, "Only Mint Once Per Address");
     
         _mint(msg.sender, tokenId, 1, new bytes(1));
@@ -146,12 +145,10 @@ contract JVTB is Initializable, UUPSUpgradeable, OwnableUpgradeable, ERC1155Supp
         _mint(msg.sender, tokenId, count, new bytes(1));
     }
 
-    // 将字符串转换为字节数组
     function stringToBytes(string memory str) internal pure returns (bytes memory) {
         return bytes(str);
     }
 
-    // 将字节数组转换为字符串
     function bytesToString(bytes memory byteArray) internal pure returns (string memory) {
         return string(byteArray);
     }

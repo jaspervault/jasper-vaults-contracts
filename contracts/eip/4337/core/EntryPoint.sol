@@ -7,7 +7,6 @@ pragma solidity ^0.8.12;
 
 /* solhint-disable avoid-low-level-calls */
 /* solhint-disable no-inline-assembly */
-import "hardhat/console.sol";
 
 import "../interfaces/IAccount.sol";
 import "../interfaces/IPaymaster.sol";
@@ -19,6 +18,7 @@ import "./SenderCreator.sol";
 import "./Helpers.sol";
 import "./NonceManager.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+// import "hardhat/console.sol";
 
 contract EntryPoint is
     IEntryPoint,
@@ -70,12 +70,12 @@ contract EntryPoint is
     ) private returns (uint256 collected) {
         uint256 preGas = gasleft();
         bytes memory context = getMemoryBytesFromOffset(opInfo.contextOffset);
-        console.log("gasleft innerHandleOp", gasleft());
+        // console.log("gasleft innerHandleOp", gasleft());
 
         try this.innerHandleOp(userOp.callData, opInfo, context) returns (
             uint256 _actualGasCost
         ) {
-            console.log("gasleft _actualGasCost", gasleft());
+            // console.log("gasleft _actualGasCost", gasleft());
             collected = _actualGasCost;
         } catch {
             bytes32 innerRevertCode;
@@ -89,7 +89,7 @@ contract EntryPoint is
                 // it must be a revert caused by paymaster.
                 revert FailedOp(opIndex, "AA95 out of gas");
             }
-            console.log("gasleft _handlePostOp", gasleft());
+            // console.log("gasleft _handlePostOp", gasleft());
 
             uint256 actualGas = preGas - gasleft() + opInfo.preOpGas;
             collected = _handlePostOp(
@@ -290,14 +290,14 @@ contract EntryPoint is
         MemoryUserOp memory mUserOp = opInfo.mUserOp;
 
         uint callGasLimit = mUserOp.callGasLimit;
-        console.log("innerHandleOp", 0);
+        // console.log("innerHandleOp", 0);
 
         unchecked {
             // handleOps was called with gas limit too low. abort entire bundle.
             if (
                 gasleft() < callGasLimit + mUserOp.verificationGasLimit + 5000
             ) {
-                console.log("innerHandleOp", 1);
+                // console.log("innerHandleOp", 1);
 
                 assembly {
                     mstore(0, INNER_OUT_OF_GAS)

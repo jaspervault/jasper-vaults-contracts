@@ -14,7 +14,7 @@ import "../lib/ModuleBase.sol";
 import { IIssuanceFacet } from "../interfaces/internal/IIssuanceFacet.sol";
 import { IPoolModule } from "../interfaces/internal/IPoolModule.sol";
 
-import "hardhat/console.sol";
+// import "hardhat/console.sol";
 
 contract PoolBase is
     ModuleBase,
@@ -92,8 +92,6 @@ contract PoolBase is
         address _to,
         uint256 _amount
     ) internal{
-
-        // IVault(vault).owner();
         IVaultFacet vaultFacet = IVaultFacet(diamond);
         require(
             !vaultFacet.getVaultLock(vault),
@@ -137,7 +135,6 @@ contract PoolBase is
         validAsset(vault, _profitAsset);
         //transfer to metamask
         if (_profitAsset != platformFacet.getEth()) {
-            console.log("profitAsset:%s to:%s amount:%s",_profitAsset,_to,_amount);
             IVault(vault).invokeTransfer(_profitAsset, _to, _amount);
         } else {
             IVault(vault).invokeTransferEth(_to, _amount);

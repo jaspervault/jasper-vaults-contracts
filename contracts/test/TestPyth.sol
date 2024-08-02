@@ -43,11 +43,15 @@ contract TestPyth {
         PythStructs.Price memory  c;
         if (priceId == 0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace){
             // 330297910000,397428060,-8,1720015945
-            c.price = 289402010000;
+            c.price = 310000000000;
             c.expo = -8 ;
             return c;
         }else if( priceId == 0x2b89b9dc8fdf9f34709a5b106b472f0f39bb6ca9ce04b0fd7f2e971688e2e53b){
-            c.price = 99995323;
+            c.price = 99990000;
+            c.expo = -8 ;
+            return c;
+        }else if( priceId == 0xc9d8b075a5c69303365ae23633d4e085199bf5c520a3b90fed1322a0342ffc33){
+            c.price = 65000*10**8;
             c.expo = -8 ;
             return c;
         }

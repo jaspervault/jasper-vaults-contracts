@@ -260,7 +260,7 @@ contract IssuanceModule is
                 updatePosition(_to, _assets[i], 0);
             }
         }
-        emit Redeem(_vault, _assetsType, _assets, _amounts);
+        emit Redeem(_vault,_to,_assetsType, _assets, _amounts);
     }
 
     function deleteVaultProxyMode(address _vault) internal {

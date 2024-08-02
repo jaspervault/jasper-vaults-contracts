@@ -10,6 +10,7 @@ interface IIssuanceModule {
     );
     event Redeem(
         address _vault,
+        address to,
         uint256[] _assetsType,
         address[] _assets,
         uint256[] _amounts

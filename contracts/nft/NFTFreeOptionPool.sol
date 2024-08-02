@@ -13,20 +13,16 @@ contract NFTFreeOptionPool is Initializable, OwnableUpgradeable, UUPSUpgradeable
     address public optionModuleContractAddress;
     address public nftContractAddress;
 
-    // NFTDiscount hash => discount id
     mapping(bytes32 => uint256) public nftDiscountIds;
-    // discount id => NFTDiscount hash
     mapping(uint256 => bytes32) public nftDiscounts;
-    // NFT id 对应哪些 Discount ID 的组合。例如 NFT id 3 对应 2次 1 ETH 免单，2次 0.1 WBTC 免单。3 => [1,1,2,2]
     mapping(uint256 => uint256[]) public nftIdToDiscountId;
-    // 用户拥有的折扣
     mapping(address => mapping(uint256 => uint256)) public userDiscounts;
 
     struct NFTDiscount{
         address optionAsset;
         uint256 quantity;
-        uint256 productType; // Degen 小时数, 以秒为单位。例如2小时就是 7200
-        uint8 optionType; // 0: call, 1: put, 2 全部
+        uint256 productType;
+        uint8 optionType;
     }
 
     mapping(address => bool) public operators;
@@ -61,25 +57,12 @@ contract NFTFreeOptionPool is Initializable, OwnableUpgradeable, UUPSUpgradeable
         nftContractAddress = _address;
     }
 
-    function setPremiumToken(address _tokenAddress, uint256 _approveAmount) public onlyOperator{
-        IERC20(_tokenAddress).approve(optionModuleContractAddress, _approveAmount);
-    }
-
     function _authorizeUpgrade(
         address newImplementation
     ) internal override onlyOwner {}
 
     function encodeNFTDiscount(NFTDiscount memory _discount) public pure returns (bytes32) {
         return keccak256(abi.encodePacked(_discount.optionAsset, _discount.quantity, _discount.productType, _discount.optionType));
-    }
-
-    function encodeNFTDiscount1(
-        address optionAsset,
-        uint256 quantity,
-        uint256 productType,
-        uint8 optionType
-    ) public pure returns (bytes32) {
-        return keccak256(abi.encodePacked(optionAsset, quantity, productType, optionType));
     }
 
     function addNFTDiscount(NFTDiscount memory _discount, uint256 _discountId) public onlyOperator{
@@ -105,11 +88,29 @@ contract NFTFreeOptionPool is Initializable, OwnableUpgradeable, UUPSUpgradeable
         uint256[] memory discounts = nftIdToDiscountId[_nftId];
 
         require(discounts.length > 0, "NFTDiscountPool: discount not exists");
-        require(msg.sender == nftContractAddress, "NFTDiscountPool: only nft contract can call this function");
+
+        bool allow = operators[msg.sender];
+        if(msg.sender == nftContractAddress){
+            allow = true;
+        }
+
+        require(allow == true, "NFTDiscountPool: only nft contract or operator can call this function");
         
         for(uint256 i = 0; i < discounts.length; i++){
             uint256 discountId = discounts[i];
             userDiscounts[_user][discountId] ++;
+        }
+    }
+
+    function setDiscountToUser(address[] memory _user, uint256[] memory discountIds, uint256[] memory counts) public onlyOperator{
+
+        require(_user.length == discountIds.length, "Error length");
+        require(counts.length == discountIds.length, "Error length in count");
+        
+        for(uint256 i = 0; i < _user.length; i++){
+            address user = _user[i];
+            uint256 discountId = discountIds[i];
+            userDiscounts[user][discountId] = counts[i];
         }
     }
 
@@ -142,7 +143,6 @@ contract NFTFreeOptionPool is Initializable, OwnableUpgradeable, UUPSUpgradeable
             _optionOrder.premiumSign.optionAsset,
             _optionOrder.quantity,
             _optionOrder.premiumSign.productType,
-            //_optionOrder.optionType
             2
         );
 
@@ -173,7 +173,6 @@ contract NFTFreeOptionPool is Initializable, OwnableUpgradeable, UUPSUpgradeable
             _optionOrder.premiumSign.optionAsset,
             _optionOrder.quantity,
             _optionOrder.premiumSign.productType,
-            //_optionOrder.optionType
             2
         );
 
@@ -184,12 +183,11 @@ contract NFTFreeOptionPool is Initializable, OwnableUpgradeable, UUPSUpgradeable
             return true;
         }
 
-        // uint256 discountCount = userDiscounts[eoaAddress][discountId];
-        // if(discountCount > 0){
-        //     userDiscounts[eoaAddress][discountId] = discountCount - 1;
-        // }
+        uint256 discountCount = userDiscounts[eoaAddress][discountId];
+        if(discountCount > 0){
+            userDiscounts[eoaAddress][discountId] = discountCount - 1;
+        }
 
-        userDiscounts[eoaAddress][discountId]--;
         emit SubmitFreeAmount(eoaAddress, _optionOrder.premiumSign.premiumAsset, amount);
         return true;
     }
@@ -204,7 +202,6 @@ contract NFTFreeOptionPool is Initializable, OwnableUpgradeable, UUPSUpgradeable
 
         address[] memory _dest = new address[](1);
         _dest[0] = dest;
-        //_requireFromEntryPointOrOwner(dest, value, func);
         result = _call(dest, value, func);
     }
 

@@ -19,12 +19,13 @@ interface IOptionFacetV2 {
         uint256 maximum;
         PremiumOracleType  premiumOracleType;
         address[] premiumAssets;
-        uint64[] productTypes;    // 1h=3600 2h=7200
-        uint256[] premiumFloorAMMs;// 10u = 10 ether
-        uint256[] premiumRates;    // 1.1 ether 0.9 ether
+        uint64[] productTypes;
+        uint256[] premiumFloorAMMs;
+        uint256[] premiumRates;
     }
-    event SetManagedOptionsSettings(ManagedOptionsSettings set);
+    event SetManagedOptionsSettings(ManagedOptionsSettings[] set);
 
-    function getManagedOptionsSettings(address _vault) external view returns(IOptionFacetV2.ManagedOptionsSettings memory set);
-    function setManagedOptionsSettings(ManagedOptionsSettings memory set) external;
+    function getManagedOptionsSettings(address _vault) external view returns(IOptionFacetV2.ManagedOptionsSettings[] memory set);
+    function getManagedOptionsSettingsByIndex(address _vault,uint256 index) external view returns(IOptionFacetV2.ManagedOptionsSettings memory set);
+    function setManagedOptionsSettings(ManagedOptionsSettings[] memory set, address _vault) external;
 }
