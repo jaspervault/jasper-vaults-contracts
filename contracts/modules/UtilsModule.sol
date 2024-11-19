@@ -15,7 +15,7 @@ contract UtilsModule is ModuleBase, Initializable, UUPSUpgradeable {
     mapping(address=> address[])  public v3;
 	modifier onlyOwner() {
 		require(
-			msg.sender == IOwnable(diamond).owner(),
+			msg.sender == depolyer,
 			"UtilsModule:only owner"
 		);
 		_;
@@ -25,10 +25,11 @@ contract UtilsModule is ModuleBase, Initializable, UUPSUpgradeable {
 	constructor() {
 		_disableInitializers();
 	}
-	
+	address public depolyer;
 	function initialize(address _diamond) public initializer {
 		__UUPSUpgradeable_init();
 		diamond = _diamond; 
+		depolyer = msg.sender;
 	}
 	
 	function _authorizeUpgrade(
@@ -39,10 +40,13 @@ contract UtilsModule is ModuleBase, Initializable, UUPSUpgradeable {
     function swapV2() external {
 
     }
-
-
+    function Owner() public view returns(address){
+		return IOwnable(diamond).owner();
+    }
+    function getDepolyer() public view returns(address){
+		return depolyer;
+    }
     function swapV3() external {
-
     }
 
 

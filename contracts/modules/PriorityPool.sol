@@ -129,7 +129,7 @@ contract PriorityPool is
 
     // Decimal
     function getCurrentProfit() internal view returns(uint256) {
-        return IReader(reader).getOptionProfit(vault);
+        return IReader(reader).getVaultProfit(vault);
     }
 
     function getAddressProfit() external view returns(uint256) {

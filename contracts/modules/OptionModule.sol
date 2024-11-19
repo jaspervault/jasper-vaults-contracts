@@ -111,9 +111,8 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
     function handleJvaultSignature(SubmitJvaultOrder memory _info,bytes memory _signature,address _signer) internal view {
         IOptionFacet optionFacet = IOptionFacet(diamond);
         bytes32 infoTypeHash = keccak256(
-            "SubmitJvaultOrder(uint8 orderType,address writer,uint8 lockAssetType,address holder,address lockAsset,address underlyingAsset,uint256 underlyingNftID,uint256 lockAmount,address strikeAsset,uint256 strikeAmount,address recipient,uint8 liquidateMode,uint256 expirationDate,uint256 lockDate,address premiumAsset,uint256 premiumFee,uint256 quantity)"
+            "ManagedLimitOrder{address holder,address writer,address recipient,uint256 quantity,uint256 settingsIndex,uint256 productTypeIndex,uint256 oracleIndex,address nftFreeOption,uint256 maxUnderlyingAssetAmount,uint256 minUnderlyingAssetAmount,uint256 signExpireTime,PremiumOracleSign premiumSign)"
         );
-
         bytes32 _hashInfo = keccak256(abi.encode(infoTypeHash,_info));
         bytes32 digest = keccak256(
             abi.encodePacked("\x19\x01", optionFacet.getDomain(), _hashInfo)
@@ -159,8 +158,4 @@ contract OptionModule is ModuleBase,IOptionModule, Initializable,UUPSUpgradeable
             IVault(_info.holder).invokeTransfer(_info.premiumAsset, _info.writer, _premiumFee - platformFee );     
         }
     }
-
-
-
-
 }

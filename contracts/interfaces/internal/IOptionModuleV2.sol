@@ -40,7 +40,14 @@ interface IOptionModuleV2 {
         address[] premiumAssets;
         uint256[] premiumRates;
         uint256[] premiumFloors;
-    } 
+    }
+
+    struct LimitOrderInfo{
+        address writer;
+        uint256 settingsIndex;
+        uint256 productTypeIndex;
+
+    }
     struct PremiumOracleSign {
         uint256 id;
         uint256 chainId;
@@ -59,7 +66,7 @@ interface IOptionModuleV2 {
         uint256 timestamp;
         bytes[] oracleSign;
     }
-   struct ManagedOrder{
+    struct ManagedOrder{
         address holder;
         address writer;
         address recipient;
@@ -69,10 +76,36 @@ interface IOptionModuleV2 {
         uint256 oracleIndex;
         address nftFreeOption;
         PremiumOracleSign premiumSign;
+        uint8 optionSourceType;
+        bool liquidationToEOA;
+        uint256 offerID;
+    }
+    struct OptionPrice {    
+        uint256 id;
+        uint256 chainId;
+        uint64 productType;
+        address optionAsset;
+        uint256 strikePrice;
+        address strikeAsset;
+        uint256 strikeAmount;
+        address lockAsset;
+        uint256 lockAmount;
+        uint256 expireDate;
+        uint256 lockDate;
+        uint8   optionType;
+        address premiumAsset;
+        uint256 premiumFee;
+        uint256 timestamp;
     }
     event OptionPremiun(IOptionFacet.OrderType _orderType, uint64 _orderID, address _writer, address _holder, address _premiumAsset, uint256 _amount);
-    event SetManagedOptionsSettings(IOptionFacetV2.ManagedOptionsSettings _newset);
     event SetOracleWhiteList(address _oracleSigner);
     event SetPriceOracle(address _priceOracleModule);
     event SetFeeDiscountWhitlist(address _pool);
+    event SetOptionModuleV2Handle(address _hanlde);
+    function SubmitManagedOrder(ManagedOrder memory _info) external;
+    function handleManagedOrder(ManagedOrder memory _info) external;
+    function setManagedOptionsSettings(IOptionFacetV2.ManagedOptionsSettings[] memory _set,address _vault, uint256[] memory _deleteIndex) external;
+    function getManagedOptionsSettings(address _vault) external view returns(IOptionFacetV2.ManagedOptionsSettings[] memory);
+    function getFeeDiscountWhitlist(address _nft)external view returns(bool);
+    function getOracleWhiteList(address _addr)external view returns(bool);
 }

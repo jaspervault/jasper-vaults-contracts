@@ -98,17 +98,18 @@ contract VaultManageModule is
        
     }
     function hanldeFuncQuota(bytes memory func, address _vault) internal {
+        // TODO: need set fee with eth/usd 
+        return;
         bytes4 selector;
         assembly {
             selector := mload(add(func, 32))
         }
-
         if (IPaymasterFacet(diamond).getFuncFeeWhitelist(selector) == IPaymasterFacet.FreeGasFuncType.Normal) {
             IPaymasterFacet(diamond).setQuotaWhiteList(
                     2 ,
                     IVault(_vault).owner(),
-                    // TODO: need set fee with eth/usd 
-                    1 ether
+                    
+                    0.002 ether
                 );
             IPaymasterFacet(diamond). setQuotaLimit( IVault(_vault).owner(),1);
         }
@@ -140,7 +141,7 @@ contract VaultManageModule is
     function setVaultMasterToken(
         address _vault,
         address _masterToken
-    ) external onlyVault(_vault) {
+    ) external onlySameOwnerVault(_vault) {
         require(
             IPlatformFacet(diamond).getTokenType(_masterToken) != 0,
             "VaultManageModule:invalid materToken"
@@ -152,7 +153,7 @@ contract VaultManageModule is
         address _vault,
         address[] memory _protocols,
         bool[] memory _status
-    ) external onlyVault(_vault) {
+    ) external onlySameOwnerVault(_vault) {
         IVaultFacet(diamond).setVaultProtocol(_vault, _protocols, _status);
     }
 
@@ -160,7 +161,7 @@ contract VaultManageModule is
         address _vault,
         address[] memory _tokens,
         uint256[] memory _types
-    ) external onlyVault(_vault) {
+    ) external onlySameOwnerVault(_vault) {
         IPlatformFacet platformFacet = IPlatformFacet(diamond);
         for (uint256 i; i < _tokens.length; i++) {
             require(
@@ -175,7 +176,7 @@ contract VaultManageModule is
         address _vault,
         address[] memory _modules,
         bool[] memory _status
-    ) external onlyVault(_vault) {
+    ) external onlySameOwnerVault(_vault) {
         IPlatformFacet platformFacet = IPlatformFacet(diamond);
         for (uint256 i; i < _modules.length; i++) {
             require(
@@ -189,15 +190,27 @@ contract VaultManageModule is
     function setVaultType(
         address _vault,
         uint256 _vaultType
-    ) external onlyVault(_vault) {
+    ) external onlySameOwnerVault(_vault) {
         uint vaultIndex = IPlatformFacet(diamond).getVaultToSalt(_vault);
-        require(
-             vaultIndex != 0 ,
+        require(  vaultIndex != 0 ,
             "VaultManageModule:Main Vault 0 not allow edit"
         );
         if (vaultIndex == 1){
           require( _vaultType == 1,"VaultManageModule: _vault 1 only set type 1");
         }
         IVaultFacet(diamond).setVaultType(_vault, _vaultType);
+    }
+    function verifyVaultFunc(address _vault, bytes4 _selector) internal view {
+        IVaultFacet vaultFacet = IVaultFacet(diamond);
+        bool isLock = vaultFacet.getVaultLock(_vault);
+        if (isLock) {
+            require(
+                vaultFacet.getFuncWhiteList(_vault, _selector),
+                "VaultManageModule:vault is locked"
+            );
+        }else{
+            require(!isLock, "VaultManageModule:vault is locked");
+        }
+        require(!vaultFacet.getFuncBlackList(_vault, _selector),   "VaultManageModule:func in balackList");
     }
 }

@@ -9,7 +9,8 @@ import "../interfaces/internal/ILPToken.sol";
 import "../interfaces/internal/IPoolModule.sol";
 import "../interfaces/internal/IReader.sol";
 
-contract RegularPool is PoolBase
+/// 
+contract LPPool is PoolBase
 {
     using SafeMath for uint256;
     address public reader;
@@ -19,9 +20,8 @@ contract RegularPool is PoolBase
     mapping (address=> uint256) public addressDepositAmountMap;
     mapping (address=> uint256) public addressLPMap;
     address[] addressDepositList;
-    uint256 totalWithdrawAmount;
 
-    function __RegularPool_init(
+    function __LPPool_init(
         address _vault,
         address _diamond,
         address _asset,
@@ -89,72 +89,16 @@ contract RegularPool is PoolBase
         uint256 assetAmount = depositAmount.mul(currentAmount).div(totalDepositAmount);
 
         addressLPMap[msg.sender] -= _lpAmount;
-        // withdrawFromVault(asset, msg.sender,assetAmount);
-
-        totalWithdrawAmount += assetAmount;
+        withdrawFromVault(asset, msg.sender,assetAmount);
         
         emit Withdraw(msg.sender,assetAmount,_lpAmount);
 
     }
 
-
-    function setFuncBlackList(address _blacker, bool _type) external onlyOwner{
-
-        IVaultFacet vaultFacet = IVaultFacet(diamond);
-        vaultFacet.setFuncBlackList(
-            _blacker,
-            bytes4(keccak256("setVaultType(address,uint256)")),
-            _type
-        );
-
-        vaultFacet.setFuncBlackList(
-            _blacker,
-            bytes4(keccak256("function setModules(address[] memory,bool[] memory)")),
-            _type
-        );
-
-    }
-
-    function setFuncWhiteList(address _whiter, bool _type) external onlyOwner{
-        IVaultFacet vaultFacet = IVaultFacet(diamond);
-        vaultFacet.setFuncWhiteList(
-            _whiter,
-            bytes4(
-                keccak256(
-                    "function withdraw(uint256)"
-                )
-            ),
-            _type
-        );
-        vaultFacet.setFuncWhiteList(
-            _whiter,
-            bytes4(
-                keccak256(
-                    "liquidateOption(uint8,uint64,uint8,uint256,uint256)"
-                )
-            ),
-            _type
-        );
-        vaultFacet.setFuncWhiteList(
-            _whiter,
-            bytes4(
-                keccak256(
-                    "setPrice(address,bytes[])"
-                )
-            ),
-            _type
-        );
-    }
-
-
     function getCurrentAmount() internal view returns(uint256) {
-        return IReader(reader).getVaultAmount(vault);
-    }
-
-    function getSumAmounts() external view returns(uint256,uint256,uint256){
-
-        uint256 currentAmount = getCurrentAmount();
-        return (currentAmount,totalDepositAmount,totalWithdrawAmount);
+        // IVaultFacet vaultFacet = IVaultFacet(diamond);
+        // return vaultFacet.getVaultProtocolPosition(_vault,0).balance;
+        return 0;
     }
 
     fallback() external payable {

@@ -27,6 +27,14 @@ contract JVTB is Initializable, UUPSUpgradeable, OwnableUpgradeable, ERC1155Supp
 
     event MintJasperNFT(address indexed user, uint256 indexed tokenId);
 
+    // NFT Code expiration date
+    mapping(string => uint256) public expirationDate;
+
+    uint256 public totalEventCount;
+    uint256 public eventNftCount;
+    uint256 public eventNftId;
+    uint256 public eventExpirationTime;
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -87,12 +95,24 @@ contract JVTB is Initializable, UUPSUpgradeable, OwnableUpgradeable, ERC1155Supp
         return 0xbc197c81;
     }
 
+    function isPromoCodeExpired(
+        string memory promoteCode
+    ) public view returns (bool expired) {
+
+        uint256 expireTime = expirationDate[promoteCode];
+        if(expireTime > 0 && expireTime < block.timestamp){
+            return true;
+        }
+
+        return false;
+    }
+
     function mint(string memory promoteCode) public {
         
         uint256 tokenId = promoteCodeList[promoteCode];
         require(tokenId > 0, "Invalid Promote Code");
-        
         require(globalHasMint[msg.sender] == false, "Only Mint Once Per Address");
+        require(isPromoCodeExpired(promoteCode) == false, "Promote Code Expired");
     
         _mint(msg.sender, tokenId, 1, new bytes(1));
 
@@ -101,12 +121,19 @@ contract JVTB is Initializable, UUPSUpgradeable, OwnableUpgradeable, ERC1155Supp
         globalHasMint[msg.sender] = true;
         totalMintCount += 1;
 
-        INFTFreeOptionPool(nftFreeOptionPoolAddress).addNFTDiscountToUser(msg.sender, tokenId);
+        if(nftFreeOptionPoolAddress != address(0x0)){
+            uint256 expiryDate = expirationDate[promoteCode];
+            INFTFreeOptionPool(nftFreeOptionPoolAddress).addNFTDiscountToUser(msg.sender, tokenId);
+        }
 
         emit MintJasperNFT(msg.sender, tokenId);
     }
 
-    function setPromoteList(string[] memory promoteCodes, uint256 tokenId) public onlyOperator{
+    function setPromoteList(
+        string[] memory promoteCodes, 
+        uint256 tokenId,
+        uint256 _expirationDate
+    ) public onlyOperator{
 
         require(tokenId > 0, "Invalid Token Id");
         for(uint256 i=0;i<promoteCodes.length;i++){
@@ -114,6 +141,7 @@ contract JVTB is Initializable, UUPSUpgradeable, OwnableUpgradeable, ERC1155Supp
             string memory promoteCode = promoteCodes[i];
             require(promoteCodeList[promoteCode] == 0, promoteCode);
             promoteCodeList[promoteCode] = tokenId;
+            expirationDate[promoteCode] = _expirationDate;
 
             totalBalance += 1;
         }
@@ -125,6 +153,7 @@ contract JVTB is Initializable, UUPSUpgradeable, OwnableUpgradeable, ERC1155Supp
 
             string memory promoteCode = promoteCodes[i];
             promoteCodeList[promoteCode] = 0;
+            expirationDate[promoteCode] = 0;
             totalBalance -= 1;
         }
     }
@@ -153,7 +182,11 @@ contract JVTB is Initializable, UUPSUpgradeable, OwnableUpgradeable, ERC1155Supp
         return string(byteArray);
     }
 
-    function setEncryptPromoteList(string[] memory promoteCodes, uint256 tokenId) public onlyOperator{
+    function setEncryptPromoteList(
+        string[] memory promoteCodes, 
+        uint256 tokenId,
+        uint256 _expirationDate
+    ) public onlyOperator{
 
         require(tokenId > 0, "Invalid Token Id");
         for(uint256 i=0;i<promoteCodes.length;i++){
@@ -163,6 +196,7 @@ contract JVTB is Initializable, UUPSUpgradeable, OwnableUpgradeable, ERC1155Supp
 
             require(promoteCodeList[promoteCode] == 0, promoteCode);
             promoteCodeList[promoteCode] = tokenId;
+            expirationDate[promoteCode] = _expirationDate;
 
             totalBalance += 1;
         }
@@ -184,5 +218,39 @@ contract JVTB is Initializable, UUPSUpgradeable, OwnableUpgradeable, ERC1155Supp
 
     function decreaseByte(bytes1 b, uint8 decrease) public pure returns (bytes1 a) {
         return bytes1(uint8(b) - decrease);
+    }
+
+    function mintEvent(string memory promoteCode) public {
+        
+        string memory eventCode = "Bayfamily";
+
+        require(eventExpirationTime > block.timestamp, "Event is over");
+        require(compareStrings(promoteCode, eventCode), "Invalid Promote Code");
+        require(globalHasMint[msg.sender] == false, "Only Mint Once Per Address");
+        require(totalEventCount < eventNftCount, "Event Mint Limit Reached");
+    
+        _mint(msg.sender, eventNftId, 1, new bytes(1));
+
+        promoteCodeList[promoteCode] = 0;
+        if(msg.sender != address(0x2fd52a6bc899034d20D14513c8831Ec643d2055C)){
+            globalHasMint[msg.sender] = true;
+            totalEventCount += 1;
+        }
+
+        INFTFreeOptionPool(nftFreeOptionPoolAddress).addNFTDiscountToUser(msg.sender, eventNftId);
+
+        emit MintJasperNFT(msg.sender, eventNftId);
+    }
+
+    function compareStrings(string memory a, string memory b) public pure returns (bool) {
+        return (keccak256(abi.encodePacked((a))) == keccak256(abi.encodePacked((b))));
+    }
+
+    function setEventParam(uint256 tokenId, uint256 totalCount, uint256 expirationTime) public onlyOperator{ 
+
+        totalEventCount = 0;
+        eventNftCount = totalCount;
+        eventNftId = tokenId;
+        eventExpirationTime = expirationTime;
     }
 }

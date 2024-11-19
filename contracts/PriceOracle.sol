@@ -2,11 +2,13 @@
 pragma solidity ^0.8.12;
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import {IOwnable} from "./interfaces/internal/IOwnable.sol";
 import {IOracleAdapter} from "./interfaces/internal/IOracleAdapter.sol";
-import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
+import {IPriceOracle} from "./interfaces/internal/IPriceOracle.sol";
+import {IOracleAdapterV2} from "./interfaces/internal/IOracleAdapterV2.sol";
 import {IPlatformFacet} from "./interfaces/internal/IPlatformFacet.sol";
-contract PriceOracle is Initializable, UUPSUpgradeable
+contract PriceOracle is Initializable, UUPSUpgradeable,IPriceOracle
      {
     address public diamond;
     address[] public oracles; //chainLink  coinbase  uniswap ...
@@ -148,5 +150,14 @@ contract PriceOracle is Initializable, UUPSUpgradeable
     }
     function getPriceSpecifyOracle(address _assetOne, address _assetTwo, uint index) external view returns (uint256){
         return IOracleAdapter(oracles[index]).read(_assetOne, _assetTwo);
+    }
+    function getHistoryPrice(
+        address _assetOne,
+        uint256 _index,
+        bytes[] memory _data
+    ) external returns (HistoryPrice[] memory price){
+        return  IOracleAdapterV2(oracles[_index]).readHistoryPrice(_assetOne, _data);
+    }
+    function  readByRoundID(address _masterToken, uint80 _roundId, uint _index) public view returns(RoundData memory ){
     }
 }

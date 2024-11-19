@@ -18,6 +18,8 @@ contract TradingCreditPool is Initializable, OwnableUpgradeable, UUPSUpgradeable
     mapping(address => bool) public operators;
     event SubmitFreeAmount(address indexed user, address indexed tokenAddress, uint256 indexed amount);
 
+    uint256 public deductionDecimal;
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -47,6 +49,10 @@ contract TradingCreditPool is Initializable, OwnableUpgradeable, UUPSUpgradeable
         tradingCreditDecimal = _decimal;
     }
 
+    function setDecuctionDecimal(uint256 _decimal) public onlyOperator {
+        deductionDecimal = _decimal;
+    }
+
     function _authorizeUpgrade(
         address newImplementation
     ) internal override onlyOwner {}
@@ -61,18 +67,30 @@ contract TradingCreditPool is Initializable, OwnableUpgradeable, UUPSUpgradeable
         }
     }
 
+    function addTradingCreditsToUser(address[] memory _user, uint256[] memory credits) public onlyOperator{
+
+        require(_user.length == credits.length, "Error length");
+        
+        for(uint256 i = 0; i < _user.length; i++){
+            address user = _user[i];
+            tradingCredits[user] += credits[i];
+        }
+    }
+
     function getUserTradingCredits(
         address user,
         uint256 premiumFee
     ) public view returns (uint256 credit){
 
         uint256 creditBalance = tradingCredits[user];
-        uint256 allowCredit = premiumFee;
+        uint256 allowCredit = 0;
         if(creditBalance < premiumFee){
-            allowCredit = premiumFee - creditBalance; 
+            allowCredit = creditBalance; 
+        }else{
+            allowCredit = premiumFee; 
         }
 
-        return allowCredit / 10**tradingCreditDecimal * 10**tradingCreditDecimal;
+        return allowCredit;
     }
 
     function getFreeAmount(IOptionModuleV2.ManagedOrder memory _optionOrder) public view returns (uint256 amount){

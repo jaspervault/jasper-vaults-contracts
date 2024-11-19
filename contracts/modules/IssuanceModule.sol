@@ -198,6 +198,21 @@ contract IssuanceModule is
         deleteVaultProxyMode(_vault);
     }
 
+    function redeemTo(
+        address _vault,
+        address payable _to,
+        uint256[] memory _assetsType,
+        address[] memory _assets,
+        uint256[] memory _amounts
+    ) external nonReentrant onlyVaultOrManager(_vault) {
+        IIssuanceFacet issuanceFacet = IIssuanceFacet(diamond);
+        IIssuanceFacet.IssueMode mode = issuanceFacet.getIssueMode(_vault);
+        if (mode == IIssuanceFacet.IssueMode.Proxy) {
+            _to = payable(issuanceFacet.getIssuer(_vault));
+        }
+        executeRedeem(_vault, _to, _assetsType, _assets, _amounts);
+        deleteVaultProxyMode(_vault);
+    }
     /**
 	   proxy  redeem  asset
 	 */

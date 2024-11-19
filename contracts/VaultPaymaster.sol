@@ -314,10 +314,10 @@ contract VaultPaymaster is
     function verifyMiner() internal view {
         IPaymasterFacet paymasterFacet = IPaymasterFacet(diamond);
         if (paymasterFacet.getOpenValidMiner()) {
-            require(
-                paymasterFacet.getMinerStatus(tx.origin),
-                "VaultPaymaster:invaliad miner"
-            );
+            // require(
+            //     paymasterFacet.getMinerStatus(tx.origin),
+            //     "VaultPaymaster:invaliad miner"
+            // );
         }
     }
 

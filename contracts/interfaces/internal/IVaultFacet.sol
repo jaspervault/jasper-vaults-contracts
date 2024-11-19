@@ -47,7 +47,7 @@ interface IVaultFacet{
      function getVaultModuleStatus(address _vault,address _module) external view returns(bool);
 
      function setVaultTokens(address _vault,address[] memory _tokens,uint256[] memory _status) external;
-     function getVaultAllTokens(address _vault) external view returns(address[] memory);
+     function  getVaultAllTokens(address _vault) external view returns(address[] memory);
      function getVaultTokenType(address _vault,address _token) external view returns(uint256);
 
      function setVaultProtocol(address _vault,address[] memory _protocols,bool[] memory _status) external;

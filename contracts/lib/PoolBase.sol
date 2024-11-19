@@ -26,14 +26,32 @@ contract PoolBase is
     using Invoke for IVault;
     using SafeERC20 for OrignIERC20;
 
-    address public vault;
-    address public asset;
-    
+    address   public vault;
+    address   public asset;
+    enum PermissionType{
+        Permissioned,
+        PermissionLess
+    }
+
+    PermissionType  public permissionType;
+    mapping(address => bool) addressPermissionMap;
+
     modifier onlyOwner() {
         require(
             msg.sender == IOwnable(diamond).owner(),
-            "TradeModule:only owner"
+            "PoolBase:only owner"
         );
+        _;
+    }
+
+    modifier onlyPermissioned() {
+
+        if(permissionType == PermissionType.Permissioned){
+            require(
+                addressPermissionMap[msg.sender],
+                "PoolBase:only permissioned"
+            );
+        }
         _;
     }
 
@@ -47,11 +65,31 @@ contract PoolBase is
         diamond = _diamond;
         vault = _vault;
         asset = _asset;
+        permissionType = PermissionType.PermissionLess;
     }
 
     function _authorizeUpgrade(
         address newImplementation
     ) internal override onlyOwner {}
+
+    // 0 Permissioned
+    // 1 PermissionLess
+    function setPermissionType(PermissionType _permissionType) public onlyOwner(){
+        permissionType = _permissionType;
+    }
+
+    /**
+     * depoist to investor 
+     * @param _investor investor for 
+     */
+    function addInvestor(address _investor) public onlyOwner(){
+
+        require(permissionType == PermissionType.Permissioned,"only permissioned need to add invest by admin");
+        require(addressPermissionMap[_investor] ,"already set permission , no need to add again");
+
+        addressPermissionMap[_investor] = true;
+
+    }
 
     /**
      * depoist to vault 

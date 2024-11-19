@@ -4,18 +4,18 @@ pragma solidity ^0.8.12;
 import "@openzeppelin/contracts/utils/Create2.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import "../eip/4337/interfaces/IEntryPoint.sol";
-import "./TestVault.sol";
+import "./VaultV2.sol";
 import {IOwnable} from "../interfaces/internal/IOwnable.sol";
 import {IPlatformFacet} from "../interfaces/internal/IPlatformFacet.sol";
 import {IVaultFacet} from "../interfaces/internal/IVaultFacet.sol";
 
 /**
- * A sample factory contract for TestVault
+ * A sample factory contract for VaultV2
  * A UserOperations "initCode" holds the address of the factory, and a method call (to createAccount, in this sample factory).
  * The factory's createAccount returns the target account address even if it is already installed.
  * This way, the entryPoint.getSenderAddress() can be called either before or after the account is created.
  */
-contract TestVaultFactory is Initializable, UUPSUpgradeable {
+contract VaultFactoryV2 is Initializable, UUPSUpgradeable {
     IEntryPoint public entryPoint;
     address public diamond;
     address public vaultImp;
@@ -51,14 +51,14 @@ contract TestVaultFactory is Initializable, UUPSUpgradeable {
     }
 
     function setVaultImplementation() public onlyOwner {
-        TestVault accountImplementation = new TestVault(entryPoint);
+        VaultV2 accountImplementation = new VaultV2(entryPoint);
         IPlatformFacet(diamond).setVaultImplementation(
             address(accountImplementation)
         );
     }
 
     function setVaultImp() public onlyOwner{
-        TestVault accountImplementation = new TestVault(entryPoint);
+        VaultV2 accountImplementation = new VaultV2(entryPoint);
         vaultImp=address(accountImplementation);
     }
 
@@ -71,20 +71,20 @@ contract TestVaultFactory is Initializable, UUPSUpgradeable {
     function createAccount(
         address wallet,
         uint256 salt
-    ) public returns (TestVault ret) {
+    ) public returns (VaultV2 ret) {
         address addr = getAddress(wallet, salt);
         uint codeSize = addr.code.length;
         if (codeSize > 0) {
-            return TestVault(payable(addr));
+            return VaultV2(payable(addr));
         }
         IPlatformFacet platformFact = IPlatformFacet(diamond);
         // address accountImplementation = platformFact.getVaultImplementation();
         address  accountImplementation=vaultImp;
-        ret = TestVault(
+        ret = VaultV2(
             payable(
                 new ERC1967Proxy{salt: bytes32(salt)}(
                     accountImplementation,
-                    abi.encodeCall(TestVault.initialize, (wallet, moduleManager))
+                    abi.encodeCall(VaultV2.initialize, (wallet, moduleManager))
                 )
             )
         );
@@ -117,7 +117,7 @@ contract TestVaultFactory is Initializable, UUPSUpgradeable {
                         type(ERC1967Proxy).creationCode,
                         abi.encode(
                             accountImplementation,
-                            abi.encodeCall(TestVault.initialize, (wallet, moduleManager))
+                            abi.encodeCall(VaultV2.initialize, (wallet, moduleManager))
                         )
                     )
                 )

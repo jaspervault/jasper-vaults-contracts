@@ -106,7 +106,6 @@ contract VaultFacet is IVaultFacet {
     }
 
     //module
-
     function setVaultModules(
         address _vault,
         address[] memory _modules,
@@ -153,7 +152,6 @@ contract VaultFacet is IVaultFacet {
     }
 
     //asset
-
     function setVaultTokens(
         address _vault,
         address[] memory _tokens,

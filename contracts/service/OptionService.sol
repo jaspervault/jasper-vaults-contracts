@@ -5,16 +5,24 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "../lib/ModuleBase.sol";
+import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
+
 import {IOwnable} from "../interfaces/internal/IOwnable.sol";
 import {Invoke} from "../lib/Invoke.sol";
 import {IOptionService} from "../interfaces/internal/IOptionService.sol";
 import {IOptionFacet} from "../interfaces/internal/IOptionFacet.sol";
 import {INonfungiblePositionManager} from "../interfaces/external/INonfungiblePositionManager.sol";
 import {IPriceOracle} from "../interfaces/internal/IPriceOracle.sol";
+import {IPythAdapter} from "../interfaces/internal/IPythAdapter.sol";
+import {IOptionLiquidateService} from "../interfaces/internal/IOptionLiquidateService.sol";
 
 contract OptionService is  ModuleBase,IOptionService, Initializable,UUPSUpgradeable, ReentrancyGuardUpgradeable{
     using Invoke for IVault;
     IPriceOracle public priceOracle;
+    mapping(address=>bool) public whiteList;
+    // todo 
+    IOptionLiquidateService public liquidateSerivce;
+
     modifier onlyOwner() {
         require( msg.sender == IOwnable(diamond).owner(),"OptionService:only owner");  
         _;
@@ -34,8 +42,11 @@ contract OptionService is  ModuleBase,IOptionService, Initializable,UUPSUpgradea
         address newImplementation
     ) internal override onlyOwner {}
 
-    function setPriceOracle(IPriceOracle _priceOracle) external  onlyOwner{
+    function setPriceOracle(IPriceOracle _priceOracle) external onlyOwner{
         priceOracle=_priceOracle;
+    }
+    function setLiquidateSerivce(IOptionLiquidateService _addr) external onlyOwner{
+        liquidateSerivce = _addr;
     }
 
     //---base call+put---
@@ -269,227 +280,17 @@ contract OptionService is  ModuleBase,IOptionService, Initializable,UUPSUpgradea
             _type
         );
     }
-    //-------liquidate--------
-    function liquidateOption(
-        IOptionFacet.OrderType _orderType,
-        uint64 _orderID,
-        LiquidateType _type,
-        uint256 _incomeAmount,
-        uint256 _slippage
-    ) external payable nonReentrant{
-        IOptionFacet optionFacet = IOptionFacet(diamond);
-        IVaultFacet vaultFacet = IVaultFacet(diamond);
-        if (IOptionFacet.OrderType.Call == _orderType) {
-            IOptionFacet.CallOrder memory order = IOptionFacet(diamond).getCallOrder(_orderID);          
-            require( order.holder != address(0), "OptionService:optionOrder not exist" );  
-            LiquidateOrder memory optionOrder=LiquidateOrder({
-                        holder:order.holder,
-                        liquidateMode:order.liquidateMode,
-                        writer:order.writer,
-                        lockAssetType:order.lockAssetType,
-                        recipient:order.recipient,
-                        lockAsset:order.lockAsset,
-                        strikeAsset:order.strikeAsset,
-                        lockAmount:order.lockAmount,
-                        strikeAmount:order.strikeAmount,
-                        expirationDate:order.expirationDate,
-                        underlyingNftID:order.underlyingNftID,
-                        quantity:order.quantity
-            });
-            if ( optionOrder.liquidateMode == (IOptionFacet.LiquidateMode.PhysicalDelivery) ) {  
-                require( _type != LiquidateType.ProfitTaking, "OptionService:Unauthorized method of option settlement, type Error");      
-            }      
-            vaultFacet.setVaultLock(optionOrder.holder, false);
-            address owner = IVault(optionOrder.holder).owner();
-            if ( msg.sender == owner ||   (IPlatformFacet(diamond).getIsVault(msg.sender) &&  IOwnable(msg.sender).owner() == owner) ) {
-                liquidateOrder(optionOrder, _type, _incomeAmount, _slippage);
-            } else if (block.timestamp > optionOrder.expirationDate) {
-                liquidateOrder( optionOrder, _type,_incomeAmount, _slippage );     
-            } else {
-                revert("OptionService:liquidate time not yet");
-            }
-            optionFacet.deleteCallOrder(_orderID);
-        } else {
-            IOptionFacet.PutOrder memory order = IOptionFacet(diamond).getPutOrder(_orderID); 
-            require(order.holder != address(0),"OptionService:optionOrder not exist");    
-            LiquidateOrder memory optionOrder=LiquidateOrder({
-                         holder:order.holder,
-                         liquidateMode:order.liquidateMode,
-                         writer:order.writer,
-                         lockAssetType:order.lockAssetType,
-                         recipient:order.recipient,
-                         lockAsset:order.lockAsset,
-                         strikeAsset:order.strikeAsset,
-                         lockAmount:order.lockAmount,
-                         strikeAmount:order.strikeAmount,
-                         expirationDate:order.expirationDate,
-                         underlyingNftID:order.underlyingNftID,
-                        quantity:order.quantity
-            });
-            if ( optionOrder.liquidateMode == (IOptionFacet.LiquidateMode.PhysicalDelivery)  ) {     
-                require(_type != LiquidateType.ProfitTaking, "OptionService:Unauthorized method of option LiquidateType:ProfitTaking type Error" );     
-            }
-            if ( optionOrder.liquidateMode == (IOptionFacet.LiquidateMode.ProfitSettlement) ) {     
-                require(_type != LiquidateType.Exercising, "OptionService:Unauthorized method of option LiquidateType:Exercising  type Error" );     
-            }
-            vaultFacet.setVaultLock(optionOrder.holder, false);
-            address owner = IVault(optionOrder.holder).owner();
-            if ( msg.sender == owner || (IPlatformFacet(diamond).getIsVault(msg.sender) &&  IOwnable(msg.sender).owner() == owner) ) {  
-                liquidateOrder(optionOrder, _type, _incomeAmount, _slippage);
-            } else if (block.timestamp > optionOrder.expirationDate) {
-                require(_type != LiquidateType.Exercising, "OptionService::Unauthorized method of option LiquidateType: Exercising " );     
-                liquidateOrder(
-                    optionOrder,
-                    _type,
-                    _incomeAmount,
-                    _slippage
-                );
-            } else {
-                revert("OptionService:liquidate time not yet");
-            }
-            optionFacet.deletePutOrder(_orderID);
-        }
-        emit LiquidateOption(
-            _orderType,
-            _orderID,
-            _type,
-            _incomeAmount,
-            _slippage
-        );
-    }
-    function liquidateOrder(
-        LiquidateOrder memory optionOrder,
-        LiquidateType _type,
-        uint256 _incomeAmount,
-        uint256 _slippage
-    ) internal {
-        IPlatformFacet platformFacet = IPlatformFacet(diamond);
-        address eth = platformFacet.getEth();
-        if (_type == LiquidateType.Exercising) {
-            uint256 strikeAmount=getParts(optionOrder.quantity, optionOrder.strikeAmount);
-             if(optionOrder.strikeAsset == eth ){
-                 IVault(optionOrder.recipient).invokeTransferEth(optionOrder.writer,strikeAmount);                 
-             }else{
-                 IVault(optionOrder.recipient).invokeTransfer(optionOrder.strikeAsset, optionOrder.writer,strikeAmount);     
-             }
-             updatePosition(optionOrder.recipient, optionOrder.strikeAsset, 0);
-             updatePosition(optionOrder.writer, optionOrder.strikeAsset, 0);
-
-             if(optionOrder.lockAssetType == IOptionFacet.UnderlyingAssetType.Original){
-                IVault(optionOrder.holder).invokeTransferEth(optionOrder.recipient, getParts(optionOrder.quantity, optionOrder.lockAmount));
-             }else if(optionOrder.lockAssetType == IOptionFacet.UnderlyingAssetType.Token){
-                 uint256 balance=IERC20(optionOrder.lockAsset).balanceOf(optionOrder.holder);
-                 IVault(optionOrder.holder).invokeTransfer(optionOrder.lockAsset,optionOrder.recipient,balance);
-             }else if(optionOrder.lockAssetType == IOptionFacet.UnderlyingAssetType.Nft){
-                 IVault(optionOrder.holder).invokeTransferNft(optionOrder.lockAsset,optionOrder.recipient,optionOrder.underlyingNftID);
-             }else{
-                revert("OptionService:liquidateCall UnderlyingAssetType error");
-             }
-             updatePosition(optionOrder.recipient, optionOrder.lockAsset, 0);
-             updatePosition(optionOrder.holder, optionOrder.lockAsset, 0);       
-        }   else if (_type == LiquidateType.NotExercising) {
-            //unlock
-            if( optionOrder.lockAssetType == IOptionFacet.UnderlyingAssetType.Original){
-                    IVault(optionOrder.holder).invokeTransferEth(optionOrder.writer, getParts(optionOrder.quantity, optionOrder.lockAmount));           
-            }else if ( optionOrder.lockAssetType == IOptionFacet.UnderlyingAssetType.Token) { 
-                   uint256 balance = IERC20(optionOrder.lockAsset).balanceOf(optionOrder.holder);             
-                    IVault(optionOrder.holder).invokeTransfer(
-                        optionOrder.lockAsset,
-                        optionOrder.writer,
-                        balance
-                    );
-            } else if (optionOrder.lockAssetType == IOptionFacet.UnderlyingAssetType.Nft ) {
-                IVault(optionOrder.holder).invokeTransferNft(
-                    optionOrder.lockAsset,
-                    optionOrder.writer,
-                    optionOrder.underlyingNftID
-                );
-            } else {
-                revert("OptionService:liquidateCall lockAssetType error");
-            }
-            updatePosition(optionOrder.holder, optionOrder.lockAsset, 0);
-            updatePosition(optionOrder.writer, optionOrder.lockAsset, 0);
-        } else if (_type ==LiquidateType.ProfitTaking) {
-            if ( optionOrder.lockAssetType != IOptionFacet.UnderlyingAssetType.Nft ) {  
-                
-                if (optionOrder.quantity == 0) {
-                    if (optionOrder.lockAsset == eth) {
-                    IVault(optionOrder.holder).invokeTransferEth(optionOrder.writer, optionOrder.holder.balance);
-                    }else{
-                        uint256 balance = IERC20(optionOrder.lockAsset).balanceOf(optionOrder.holder);        
-                        IVault(optionOrder.holder).invokeTransfer( optionOrder.lockAsset, optionOrder.writer, balance);
-                    }
-                }else{
-                    uint amount = getEarningsAmount(
-                        optionOrder.lockAsset,
-                        getParts(optionOrder.quantity, optionOrder.lockAmount),
-                        optionOrder.strikeAsset,
-                        getParts(optionOrder.quantity, optionOrder.strikeAmount)
-                    );
-
-                    validSlippage(amount, _incomeAmount, _slippage, _slippage);
-                    if (optionOrder.lockAsset == eth) {
-                        IVault(optionOrder.holder).invokeTransferEth(optionOrder.writer, getParts(optionOrder.quantity, optionOrder.lockAmount) - amount);
-                        IVault(optionOrder.holder).invokeTransferEth(optionOrder.recipient, amount);
-                    } else {
-                        uint256 balance = IERC20(optionOrder.lockAsset).balanceOf(optionOrder.holder);        
-                        IVault(optionOrder.holder).invokeTransfer( optionOrder.lockAsset, optionOrder.writer, balance - amount );
-                        IVault(optionOrder.holder).invokeTransfer( optionOrder.lockAsset, optionOrder.recipient,amount );          
-                    }
-                }               
-            } else {
-                revert("OptionService:liquidateCall LiquidateType error");
-            }
-            updatePosition(optionOrder.holder, optionOrder.lockAsset, 0);
-            updatePosition(optionOrder.writer, optionOrder.lockAsset, 0);
-            updatePosition(optionOrder.recipient, optionOrder.lockAsset, 0);
-        }
-    }
-
-     function liquidateswapOrder () public{
-        
-     }
-    function validSlippage(
-        uint amountA,
-        uint amountB,
-        uint holderSlippage,
-        uint writerSlippage
-    ) public pure returns (bool) {
-        if (holderSlippage == 1 ether ){
-            return true;
-        }
-        uint slippage = holderSlippage < writerSlippage
-            ? holderSlippage
-            : writerSlippage;
-        require(
-            amountA <= (amountB * (1 ether + slippage)) / 1 ether,
-            "OptionService: amountA < amountB"
-        );
-        require(
-            amountA >= (amountB * (1 ether - slippage)) / 1 ether,
-            "OptionService: amountA > amountB"
-        );
-        return true;
-    }
-
-    function getEarningsAmount(
-        address lockAsset, // ETH
-        uint256 lockAmount, // 1
-        address strikeAsset, // USDC
-        uint256 strikeAmount
-    ) public view returns (uint) { 
-    
-        address eth=IPlatformFacet(diamond).getEth();
-        address weth=IPlatformFacet(diamond).getWeth();
-        uint price = priceOracle.getPrice(lockAsset == eth ? weth : lockAsset, strikeAsset == eth ? weth : strikeAsset);        
-        uint lockAssetDecimal = uint(IERC20(lockAsset == eth ? weth : lockAsset).decimals());
-        uint strikeAssetDecimal = uint( IERC20(strikeAsset == eth ? weth : strikeAsset).decimals());    
-        uint reversePrice =priceOracle.getPrice( strikeAsset == eth ? weth : strikeAsset, lockAsset == eth ? weth : lockAsset);     
-        uint nowAmount = ( lockAmount * price * 10 ** strikeAssetDecimal  )  / 10 ** lockAssetDecimal / 1 ether;
-        return strikeAmount >= nowAmount ? 0:((nowAmount-strikeAmount) * reversePrice *  10 ** lockAssetDecimal) / 10 ** strikeAssetDecimal /1 ether;  
-    }
     function getParts(uint256 quantity ,uint256 strikeAmount)  public pure returns(uint256){
           return quantity*strikeAmount/ 1 ether;
     }
 
+    //-------liquidate-------- todo
+    function liquidateOption(
+        LiquidateParams memory _params
+    ) external payable nonReentrant{
+        LiquidateResult memory result = liquidateSerivce.liquidateOption(
+            _params,
+            msg.sender);
+        emit LiquidateOption(_params._orderType,_params._orderID, _params._type,_params._index,result);
+    }
 }

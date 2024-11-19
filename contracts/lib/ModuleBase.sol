@@ -25,7 +25,19 @@ contract ModuleBase {
 
         _;
     }
-
+    modifier onlySameOwnerVault(address _vault) {
+        require(
+            IPlatformFacet(diamond).getIsVault(_vault),
+            "ModuleBase:vault must in platform"
+        );
+        require(
+            IPlatformFacet(diamond).getIsVault(msg.sender),
+            "ModuleBase:sender must in platform"
+        );
+        require(!IVaultFacet(diamond).getVaultLock(_vault)&&!IVaultFacet(diamond).getVaultLock(msg.sender),"ModuleBase:vault is locked");
+        require( IVault(_vault).owner()==IVault(msg.sender).owner(),   "ModuleBase:vault belong error" );
+        _;
+    }
 
 
     modifier onlyVaultOrManager(address _vault) {
