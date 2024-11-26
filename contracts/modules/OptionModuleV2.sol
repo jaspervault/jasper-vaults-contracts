@@ -76,7 +76,7 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
         IOptionFacetV2.ManagedOptionsSettings memory setting = optionFacetV2.getManagedOptionsSettingsByIndex(_info.writer,_info.settingsIndex);
         optionModuleV2Handle.verifyManagedOrder(_info, setting);
         //transfer fee
-        uint256 premiumFeeToPay = transferManagedFee(_info, setting);
+        (uint256 premiumAmount,uint freePremiumAmount) = transferManagedFee(_info, setting);
         //create order
         if(setting.orderType==IOptionFacet.OrderType.Call){
              IOptionFacet.CallOrder memory callOrder= IOptionFacet.CallOrder({
@@ -102,7 +102,6 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
                 _info.liquidationToEOA
             ));
             updatePosition(_info.writer,_info.premiumSign.premiumAsset,0);
-            emit OptionPremiun(IOptionFacet.OrderType.Call, IOptionFacet(diamond).getOrderId(),  setting.writer,  _info.holder, _info.premiumSign.premiumAsset,premiumFeeToPay);
         }else if(setting.orderType==IOptionFacet.OrderType.Put){
             IOptionFacet.PutOrder memory putOrder= IOptionFacet.PutOrder({
                         holder:_info.holder,
@@ -125,26 +124,29 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
             IOptionFacetV2(diamond).setOptionExtraData(IOptionFacet(diamond).getOrderId(),  IOptionFacetV2.OptionExtra(
                 setting.productTypes[_info.productTypeIndex],
                 _info.optionSourceType,
-                _info.liquidationToEOA            
+                _info.liquidationToEOA     
             ));
-            emit OptionPremiun(IOptionFacet.OrderType.Put,IOptionFacet(diamond).getOrderId(),setting.writer,_info.holder,_info.premiumSign.premiumAsset,premiumFeeToPay);
         }else{
             revert("OptionModule:orderType error");
         }
+        emit OptionPremiun(IOptionFacet(diamond).getOrderId(),_info,premiumAmount,freePremiumAmount);
+
     }
     function SubmitManagedOrder(ManagedOrder memory _info) external nonReentrant onlySameOwnerVault(_info.holder){
         IOptionModuleV2(address(this)).handleManagedOrder(_info);
     }
     function handleManagedFee(
         ManagedOrder memory _info,
-        uint256 _premiumFeeToPay
-    ) internal {
+        uint256 _freePremiumAmount
+    ) internal  returns(
+        uint256 freeOptionAmount
+     ){
         IOptionFacet optionFacet = IOptionFacet(diamond);
         IPlatformFacet platformFacet=IPlatformFacet(diamond);
         address eth= platformFacet.getEth();
         //calculate premiumFee
         //calculate platformFee
-        uint256 platformFee = (_premiumFeeToPay * optionFacet.getFeeRate()) / 1 ether;           
+        uint256 platformFee = (_freePremiumAmount * optionFacet.getFeeRate()) / 1 ether;           
         address feeRecipient = optionFacet.getFeeRecipient();
         require(
             !IVaultFacet(diamond).getVaultLock(_info.recipient) &&
@@ -156,18 +158,17 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
             IOwnable(_info.holder).owner()==IOwnable(_info.recipient).owner(),
             "OptionModule:recipient error"
         );
-        uint256 freeOptionAmount;
         uint256 holderPayOptionAmount;
         if (_info.nftFreeOption!=address(0)){
             uint256 freeAmount = INFTFreeOptionPool(_info.nftFreeOption).getFreeAmount(_info);
-            if (freeAmount <= _premiumFeeToPay ){
+            if (freeAmount <= _freePremiumAmount ){
                 freeOptionAmount = freeAmount;
-                holderPayOptionAmount = _premiumFeeToPay - freeAmount;
+                holderPayOptionAmount = _freePremiumAmount - freeAmount;
             }else{
-                freeOptionAmount = _premiumFeeToPay;
+                freeOptionAmount = _freePremiumAmount;
             }
         }else{
-            holderPayOptionAmount=_premiumFeeToPay;
+            holderPayOptionAmount=_freePremiumAmount;
         }
         if (_info.nftFreeOption!=address(0)&&freeOptionAmount>0){
             require(INFTFreeOptionPool(_info.nftFreeOption).submitFreeAmount(_info, freeOptionAmount),"OptionModule:submitFreeAmount error");
@@ -182,8 +183,8 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
                 if (platformFee > 0 && feeRecipient != address(0)) {
                     IVault(_info.holder).invokeTransferEth(feeRecipient, platformFee);
                 }
-                if( _premiumFeeToPay - platformFee>0){
-                    IVault(_info.holder).invokeTransferEth(_info.writer, _premiumFeeToPay - platformFee);
+                if( _freePremiumAmount - platformFee>0){
+                    IVault(_info.holder).invokeTransferEth(_info.writer, _freePremiumAmount - platformFee);
                 }
             } else {
                 if (freeOptionAmount>0){
@@ -195,14 +196,14 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
                 if (platformFee > 0 && feeRecipient != address(0)) {
                     IVault(_info.holder).invokeTransfer( _info.premiumSign.premiumAsset,feeRecipient,platformFee);         
                 }
-                if( _premiumFeeToPay - platformFee>0){
-                    IVault(_info.holder).invokeTransfer(_info.premiumSign.premiumAsset, _info.writer, _premiumFeeToPay - platformFee );     
+                if( _freePremiumAmount - platformFee>0){
+                    IVault(_info.holder).invokeTransfer(_info.premiumSign.premiumAsset, _info.writer, _freePremiumAmount - platformFee );     
                 }
             }
-
+        return freeOptionAmount;
     }
 
-    function transferManagedFee(ManagedOrder memory _info,IOptionFacetV2.ManagedOptionsSettings memory setting) internal returns(uint256 premiumFeeToPay){
+    function transferManagedFee(ManagedOrder memory _info,IOptionFacetV2.ManagedOptionsSettings memory setting) internal returns(uint256 premiumFeeToPay, uint freePremiumAmount){
         address eth = IPlatformFacet(diamond).getEth();
         address weth = IPlatformFacet(diamond).getWeth();
         uint256 premiumAmount;
@@ -221,8 +222,8 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
             premiumFeeToPay=premiumAmount >= premiumFloorAmount ? premiumAmount :premiumFloorAmount ;
         }
         premiumFeeToPay = optionService.getParts(_info.quantity,premiumFeeToPay);
-        handleManagedFee(_info,premiumFeeToPay);
-        return premiumFeeToPay;
+        freePremiumAmount = handleManagedFee(_info,premiumFeeToPay);
+        return (premiumFeeToPay,freePremiumAmount);
     }
     function getPremiumFloorAmount(ManagedOrder memory _info,IOptionFacetV2.ManagedOptionsSettings memory setting,address eth, address weth,uint256 premiumAssetPrice,uint256 premiumDecimals) internal view returns(uint256 premiumFloorAmount) {
         uint256 preMiumFloorUSD =  setting.premiumFloorAMMs[_info.productTypeIndex] * priceOracleModule.getUSDPriceSpecifyOracle(setting.lockAsset == eth ? weth : setting.lockAsset, _info.oracleIndex)  *_info.premiumSign.lockAmount / 1 ether ;

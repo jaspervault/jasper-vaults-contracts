@@ -5,7 +5,7 @@ import {IOwnable} from "../interfaces/internal/IOwnable.sol";
 
 contract OptionFacetV2 is IOptionFacetV2 {
     bytes32 constant DIAMOND_STORAGE_POSITION =
-        keccak256("diamond.OptionFacetV2.1.diamond.storage");
+        keccak256("diamond.OptionFacetV2.2.diamond.storage");
     struct OptionV2 {
         mapping (address => ManagedOptionsSettings[]) managedOptionsSettingList;
         mapping (uint64 orderId=> OptionExtra) optionExtra;

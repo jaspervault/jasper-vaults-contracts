@@ -97,7 +97,7 @@ interface IOptionModuleV2 {
         uint256 premiumFee;
         uint256 timestamp;
     }
-    event OptionPremiun(IOptionFacet.OrderType _orderType, uint64 _orderID, address _writer, address _holder, address _premiumAsset, uint256 _amount);
+    event OptionPremiun(uint64 _orderID,ManagedOrder _info,uint256 _premiumAmount,uint256 _freePremiumAmount);
     event SetOracleWhiteList(address _oracleSigner);
     event SetPriceOracle(address _priceOracleModule);
     event SetFeeDiscountWhitlist(address _pool);

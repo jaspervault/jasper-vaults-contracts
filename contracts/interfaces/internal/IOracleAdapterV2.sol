@@ -10,5 +10,6 @@ interface IOracleAdapterV2 {
       uint32 observeAt;
       uint32 expireAt;
    }
+   
    function readHistoryPrice(address _masterToken, bytes[] memory _data) external returns(IPriceOracle.HistoryPrice[] memory historyPrices);
 }

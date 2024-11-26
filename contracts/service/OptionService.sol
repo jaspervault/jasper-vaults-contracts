@@ -3,22 +3,18 @@ pragma solidity ^0.8.12;
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
-import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "../lib/ModuleBase.sol";
-import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 
 import {IOwnable} from "../interfaces/internal/IOwnable.sol";
 import {Invoke} from "../lib/Invoke.sol";
 import {IOptionService} from "../interfaces/internal/IOptionService.sol";
 import {IOptionFacet} from "../interfaces/internal/IOptionFacet.sol";
 import {INonfungiblePositionManager} from "../interfaces/external/INonfungiblePositionManager.sol";
-import {IPriceOracle} from "../interfaces/internal/IPriceOracle.sol";
-import {IPythAdapter} from "../interfaces/internal/IPythAdapter.sol";
 import {IOptionLiquidateService} from "../interfaces/internal/IOptionLiquidateService.sol";
 
 contract OptionService is  ModuleBase,IOptionService, Initializable,UUPSUpgradeable, ReentrancyGuardUpgradeable{
     using Invoke for IVault;
-    IPriceOracle public priceOracle;
+    address public priceOracle;
     mapping(address=>bool) public whiteList;
     // todo 
     IOptionLiquidateService public liquidateSerivce;
@@ -32,23 +28,17 @@ contract OptionService is  ModuleBase,IOptionService, Initializable,UUPSUpgradea
         _disableInitializers();
     }
 
-    function initialize(address _diamond,address _priceOracle) public initializer {
+    function initialize(address _diamond) public initializer {
         __UUPSUpgradeable_init();
         diamond = _diamond;
-        priceOracle=IPriceOracle(_priceOracle);
     }
 
     function _authorizeUpgrade(
         address newImplementation
     ) internal override onlyOwner {}
-
-    function setPriceOracle(IPriceOracle _priceOracle) external onlyOwner{
-        priceOracle=_priceOracle;
-    }
     function setLiquidateSerivce(IOptionLiquidateService _addr) external onlyOwner{
         liquidateSerivce = _addr;
     }
-
     //---base call+put---
     function createPutOrder(
         IOptionFacet.PutOrder memory _putOrder

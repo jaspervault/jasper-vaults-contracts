@@ -3,27 +3,23 @@ pragma solidity ^0.8.12;
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
-import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "../lib/ModuleBase.sol";
-import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 
 import {IOwnable} from "../interfaces/internal/IOwnable.sol";
 import {Invoke} from "../lib/Invoke.sol";
 import {IOptionLiquidateService} from "../interfaces/internal/IOptionLiquidateService.sol";
 import {IOptionService} from "../interfaces/internal/IOptionService.sol";
 import {IOptionFacet} from "../interfaces/internal/IOptionFacet.sol";
-import {INonfungiblePositionManager} from "../interfaces/external/INonfungiblePositionManager.sol";
 import {IOptionFacetV2} from "../interfaces/internal/IOptionFacetV2.sol";
-import {IPythAdapter} from "../interfaces/internal/IPythAdapter.sol";
 import {IOptionLiquidateHelper} from "../interfaces/internal/IOptionLiquidateHelper.sol";
-import "hardhat/console.sol";
+
 
 contract OptionLiquidateService is  ModuleBase,IOptionLiquidateService, Initializable,UUPSUpgradeable, ReentrancyGuardUpgradeable{
     using Invoke for IVault;
     mapping(address=>bool) public liquidateWhiteList;
-    uint ethLiquidateDecimals ;
-    IOptionLiquidateHelper liquidateHelper ;
-    uint maxLossRate;
+    uint public ethLiquidateDecimals ;
+    IOptionLiquidateHelper public liquidateHelper ;
+    uint public maxLossRate;
     modifier onlyOwner() {
         require( msg.sender == IOwnable(diamond).owner(),"OptionLiquidateService:only owner");  
         _;
@@ -61,7 +57,7 @@ contract OptionLiquidateService is  ModuleBase,IOptionLiquidateService, Initiali
     function liquidateOption(
         IOptionService.LiquidateParams calldata _params,
         address _sender
-    ) external payable  nonReentrant returns (IOptionService.LiquidateResult memory result){
+    ) external payable onlyModule nonReentrant returns (IOptionService.LiquidateResult memory result){
         IOptionFacet optionFacet = IOptionFacet(diamond);
         IVaultFacet vaultFacet = IVaultFacet(diamond);
         if (IOptionFacet.OrderType.Call == _params._orderType) {
@@ -148,8 +144,10 @@ contract OptionLiquidateService is  ModuleBase,IOptionLiquidateService, Initiali
         address eth = platformFacet.getEth();
         address recipientAddr;
         IOptionFacetV2.OptionExtra memory  extraData = IOptionFacetV2(diamond).getOptionExtraData(_params._orderID);
-         if (extraData.liquidationToEOA){
-            recipientAddr = IOwnable(optionOrder.recipient).owner();
+         if (extraData.liquidationToEOA==true){
+            recipientAddr = IOwnable(optionOrder.holder).owner();
+         }else{
+            recipientAddr = optionOrder.recipient;
          }
         if (_params._type == IOptionService.LiquidateType.Exercising) {
             uint256 strikeAmount=getParts(optionOrder.quantity, optionOrder.strikeAmount);

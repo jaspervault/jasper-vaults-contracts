@@ -12,11 +12,11 @@ import {IOptionLiquidateHelper} from "../interfaces/internal/IOptionLiquidateHel
 import {IOptionLiquidateService} from "../interfaces/internal/IOptionLiquidateService.sol";
 import {IOptionFacet} from "../interfaces/internal/IOptionFacet.sol";
 import {IPriceOracle} from "../interfaces/internal/IPriceOracle.sol";
-import "hardhat/console.sol";
+
 
 contract OptionLiquidateHelper is  ModuleBase,IOptionLiquidateHelper, Initializable,UUPSUpgradeable, ReentrancyGuardUpgradeable{
     IPriceOracle public priceOracle;
-    uint ethLiquidateDecimals;
+    uint public ethLiquidateDecimals;
     modifier onlyOwner() {
         require( msg.sender == IOwnable(diamond).owner(),"OptionLiquidateService:only owner");  
         _;
@@ -45,7 +45,6 @@ contract OptionLiquidateHelper is  ModuleBase,IOptionLiquidateHelper, Initializa
     }
 
     // 10 min ;10 price ;interval > 1 min
-    // 白名单清算  strike asset / lock asset // btc/usdt
     function whiteListLiquidatePrice( IOptionLiquidateService.GetEarningsAmount memory _data) external returns(uint lockAssetPrice,uint strikeAssetPrice) {
         if (_data.extraData.productType<=1800) {
         IPriceOracle.HistoryPrice[] memory  lockAssetHistoryPrice = priceOracle.getHistoryPrice(_data.lockAsset,_data.index,_data.lockAssetPriceData);
@@ -92,13 +91,12 @@ contract OptionLiquidateHelper is  ModuleBase,IOptionLiquidateHelper, Initializa
                 price[2] = strikeAssetHistoryPrice[2].price;
                 return (lockAssetHistoryPrice[0].price, getAverage(price));
             }
-        }else{
+        }else{  
             return verifyLiquidatePrice(_data);
         }
     }
     // 10 min ;10 price ;interval >1 min
     function verifyLiquidatePrice(IOptionLiquidateService.GetEarningsAmount memory _data) public  returns(uint lockAssetPrice,uint strikeAssetPrice) {
-        
         IPriceOracle.HistoryPrice[] memory  lockAssetHistoryPrice = priceOracle.getHistoryPrice(_data.lockAsset,_data.index,_data.lockAssetPriceData);
         IPriceOracle.HistoryPrice[] memory  strikeAssetHistoryPrice = priceOracle.getHistoryPrice(_data.strikeAsset,_data.index,_data.strikeAssetPriceData);
         if (_data.orderType == IOptionFacet.OrderType.Call){
@@ -157,7 +155,7 @@ contract OptionLiquidateHelper is  ModuleBase,IOptionLiquidateHelper, Initializa
                 require(strikeAssetHistoryPrice[2].timestamp-strikeAssetHistoryPrice[1].timestamp>=60,"OptionLiquidateService:publishTime interval error");
                 require(strikeAssetHistoryPrice[1].timestamp-strikeAssetHistoryPrice[0].timestamp>=60,"OptionLiquidateService:publishTime interval error");
                 require(lockAssetHistoryPrice[0].timestamp >= _data.expirationDate-3600*24,"OptionLiquidateService:lockAssetHistoryPrice time over 24 h");
-                uint[] memory price = new uint[](3);
+                uint[] memory price = new uint[](10);
                 price[0] = strikeAssetHistoryPrice[0].price;
                 price[1] = strikeAssetHistoryPrice[1].price;
                 price[2] = strikeAssetHistoryPrice[2].price;
