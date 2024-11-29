@@ -38,18 +38,25 @@ contract OptionLiquidateService is  ModuleBase,IOptionLiquidateService, Initiali
         address newImplementation
     ) internal override onlyOwner {}
 
-
+    event SetLiquidateWhiteList(address _addr,bool _ok);
     function setLiquidateWhiteList(address _addr,bool _ok) external  onlyOwner{
         liquidateWhiteList[_addr]=_ok;
+        emit SetLiquidateWhiteList(_addr,_ok);
     }
+    event SetLiquidateHelper(address _addr);
     function setLiquidateHelper(address _addr) external  onlyOwner{
        liquidateHelper = IOptionLiquidateHelper(_addr);
+        emit SetLiquidateHelper(_addr);
     }
+    event SetETHLiquidateDecimals(uint _decimals);
     function setETHLiquidateDecimals(uint _decimals) external  onlyOwner{
        ethLiquidateDecimals = _decimals;
+       emit SetETHLiquidateDecimals(_decimals);
     }
+    event  SetMaxLossRate(uint _rate);
     function setMaxLossRate(uint _rate) external  onlyOwner{
        maxLossRate = _rate;
+       emit SetMaxLossRate(_rate);
     }
 
     
@@ -170,6 +177,7 @@ contract OptionLiquidateService is  ModuleBase,IOptionLiquidateService, Initiali
             }
             updatePosition(optionOrder.holder, optionOrder.lockAsset, 0);       
         } else if (_params._type == IOptionService.LiquidateType.NotExercising) {
+            require(liquidateWhiteList[_sender],"OptionLiquidateService:only whiteList can NotExercising ");
             //unlock
             if( optionOrder.lockAssetType == IOptionFacet.UnderlyingAssetType.Original){
                     IVault(optionOrder.holder).invokeTransferEth(optionOrder.writer, getParts(optionOrder.quantity, optionOrder.lockAmount));           
@@ -260,7 +268,7 @@ contract OptionLiquidateService is  ModuleBase,IOptionLiquidateService, Initiali
         // uint256 strikeAssetPrice = priceOracle.getHistoryPrice(_data.strikeAsset,_data.index,_data.expirationDate,_data.data[0]);        
         uint lockAssetDecimal = uint(_data.lockAsset == eth ? getETHdecimals(weth):IERC20(_data.lockAsset).decimals());
         uint strikeAssetDecimal =   uint(_data.strikeAsset == eth ? getETHdecimals(weth):IERC20(_data.strikeAsset).decimals());
-        uint reversePrice =  1 ether * 1 ether / (lockAssetPrice/strikeAssetPrice);
+        uint reversePrice =  1 ether * 1 ether / (1 ether * lockAssetPrice / strikeAssetPrice);
         uint nowAmount = (_data.lockAmount * lockAssetPrice * 10 ** strikeAssetDecimal  )  / 10 ** lockAssetDecimal / 1 ether;
         earn = _data.strikeAmount >= nowAmount ? 0:((nowAmount-_data.strikeAmount) * reversePrice *  10 ** lockAssetDecimal) / 10 ** strikeAssetDecimal /1 ether;
         result.amount=earn;

@@ -9,7 +9,7 @@ import {IOracleAdapter} from "../../interfaces/internal/IOracleAdapter.sol";
 import {IOracleAdapterV2} from "../../interfaces/internal/IOracleAdapterV2.sol";
 import {IPriceOracle} from "../../interfaces/internal/IPriceOracle.sol";
 
-contract AproOracleAdapter is
+contract AproOracleAdapterV2 is
     IOracleAdapter,
     Initializable,
     UUPSUpgradeable,
@@ -22,6 +22,7 @@ contract AproOracleAdapter is
     mapping(address => mapping(address => bytes32)) public pythIDs;
     mapping(address => uint256) public decimals;
     IVerifierProxy public s_verifierProxy;
+    address operator;
 
     event SetOralces(
         address _masterToken,
@@ -32,7 +33,10 @@ contract AproOracleAdapter is
         require(msg.sender == IOwnable(diamond).owner(), "only owner");
         _;
     }
-
+    modifier onlyOperator() {
+        require(msg.sender == operator, "only operator");
+        _;
+    }
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
@@ -41,13 +45,27 @@ contract AproOracleAdapter is
     function initialize(
         address _diamond,
         address _ethToken,
-        address _usdToken
+        address _usdToken,
+        address _operator,
+        address _verifierProxy
     ) public initializer {
         diamond = _diamond;
         ethToken = _ethToken;
         usdToken = _usdToken;
+        operator = _operator;
+        s_verifierProxy = IVerifierProxy(_verifierProxy);
     }
-
+    event SetDecimals(address _token, uint256 _decimal);
+    function setDecimals(address _token, uint256 _decimal) external onlyOperator  {
+        decimals[_token] = _decimal;
+        emit SetDecimals(_token, _decimal);
+    }
+    event SetVerifierProxy(address _operator);
+    function setVerifierProxy(address _verifierProxy) external onlyOperator {
+        require(operator == msg.sender, "AproOracleAdapter:only operator");
+        s_verifierProxy = IVerifierProxy(_verifierProxy);
+        emit SetVerifierProxy(_verifierProxy);
+    }
     function _authorizeUpgrade(
         address newImplementation
     ) internal override onlyOwner {}
@@ -56,22 +74,28 @@ contract AproOracleAdapter is
         address _masterToken,
         address _quoteToken,
         bytes32 _id
-    ) public onlyOwner {
+    ) public onlyOperator {
         require(
             _quoteToken == ethToken || _quoteToken == usdToken,
-            "AproOracleAdapter:quoteToken error"
+            "AproOracleAdapter:quoteToken set error"
         );
         pythIDs[_masterToken][_quoteToken] = _id;
         emit SetOralces(_masterToken, _quoteToken, _id);
     }
 
-    function setOralceList(
+   function setOralceList(
         address[] memory _masterTokens,
         address[] memory _quoteTokens,
-        bytes32[] memory _oracle
-    ) external onlyOwner {
+        bytes32[] memory _ids
+    ) external  onlyOperator{
+        require(operator == msg.sender, "AproOracleAdapter:only operator");
         for (uint i; i < _quoteTokens.length; i++) {
-            setOralcesIds(_masterTokens[i], _quoteTokens[i], _oracle[i]);
+            require(
+            _quoteTokens[i] == ethToken || _quoteTokens[i] == usdToken,
+            "AproOracleAdapter:quoteToken set error"
+            );
+            pythIDs[_masterTokens[i]][_quoteTokens[i]] = _ids[i];
+            emit SetOralces(_masterTokens[i], _quoteTokens[i], _ids[i]);
         }
     }
 

@@ -16,7 +16,6 @@ import {IPriceOracle} from "../interfaces/internal/IPriceOracle.sol";
 
 contract OptionLiquidateHelper is  ModuleBase,IOptionLiquidateHelper, Initializable,UUPSUpgradeable, ReentrancyGuardUpgradeable{
     IPriceOracle public priceOracle;
-    uint public ethLiquidateDecimals;
     modifier onlyOwner() {
         require( msg.sender == IOwnable(diamond).owner(),"OptionLiquidateService:only owner");  
         _;
@@ -35,14 +34,12 @@ contract OptionLiquidateHelper is  ModuleBase,IOptionLiquidateHelper, Initializa
     function _authorizeUpgrade(
         address newImplementation
     ) internal override onlyOwner {}
-
+    event SetPriceOracle(IPriceOracle _priceOracle);
     function setPriceOracle(IPriceOracle _priceOracle) external  onlyOwner{
         priceOracle=_priceOracle;
+        emit SetPriceOracle(_priceOracle);
     }
 
-    function setETHLiquidateDecimals(uint _decimals) external  onlyOwner{
-        ethLiquidateDecimals = _decimals;
-    }
 
     // 10 min ;10 price ;interval > 1 min
     function whiteListLiquidatePrice( IOptionLiquidateService.GetEarningsAmount memory _data) external returns(uint lockAssetPrice,uint strikeAssetPrice) {
@@ -77,7 +74,6 @@ contract OptionLiquidateHelper is  ModuleBase,IOptionLiquidateHelper, Initializa
                 price[2] = lockAssetHistoryPrice[2].price;
                 return (getAverage(price),strikeAssetHistoryPrice[0].price);
             }else{
-
                 require(strikeAssetHistoryPrice.length == 3,'OptionLiquidateService:strikeAssetHistoryPrice length 3 error');
                 require(_data.expirationDate>= strikeAssetHistoryPrice[0].timestamp&&strikeAssetHistoryPrice[0].timestamp >= _data.expirationDate-60*10,"OptionLiquidateService:strikeAssetHistoryPrice time error");
                 require(_data.expirationDate>= strikeAssetHistoryPrice[1].timestamp&&strikeAssetHistoryPrice[1].timestamp >= _data.expirationDate-60*10,"OptionLiquidateService:strikeAssetHistoryPrice time error");
@@ -134,7 +130,7 @@ contract OptionLiquidateHelper is  ModuleBase,IOptionLiquidateHelper, Initializa
                 price[9] = lockAssetHistoryPrice[9].price;
                 return (getAverage(price),strikeAssetHistoryPrice[0].price);
             }else{
-                require(strikeAssetHistoryPrice.length == 10,'OptionLiquidateService:strikeAssetHistoryPrice length 5 error');
+                require(strikeAssetHistoryPrice.length == 10,'OptionLiquidateService:strikeAssetHistoryPrice length 10 error');
                 require(_data.expirationDate>= strikeAssetHistoryPrice[0].timestamp&&strikeAssetHistoryPrice[0].timestamp >= _data.expirationDate-60*30,"OptionLiquidateService:strikeAssetHistoryPrice time error");
                 require(_data.expirationDate>= strikeAssetHistoryPrice[1].timestamp&&strikeAssetHistoryPrice[1].timestamp >= _data.expirationDate-60*30,"OptionLiquidateService:strikeAssetHistoryPrice time error");
                 require(_data.expirationDate>= strikeAssetHistoryPrice[2].timestamp&&strikeAssetHistoryPrice[2].timestamp >= _data.expirationDate-60*30,"OptionLiquidateService:strikeAssetHistoryPrice time error");

@@ -212,7 +212,7 @@ contract OptionService is  ModuleBase,IOptionService, Initializable,UUPSUpgradea
                     "OptionService:nft assets error"
                 );
                 require(
-                    uint256(liquidity) >= _verifyOrder.lockAmount,
+                    uint256(liquidity) >= optionLockAmount,
                     "OptionService:lockAmount not enough"
                 );
                 IVault(_verifyOrder.writer).invokeTransferNft(

@@ -26,7 +26,7 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
         uint256 total;
         uint256 orderCount;
     }
-    mapping(bytes=>SignData) public signData;
+    mapping(bytes=>SignData) public signData; 
     mapping(address=>bool) public oracleWhiteList;
     mapping(address=>bool) public feeDiscountWhitlist;
     IOptionModuleV2Handle public optionModuleV2Handle;
@@ -120,12 +120,12 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
                         quantity:_info.quantity
              });
             optionService.createPutOrder(putOrder);
-            updatePosition(_info.writer,_info.premiumSign.premiumAsset,0);
             IOptionFacetV2(diamond).setOptionExtraData(IOptionFacet(diamond).getOrderId(),  IOptionFacetV2.OptionExtra(
                 setting.productTypes[_info.productTypeIndex],
                 _info.optionSourceType,
                 _info.liquidationToEOA     
             ));
+            updatePosition(_info.writer,_info.premiumSign.premiumAsset,0);
         }else{
             revert("OptionModule:orderType error");
         }
