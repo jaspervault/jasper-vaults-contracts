@@ -208,12 +208,12 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
         address weth = IPlatformFacet(diamond).getWeth();
         uint256 premiumAmount;
         uint256 premiumAssetPrice =  priceOracleModule.getUSDPriceSpecifyOracle(
-            _info.premiumSign.premiumAsset == eth ? weth :  _info.premiumSign.premiumAsset,
+            _info.premiumSign.premiumAsset,
             _info.oracleIndex);
         uint256 premiumDecimals =  uint256(IERC20(_info.premiumSign.premiumAsset == eth ? weth : _info.premiumSign.premiumAsset).decimals());
         uint256 premiumFloorAmount = getPremiumFloorAmount(_info,setting,eth,weth,premiumAssetPrice,premiumDecimals);
         if (setting.premiumOracleType==IOptionFacetV2.PremiumOracleType.AMMS){
-            uint256 premiumUSD = setting.premiumRates[_info.productTypeIndex] * priceOracleModule.getUSDPriceSpecifyOracle(setting.lockAsset == eth ? weth : setting.lockAsset, _info.oracleIndex)*_info.premiumSign.lockAmount / 1 ether ;
+            uint256 premiumUSD = setting.premiumRates[_info.productTypeIndex] * priceOracleModule.getUSDPriceSpecifyOracle(setting.lockAsset , _info.oracleIndex)*_info.premiumSign.lockAmount / 1 ether ;
             premiumAmount = 10**36/premiumAssetPrice*premiumUSD
              * 10**premiumDecimals / 1 ether / 10** uint256(IERC20(setting.lockAsset == eth ? weth : setting.lockAsset).decimals())/ 1 ether;
             premiumFeeToPay=premiumAmount >= premiumFloorAmount ? premiumAmount :premiumFloorAmount ;
@@ -226,7 +226,7 @@ contract OptionModuleV2 is ModuleBase,IOptionModuleV2, Initializable,UUPSUpgrade
         return (premiumFeeToPay,freePremiumAmount);
     }
     function getPremiumFloorAmount(ManagedOrder memory _info,IOptionFacetV2.ManagedOptionsSettings memory setting,address eth, address weth,uint256 premiumAssetPrice,uint256 premiumDecimals) internal view returns(uint256 premiumFloorAmount) {
-        uint256 preMiumFloorUSD =  setting.premiumFloorAMMs[_info.productTypeIndex] * priceOracleModule.getUSDPriceSpecifyOracle(setting.lockAsset == eth ? weth : setting.lockAsset, _info.oracleIndex)  *_info.premiumSign.lockAmount / 1 ether ;
+        uint256 preMiumFloorUSD =  setting.premiumFloorAMMs[_info.productTypeIndex] * priceOracleModule.getUSDPriceSpecifyOracle(setting.lockAsset, _info.oracleIndex)  *_info.premiumSign.lockAmount / 1 ether ;
         premiumFloorAmount = 10 ** 36/ premiumAssetPrice* preMiumFloorUSD  * 10**premiumDecimals / 1 ether / 10** uint256(IERC20(setting.lockAsset == eth ? weth : setting.lockAsset).decimals())/ 1 ether;
     }
 

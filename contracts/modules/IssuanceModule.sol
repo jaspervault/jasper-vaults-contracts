@@ -13,6 +13,7 @@ import {IERC20 as OrignIERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.
 import {Invoke} from "../lib/Invoke.sol";
 import {IIssuanceModule} from "../interfaces/internal/IIssuanceModule.sol";
 import {IIssuanceFacet} from "../interfaces/internal/IIssuanceFacet.sol";
+import {IOptionFacet} from "../interfaces/internal/IOptionFacet.sol";
 
 contract IssuanceModule is
     ModuleBase,
@@ -277,8 +278,9 @@ contract IssuanceModule is
         }
         emit Redeem(_vault,_to,_assetsType, _assets, _amounts);
     }
-
     function deleteVaultProxyMode(address _vault) internal {
+        IIssuanceFacet issuanceFacet = IIssuanceFacet(diamond);
+        IOptionFacet optionFacet = IOptionFacet(diamond);
         IPlatformFacet platformFacet = IPlatformFacet(diamond);
         uint256 count = platformFacet.getAssetTypeCount() + 1;
         uint16[] memory _positionTypes = new uint16[](count);
@@ -289,7 +291,10 @@ contract IssuanceModule is
             .getVaultAllPosition(_vault, _positionTypes)
             .length;
         if (total == 0) {
-            IIssuanceFacet issuanceFacet = IIssuanceFacet(diamond);
+            require(optionFacet.getWriterPuts(_vault).length==0&&
+            optionFacet.getWriterCalls(_vault).length==0&&
+            optionFacet.getHolderCalls(_vault).length==0&&
+            optionFacet.getHolderPuts(_vault).length==0,"IssuanceModule:there has order not closed");
             issuanceFacet.setIssuer(_vault, address(0));
             issuanceFacet.setIssueMode(
                 _vault,

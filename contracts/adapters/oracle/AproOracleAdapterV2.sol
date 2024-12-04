@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.12;
+pragma solidity 0.8.26;
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {IOwnable} from "../../interfaces/internal/IOwnable.sol";
@@ -30,17 +30,21 @@ contract AproOracleAdapterV2 is
         bytes32 _oracle
     );
     modifier onlyOwner() {
-        require(msg.sender == IOwnable(diamond).owner(), "only owner");
+        // require(msg.sender == IOwnable(diamond).owner(), "only owner");
+        require(msg.sender == operator, "only owner");
         _;
     }
     modifier onlyOperator() {
         require(msg.sender == operator, "only operator");
         _;
     }
+    receive() external payable {}
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
     }
+
 
     function initialize(
         address _diamond,
@@ -143,6 +147,8 @@ contract AproOracleAdapterV2 is
         }
     }
 
+
+
     // Main function to read history price
     function readHistoryPrice(
         address _masterToken,
@@ -194,16 +200,6 @@ contract AproOracleAdapterV2 is
             require(verifiedReport.feedId == pythIDs[_masterToken][usdToken], "PythOracleAdapter:_masterToken priceIDs missMatch");
             historyPrice[i].price = getPriceByPriceReport(_masterToken,verifiedReport);
             historyPrice[i].timestamp = verifiedReport.observationsTimestamp;
-            // (IPythAdapter.PythData memory pythDataStruct) = abi.decode(_data[i], (IPythAdapter.PythData));
-            // uint fee = IPyth(pyth).getUpdateFee(pythDataStruct.updateData);
-            // PythStructs.PriceFeed[] memory pythPriceList = getHistoryPriceFromPyth(fee, pythDataStruct);
-            // require(pythPriceList.length != 0, "PythOracleAdapter:length missMatch");
-            // for (uint p;p< pythPriceList.length;p++){
-            //     PythStructs.PriceFeed memory pythPrice = pythPriceList[p];
-            //     require(pythPrice.id == pythIDs[_masterToken][usdToken], "PythOracleAdapter:_masterToken priceIDs missMatch");
-            //     historyPrice[i].price = getPriceByPriceFeed(pythPrice);
-            //     historyPrice[i].timestamp = pythPrice.price.publishTime;
-            // }
         }
         return historyPrice;
     }
@@ -214,6 +210,38 @@ contract AproOracleAdapterV2 is
             : decimals[token];
         uint256 expo = tempExpo;
         price = verifiedReport.price * 10 ** (18 - expo);
+    }
+    function verifyAndReadLatestPrice(bytes calldata payload) public returns( IAproOracleV2.Price memory price){
+        IFeeManager feeManager = IFeeManager(address(s_verifierProxy.s_feeManager()));
+        address feeTokenAddress = feeManager.i_nativeAddress();
+        (/* bytes32[3] reportContextData */ , bytes memory reportData,,,) = abi
+        .decode(payload, (bytes32[3], bytes, bytes32[], bytes32[], bytes32));
+        (IAproOracleV2.Asset memory fee, ,) = feeManager.getFeeAndReward(
+            address(this),
+            reportData,
+            feeTokenAddress
+        );
+        // Verify the report
+        bytes memory verifiedReportData = s_verifierProxy.verify{value: fee.amount}(
+            payload,
+            abi.encode(feeTokenAddress)
+        );
+        IAproOracleV2.Report memory verifiedReport = abi.decode(verifiedReportData, (IAproOracleV2.Report));
+        // verifiedReport.priceId
+        return IPriceReader(address(s_verifierProxy)).getPriceNoOlderThan(verifiedReport.feedId, 60);
+    }
+    function setPrice(bytes[] calldata payloads) public {
+        for(uint i;i<payloads.length;i++){
+            IFeeManager feeManager = IFeeManager(address(s_verifierProxy.s_feeManager()));
+            address feeTokenAddress = feeManager.i_nativeAddress();
+            (/* bytes32[3] reportContextData */ , bytes memory reportData,,,) = abi.decode(payloads[i], (bytes32[3], bytes, bytes32[], bytes32[], bytes32));
+              (IAproOracleV2.Asset memory fee, , ) = feeManager.getFeeAndReward(
+                address(this),
+                reportData,
+                feeTokenAddress
+            );
+            s_verifierProxy.verify{value: fee.amount}(payloads[i],abi.encode(feeTokenAddress));
+        }
     }
 
 }

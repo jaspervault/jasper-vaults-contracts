@@ -8,6 +8,7 @@ import {IOracleAdapter} from "./interfaces/internal/IOracleAdapter.sol";
 import {IPriceOracle} from "./interfaces/internal/IPriceOracle.sol";
 import {IOracleAdapterV2} from "./interfaces/internal/IOracleAdapterV2.sol";
 import {IPlatformFacet} from "./interfaces/internal/IPlatformFacet.sol";
+
 contract PriceOracle is Initializable, UUPSUpgradeable,IPriceOracle
      {
     address public diamond;
@@ -29,7 +30,10 @@ contract PriceOracle is Initializable, UUPSUpgradeable,IPriceOracle
     function setPrice(address _pyth,bytes[] calldata _priceUpdateData) external{
         require(IPlatformFacet(diamond).getIsVault(msg.sender),"PriceOracle:role error");  
         uint fee = IPyth(_pyth).getUpdateFee(_priceUpdateData);
-        IPyth(_pyth).updatePriceFeeds{ value: fee }(_priceUpdateData);
+        IPyth(_pyth).updatePriceFeeds{value: fee}(_priceUpdateData);
+    }
+    function setPriceV2(uint256 _index, bytes[] memory _data) public {
+        IOracleAdapterV2(oracles[_index]).setPrice(_data);
     }
 
     function _authorizeUpgrade(

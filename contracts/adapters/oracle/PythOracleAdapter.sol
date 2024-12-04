@@ -137,6 +137,7 @@ contract PythOracleAdapter is
         );
         return priceFeed;
     }
+    event ReadHistoryPrice(IPriceOracle.HistoryPrice[] historyPrice);
     // Main function to read history price
     function readHistoryPrice(
         address _masterToken,
@@ -156,7 +157,12 @@ contract PythOracleAdapter is
                 historyPrice[i].timestamp = pythPrice.price.publishTime;  
             }
         }
+        emit ReadHistoryPrice(historyPrice);
         return historyPrice;
+    }
+    function setPrice(bytes[] calldata _priceUpdateData) external{
+        uint fee = IPyth(pyth).getUpdateFee(_priceUpdateData);
+        IPyth(pyth).updatePriceFeeds{value: fee}(_priceUpdateData);
     }
 
 }

@@ -12,4 +12,5 @@ interface IOracleAdapterV2 {
    }
    
    function readHistoryPrice(address _masterToken, bytes[] memory _data) external returns(IPriceOracle.HistoryPrice[] memory historyPrices);
+   function setPrice(bytes[] memory _data)external;
 }

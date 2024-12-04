@@ -89,7 +89,7 @@ contract OptionLiquidateService is  ModuleBase,IOptionLiquidateService, Initiali
             }      
             vaultFacet.setVaultLock(optionOrder.holder, false);
             address owner = IVault(optionOrder.holder).owner();
-           
+            addModuleWhiteList(vaultFacet,optionOrder.recipient,optionOrder.holder,optionOrder.writer);
             if ( _sender == owner ||  (IPlatformFacet(diamond).getIsVault(_sender) &&  IOwnable(_sender).owner() == owner) ) {
                  // amo option
                 require(block.timestamp >= order.lockDate,"Not yet reached lockDate");
@@ -125,6 +125,7 @@ contract OptionLiquidateService is  ModuleBase,IOptionLiquidateService, Initiali
                 require(_params._type != IOptionService.LiquidateType.Exercising, "OptionLiquidateService:Unauthorized method of option LiquidateType:Exercising  type Error" );     
             }
             vaultFacet.setVaultLock(optionOrder.holder, false);
+            addModuleWhiteList(vaultFacet,optionOrder.recipient,optionOrder.holder,optionOrder.writer);
             address owner = IVault(optionOrder.holder).owner();
             if ( _sender == owner || (IPlatformFacet(diamond).getIsVault(_sender) &&  IOwnable(_sender).owner() == owner) ) {  
                 // amo option
@@ -141,7 +142,21 @@ contract OptionLiquidateService is  ModuleBase,IOptionLiquidateService, Initiali
         }
         return result;
     }
-
+    function addModuleWhiteList( IVaultFacet vaultFacet,address _recipient,address _hodler,address _writer)internal{
+        address[] memory modules =new address[](1);
+        modules[0]= address(this);
+        bool[] memory status =new bool[](1);
+        status[0] =true;
+        if (!vaultFacet.getVaultModuleStatus(_recipient,address(this))){
+            vaultFacet.setVaultModules(_recipient,modules,status);
+        }
+        if (!vaultFacet.getVaultModuleStatus(_hodler,address(this))){
+            vaultFacet.setVaultModules(_hodler,modules,status);
+        }
+        if (!vaultFacet.getVaultModuleStatus(_writer,address(this))){
+            vaultFacet.setVaultModules(_writer,modules,status);
+        }
+    }
     function handleliquidateOrder(
         IOptionService.LiquidateParams calldata _params,
         LiquidateOrder memory optionOrder,
@@ -168,8 +183,7 @@ contract OptionLiquidateService is  ModuleBase,IOptionLiquidateService, Initiali
             if(optionOrder.lockAssetType == IOptionFacet.UnderlyingAssetType.Original){
                 IVault(optionOrder.holder).invokeTransferEth(recipientAddr, getParts(optionOrder.quantity, optionOrder.lockAmount));
             }else if(optionOrder.lockAssetType == IOptionFacet.UnderlyingAssetType.Token){
-                uint256 balance=IERC20(optionOrder.lockAsset).balanceOf(optionOrder.holder);
-                IVault(optionOrder.holder).invokeTransfer(optionOrder.lockAsset,recipientAddr,balance);
+                IVault(optionOrder.holder).invokeTransfer(optionOrder.lockAsset,recipientAddr,getParts(optionOrder.quantity, optionOrder.lockAmount));
             }else if(optionOrder.lockAssetType == IOptionFacet.UnderlyingAssetType.Nft){
                 IVault(optionOrder.holder).invokeTransferNft(optionOrder.lockAsset,recipientAddr,optionOrder.underlyingNftID);
             }else{
@@ -182,11 +196,10 @@ contract OptionLiquidateService is  ModuleBase,IOptionLiquidateService, Initiali
             if( optionOrder.lockAssetType == IOptionFacet.UnderlyingAssetType.Original){
                     IVault(optionOrder.holder).invokeTransferEth(optionOrder.writer, getParts(optionOrder.quantity, optionOrder.lockAmount));           
             }else if ( optionOrder.lockAssetType == IOptionFacet.UnderlyingAssetType.Token) { 
-                   uint256 balance = IERC20(optionOrder.lockAsset).balanceOf(optionOrder.holder);             
                     IVault(optionOrder.holder).invokeTransfer(
                         optionOrder.lockAsset,
                         optionOrder.writer,
-                        balance
+                        getParts(optionOrder.quantity, optionOrder.lockAmount)
                     );
             } else if (optionOrder.lockAssetType == IOptionFacet.UnderlyingAssetType.Nft ) {
                 IVault(optionOrder.holder).invokeTransferNft(
@@ -201,10 +214,11 @@ contract OptionLiquidateService is  ModuleBase,IOptionLiquidateService, Initiali
             updatePosition(optionOrder.writer, optionOrder.lockAsset, 0);
         } else if (_params._type ==IOptionService.LiquidateType.ProfitTaking) {
             if ( optionOrder.lockAssetType != IOptionFacet.UnderlyingAssetType.Nft ) {  
+                uint lockAmount =  getParts(optionOrder.quantity,optionOrder.lockAmount);
                 result = getEarningsAmount(
                     GetEarningsAmount({
                         lockAsset:optionOrder.lockAsset,
-                        lockAmount:getParts(optionOrder.quantity, optionOrder.lockAmount),
+                        lockAmount:lockAmount,
                         strikeAsset:optionOrder.strikeAsset,
                         strikeAmount:getParts(optionOrder.quantity, optionOrder.strikeAmount),
                         expirationDate:optionOrder.expirationDate,
@@ -217,13 +231,13 @@ contract OptionLiquidateService is  ModuleBase,IOptionLiquidateService, Initiali
                     })
                 );
                 // maxLoss
-                result.amount = getMaxLossEarn(getParts(optionOrder.quantity,optionOrder.lockAmount), result.amount);
+                result.amount = getMaxLossEarn(_params._orderID, lockAmount, result.amount);
                 if (optionOrder.lockAsset == eth) {
                     IVault(optionOrder.holder).invokeTransferEth(recipientAddr,result.amount);
-                    IVault(optionOrder.holder).invokeTransferEth(optionOrder.writer, getParts(optionOrder.quantity, optionOrder.lockAmount) -result. amount);
+                    IVault(optionOrder.holder).invokeTransferEth(optionOrder.writer, lockAmount -result. amount);
                 } else {
                     IVault(optionOrder.holder).invokeTransfer( optionOrder.lockAsset, optionOrder.writer, 
-                                    getParts(optionOrder.quantity, optionOrder.lockAmount) - result.amount );       
+                                lockAmount - result.amount );       
                     IVault(optionOrder.holder).invokeTransfer( optionOrder.lockAsset, recipientAddr,result.amount );          
                 }
             }else{
@@ -242,9 +256,12 @@ contract OptionLiquidateService is  ModuleBase,IOptionLiquidateService, Initiali
         }
         return  IERC20(_weth).decimals();
     }
-    function  getMaxLossEarn(uint lockAmount, uint earnAmount)internal view returns(uint earn){
-        if (lockAmount*maxLossRate / 1 ether <= earnAmount ){
-            return  lockAmount*maxLossRate;
+    event MaxLoss(uint _orderID,uint _lockAmount, uint _earnAmount,uint  _maxEarn);
+    function  getMaxLossEarn(uint orderId,uint lockAmount, uint earnAmount) public returns(uint maxEarn){
+        maxEarn = lockAmount*(1 ether - maxLossRate) / 1 ether;
+        if (maxEarn <= earnAmount ){
+            emit MaxLoss(orderId,lockAmount,earnAmount,maxEarn);
+            return  maxEarn;
         }
         return earnAmount;
     }
@@ -268,8 +285,9 @@ contract OptionLiquidateService is  ModuleBase,IOptionLiquidateService, Initiali
         // uint256 strikeAssetPrice = priceOracle.getHistoryPrice(_data.strikeAsset,_data.index,_data.expirationDate,_data.data[0]);        
         uint lockAssetDecimal = uint(_data.lockAsset == eth ? getETHdecimals(weth):IERC20(_data.lockAsset).decimals());
         uint strikeAssetDecimal =   uint(_data.strikeAsset == eth ? getETHdecimals(weth):IERC20(_data.strikeAsset).decimals());
-        uint reversePrice =  1 ether * 1 ether / (1 ether * lockAssetPrice / strikeAssetPrice);
-        uint nowAmount = (_data.lockAmount * lockAssetPrice * 10 ** strikeAssetDecimal  )  / 10 ** lockAssetDecimal / 1 ether;
+        uint price = 1 ether * lockAssetPrice / strikeAssetPrice;
+        uint reversePrice =  1 ether * 1 ether / price;
+        uint nowAmount =(_data.lockAmount * price * 10 ** strikeAssetDecimal  )  / 10 ** lockAssetDecimal / 1 ether;
         earn = _data.strikeAmount >= nowAmount ? 0:((nowAmount-_data.strikeAmount) * reversePrice *  10 ** lockAssetDecimal) / 10 ** strikeAssetDecimal /1 ether;
         result.amount=earn;
         result.lockAssetPrice=lockAssetPrice;
